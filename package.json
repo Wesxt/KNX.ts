@@ -1,0 +1,1 @@
+{"scripts":{"build":"tsc && babel src --extensions .ts --out-dir dist","start":"node dist/index.js","watch":"tsc -w"},"dependencies":{"dgram":"^1.0.1","events":"^3.3.0","net":"^1.0.2"},"devDependencies":{"@babel/cli":"^7.26.4","@babel/core":"^7.26.0","@babel/preset-env":"^7.26.0","@babel/preset-typescript":"^7.26.0","typescript":"^5.7.3"}}
