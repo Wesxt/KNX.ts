@@ -135,24 +135,82 @@ const ERROR_CODES = {
   0x0A: "Value temporarily not writeable",
 }
 
-class KNXArnoldReceiver {
-  connection: unknown;
+import KNXArnoldDatagram from "./KNXArnoldDatagram";
+import { KNXArnoldHelper } from "./KNXArnoldHelper";
+
+export class KNXArnoldReceiver {
+  connection: any;
   constructor(connection: any) {
     this.connection = connection
   }
-  public processCEMI(datagram: any, cemi: any) {
-    datagram.message_code = cemi[0]
-    datagram.additional_info_length = cemi[1]
-    if(datagram.additional_info_length > 0) {
-      datagram.additional_info = Buffer.from(datagram.additional_info_length)
-      for(let i = 0; i < datagram.additional_info_length; i++) {
-        datagram.additional_info[i] = cemi[2 + i]
+  processCEMI(datagram: any, cemi: any) {
+    try {
+      datagram.message_code = cemi[0]
+      datagram.additional_info_length = cemi[1]
+      if (datagram.additional_info_length > 0) {
+        datagram.additional_info = Buffer.from(datagram.additional_info_length)
+        for (let i = 0; i < datagram.additional_info_length; i++) {
+          datagram.additional_info[i] = cemi[2 + i]
+        }
       }
+      datagram.control_field_1 = cemi[2 + datagram.additional_info_length];
+      datagram.control_field_2 = cemi[3 + datagram.additional_info_length];
+      let buf = Buffer.alloc(2);
+      buf[0] = cemi[4 + datagram.additional_info_length];
+      buf[1] = cemi[5 + datagram.additional_info_length];
+      datagram.source_address = KNXArnoldHelper.GetIndividualAddress(buf);
+      buf = Buffer.alloc(2);
+      datagram.destination_address =
+        (KNXArnoldHelper.GetKnxDestinationAddressType(datagram.control_field_2) === KNXArnoldHelper.KnxDestinationAddressType.INDIVIDUAL) ?
+          KNXArnoldHelper.GetIndividualAddress(buf) :
+          KNXArnoldHelper.GetGroupAddress(buf, this.connection.ThreeLevelGroupAddressing);
+      datagram.data_length = cemi[8 + datagram.additional_info_length]
+      datagram.apdu = Buffer.alloc(datagram.data_length + 1);
+      for (var i = 0; i < datagram.apdu.length; i++)
+        datagram.apdu[i] = cemi[9 + i + datagram.additional_info_length];
+      datagram.data = KNXArnoldHelper.GetData(datagram.data_length, datagram.apdu);
+
+      datagram.dtpData = new KNXArnoldDatagram(datagram.apdu);
+      if (this.connection.debug) {
+        console.log("-----------------------------------------------------------------------------------------------------");
+        console.log(cemi.toString('hex'));
+        console.log("Event Header Length: " + datagram.header_length);
+        console.log("Event Protocol Version: " + datagram.protocol_version);
+        console.log("Event Service Type: 0x" + datagram.service_type.toString('hex'));
+        console.log("Event Total Length: " + datagram.total_length);
+        console.log("Event Message Code: " + datagram.message_code);
+        console.log("Event Aditional Info Length: " + datagram.additional_info_length);
+        if (datagram.additional_info_length > 0)
+          console.log("Event Aditional Info: 0x" + datagram.additional_info.toString('hex'));
+        console.log("Event Control Field 1: " + datagram.control_field_1);
+        console.log("Event Control Field 2: " + datagram.control_field_2);
+        console.log("Event Source Address: " + datagram.source_address);
+        console.log("Event Destination Address: " + datagram.destination_address);
+        console.log("Event Data Length: " + datagram.data_length);
+        console.log("Event APDU: 0x" + datagram.apdu.toString('hex'));
+        console.log("Event Data: " + datagram.data.toString('hex'));
+        console.log("-----------------------------------------------------------------------------------------------------");
+      }
+      if (datagram.message_code != 0x29) {
+        return;
+      }
+      const type = datagram.apdu[1] >> 4;
+      switch (type) {
+        case 8:
+          this.connection.emit('event', datagram.destination_address, datagram.data, datagram);
+          this.connection.emit('event.' + datagram.destination_address.toString(), datagram.destination_address, datagram.data, datagram);
+          break;
+        case 4:
+          this.connection.emit('status', datagram.destination_address, datagram.data, datagram);
+          this.connection.emit('status.' + datagram.destination_address.toString(), datagram.destination_address, datagram.data, datagram);
+          break;
+        default:
+          console.log('Unknown type[' + type + '] received in datagram[' + datagram.data.toString('hex') + ']');
+          break;
+      }
+    } catch (error) {
+        // ignore, missing warning information
+      console.error(error)
     }
-    datagram.control_field_1 = cemi[2 + datagram.additional_info_length];
-    datagram.control_field_2 = cemi[3 + datagram.additional_info_length];
-    const buf = Buffer.alloc(2);
-    buf[0] = cemi[4 + datagram.additional_info_length];
-    buf
   }
 }
