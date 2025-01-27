@@ -32,14 +32,14 @@ import { InvalidKnxAddressException } from "./InvalidKnxAddresExeption";
 //           |  | Main Grp  |            Sub Group           |
 //           +--+--------------------+-----------------------+
 export class KNXArnoldHelper {
-  static Idexp(mantissa, exponent) {
+  static Idexp(mantissa: number, exponent: number) {
     return exponent > 1023 // avoid multiplying by infinity
       ? mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023)
       : exponent < -1074 // avoid multiplying by zero
         ? mantissa * Math.pow(2, -1074) * Math.pow(2, exponent + 1074)
         : mantissa * Math.pow(2, exponent);
   }
-  static frexp(value) {
+  static frexp(value: number) {
     if (value === 0) return [value, 0];
     let data = new DataView(new ArrayBuffer(8))
     data.setFloat64(0, value)
@@ -52,19 +52,19 @@ export class KNXArnoldHelper {
       mantissa = this.Idexp(value, -exponent)
     return [mantissa, exponent]
   }
-  static IsAddressIndividual(address) {
+  static IsAddressIndividual(address: string) {
     return address.indexOf('.') !== -1;
   }
   static GetIndividualAddress(addr: Buffer) {
     return this.GetAddress(addr, '.', false);
   }
 
-  static GetGroupAddress(addr: Buffer, threeLevelAddressing) {
+  static GetGroupAddress(addr: Buffer, threeLevelAddressing: unknown) {
     return this.GetAddress(addr, '/', threeLevelAddressing);
   }
-  static GetAddress(addr: Buffer, separator?, threeLevelAddressing?) {
+  static GetAddress(addr: Buffer, separator?: string, threeLevelAddressing?: unknown) {
     if (addr && !separator && (threeLevelAddressing === null || threeLevelAddressing == undefined)) {
-      return this.GetAddress_(addr)
+      return this.GetAddress_(addr as unknown as string)
     }
     let group = separator === '/';
     let address = null;
@@ -89,7 +89,7 @@ export class KNXArnoldHelper {
     }
     return address;
   }
-  static GetAddress_(address) {
+  static GetAddress_(address: string) {
     try {
       let addr = Buffer.alloc(2);
       let threeLevelAddressing = true;
@@ -118,7 +118,8 @@ export class KNXArnoldHelper {
         part = parseInt(parts[1]);
         if (part > 2047)
           throw new InvalidKnxAddressException(address);
-        var part2 = BitConverter.GetBytes(part);
+        var part2 = Buffer.alloc(2);
+        part2.writeUInt16BE(part, 0);
         if (part2.length > 2)
           throw new InvalidKnxAddressException(address);
         addr[0] = (addr[0] | part2[0]) & 255;
@@ -196,7 +197,7 @@ export class KNXArnoldHelper {
     INDIVIDUAL: 0,
     GROUP: 1
   }
-  static GetKnxDestinationAddressType(control_field_2) {
+  static GetKnxDestinationAddressType(control_field_2: number) {
     return (0x80 & control_field_2) != 0
       ? this.KnxDestinationAddressType.GROUP
       : this.KnxDestinationAddressType.INDIVIDUAL;
@@ -236,16 +237,20 @@ export class KNXArnoldHelper {
   // +--------+--------+--------+--------+--------+--------+--------+--------++--------+----....
   // +                            B  Y  T  E    2                            ||       B Y T E  3
   // +-----------------------------------------------------------------------++-------------....
-  static GetData(dataLength, apdu: Buffer) {
+  static GetData(dataLength: number, apdu: Buffer) {
     switch (dataLength) {
       case 0:
         return '';
       case 1:
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
-        return parseInt(0x3F & apdu[1], 10).toString();
+        // return parseInt(0x3F & apdu[1], 10).toString();
+        // Interpreta el segundo byte con la máscara 0x3F.
+      // Devuelve el valor del byte con la máscara 0x3F como una cadena.
+      return (0x3F & apdu[1]).toString();
       case 2:
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
-        return parseInt(apdu[2]).toString();
+        // Interpreta el tercer byte como un carácter Unicode.
+      return String.fromCharCode(apdu[2]);
       case 3:
         var sign = apdu[2] >> 7;
         var exponent = (apdu[2] & 0b01111000) >> 3;
@@ -272,7 +277,7 @@ export class KNXArnoldHelper {
       return data.length;
     return data.length + 1;
   }
-  static WriteData(datagram: Buffer, data: Buffer, dataStart) {
+  static WriteData(datagram: Buffer, data: Buffer, dataStart: number) {
     if (data.length == 1) {
       if (data[0] < 0x3F) {
         datagram[dataStart] = (datagram[dataStart] | data[0]) & 255;
@@ -304,8 +309,12 @@ export class KNXArnoldHelper {
         apdu_data[0] = (sign << 7) + (exp << 3) + (mant >> 8);
         apdu_data[1] = mant % 256;
       }
-      datagram[dataStart + 1] = apdu_data[0];
-      datagram[dataStart + 2] = apdu_data[1];
+      if (apdu_data) {
+        datagram[dataStart + 1] = apdu_data[0];
+        datagram[dataStart + 2] = apdu_data[1];
+      } else {
+        throw new Error("apdu_data is not defined")
+      }
     } else if (data.length > 1) {
       if (data[0] < 0x3F) {
         datagram[dataStart] = (datagram[dataStart] | data[0]) & 255;

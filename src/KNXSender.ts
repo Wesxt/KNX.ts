@@ -5,14 +5,17 @@ export class KNXSender {
   constructor(connection: KNXConnection) {
     this.connection = connection
   }
-  Action(destinationAddress, data: Buffer, callback) {
+  Action(destinationAddress: Buffer, data: Buffer, callback: () => any) {
     this.SendData(this.CreateActionDatagram(destinationAddress, data), callback);
   }
-  RequestStatus(destinationAddress, callback) {
+  RequestStatus(destinationAddress: Buffer, callback: () => any) {
     callback && this.connection.once('status.' + destinationAddress.toString(), callback);
     this.SendData(this.CreateRequestStatusDatagram(destinationAddress));
   }
-  CreateActionDatagramCommon(destinationAddress, data: Buffer, header: Buffer) {
+  SendData(arg0: any) {
+    throw new Error("Method not implemented.");
+  }
+  CreateActionDatagramCommon(destinationAddress: Buffer, data: Buffer, header: Buffer) {
     let i;
     let dataLength = KNXArnoldHelper.GetDataLength(data);
     // HEADER
@@ -24,7 +27,7 @@ export class KNXSender {
     // |  Msg   |Add.Info| Ctrl 1 | Ctrl 2 | Source Address | Dest. Address  |  Data  |      APDU      |
     // | Code   | Length |        |        |                |                | Length |                |
     // +--------+--------+--------+--------+----------------+----------------+--------+----------------+
-    59//   1 byte   1 byte   1 byte   1 byte      2 bytes          2 bytes       1 byte      2 bytes
+    //   1 byte   1 byte   1 byte   1 byte      2 bytes          2 bytes       1 byte      2 bytes
     //
     //  Message Code    = 0x11 - a L_Data.req primitive
     //      COMMON EMI MESSAGE CODES FOR DATA LINK LAYER PRIMITIVES
@@ -80,12 +83,18 @@ export class KNXSender {
     datagram[i++] = this.connection.ActionMessageCode != 0x00 ? this.connection.ActionMessageCode : (0x11 & 255);
     datagram[i++] = 0x00;
     datagram[i++] = 0xAC;
-    datagram[i++] = KNXArnoldHelper.IsAddressIndividual(destinationAddress) ? (0x50 & 255) : 0xF0;
+    datagram[i++] = KNXArnoldHelper.IsAddressIndividual(destinationAddress.toString()) ? (0x50 & 255) : 0xF0;
     datagram[i++] = 0x00;
     datagram[i++] = 0x00;
     let dst_address = KNXArnoldHelper.GetAddress(destinationAddress);
-    datagram[i++] = dst_address[0];
-    datagram[i++] = dst_address[1];
+    if(dst_address instanceof Buffer) {
+      datagram[i++] = dst_address[0];
+      datagram[i++] = dst_address[1];
+    } else {
+      datagram[i++] = 0
+      datagram[i++] = 0
+      console.error("dst_address is not instance of Buffer")
+    }
     datagram[i++] = dataLength & 255;
     datagram[i++] = 0x00;
     datagram[i] = 0x80;
@@ -93,17 +102,23 @@ export class KNXSender {
     this.connection.debug && console.log(`KnxSender.CreateActionDatagramCommon datagram ${datagram.toString('hex')}`);
     return datagram;
   }
-  CreateRequestStatusDatagramCommon(destinationAddress, datagram: Buffer, cemi_start_pos) {
+  CreateRequestStatusDatagramCommon(destinationAddress: Buffer, datagram: Buffer, cemi_start_pos: 6) {
     let i= 0;
     datagram[cemi_start_pos + i++] = this.connection.ActionMessageCode != 0x00 ? this.connection.ActionMessageCode : (0x11 & 255);
     datagram[cemi_start_pos + i++] = 0x00;
     datagram[cemi_start_pos + i++] = 0xAC;
-    datagram[cemi_start_pos + i++] = KNXArnoldHelper.IsAddressIndividual(destinationAddress) ? (0x50 & 255) : (0xF0 & 255);
+    datagram[cemi_start_pos + i++] = KNXArnoldHelper.IsAddressIndividual(destinationAddress.toString()) ? (0x50 & 255) : (0xF0 & 255);
     datagram[cemi_start_pos + i++] = 0x00;
     datagram[cemi_start_pos + i++] = 0x00;
-    dst_address = KNXArnoldHelper.GetAddress(destinationAddress);
-    datagram[cemi_start_pos + i++] = dst_address[0];
-    datagram[cemi_start_pos + i++] = dst_address[1];
+    let dst_address = KNXArnoldHelper.GetAddress(destinationAddress);
+    if(dst_address instanceof Buffer) {
+      datagram[cemi_start_pos + i++] = dst_address[0];
+      datagram[cemi_start_pos + i++] = dst_address[1];
+    } else {
+      datagram[cemi_start_pos + i++] = 0
+      datagram[cemi_start_pos + i++] = 0
+      console.error("dst_address is not instance of Buffer")
+    }
     datagram[cemi_start_pos + i++] = 0x01;
     datagram[cemi_start_pos + i++] = 0x00;
     datagram[cemi_start_pos + i] = 0x00;
