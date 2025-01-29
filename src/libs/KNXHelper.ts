@@ -31,7 +31,7 @@ import { InvalidKnxAddressException } from "./InvalidKnxAddresExeption";
 //           +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 //           |  | Main Grp  |            Sub Group           |
 //           +--+--------------------+-----------------------+
-export class KNXArnoldHelper {
+export class KNXHelper {
   static Idexp(mantissa: number, exponent: number) {
     return exponent > 1023 // avoid multiplying by infinity
       ? mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023)
@@ -62,33 +62,40 @@ export class KNXArnoldHelper {
   static GetGroupAddress(addr: Buffer, threeLevelAddressing: unknown) {
     return this.GetAddress(addr, '/', threeLevelAddressing);
   }
-  static GetAddress(addr: Buffer, separator?: string, threeLevelAddressing?: unknown) {
+  static GetAddress(addr: Buffer | string, separator?: string, threeLevelAddressing?: unknown) {
     if (addr && !separator && (threeLevelAddressing === null || threeLevelAddressing == undefined)) {
-      return this.GetAddress_(addr as unknown as string)
+      return this.GetAddress_(addr as string)
     }
-    let group = separator === '/';
-    let address = null;
-    if (group && !threeLevelAddressing) {
-      // 2 level group
-      address = (addr[0] >> 3).toString();
-      address += separator;
-      address += (((addr[0] & 0x07) << 8) + addr[1]).toString(); // this may not work, must be checked
+    if(addr instanceof Buffer) {
+      let group = separator === '/';
+      let address = null;
+      if (group && !threeLevelAddressing) {
+        // 2 level group
+        address = (addr[0] >> 3).toString();
+        address += separator;
+        address += (((addr[0] & 0x07) << 8) + addr[1]).toString(); // this may not work, must be checked
+      }
+      else {
+        // 3 level individual or group
+        address = group
+          ? ((addr[0] & 0xFF) >> 3).toString()
+          : (addr[0] >> 4).toString();
+        address += separator;
+        if (group)
+          address += (addr[0] & 0x07).toString();
+        else
+          address += (addr[0] & 0x0F).toString();
+        address += separator;
+        address += addr[1].toString();
+      }
+      return address;
     }
-    else {
-      // 3 level individual or group
-      address = group
-        ? ((addr[0] & 0xFF) >> 3).toString()
-        : (addr[0] >> 4).toString();
-      address += separator;
-      if (group)
-        address += (addr[0] & 0x07).toString();
-      else
-        address += (addr[0] & 0x0F).toString();
-      address += separator;
-      address += addr[1].toString();
-    }
-    return address;
   }
+  /**
+   * Converts a string group address to buffer
+   * @param address Group address
+   * @returns 
+   */
   static GetAddress_(address: string) {
     try {
       let addr = Buffer.alloc(2);
@@ -111,14 +118,14 @@ export class KNXArnoldHelper {
         }
       }
       if (!threeLevelAddressing) {
-        var part = parseInt(parts[0]);
+        let part = parseInt(parts[0]);
         if (part > 15)
           throw new InvalidKnxAddressException(address);
         addr[0] = (part << 3) & 255;
         part = parseInt(parts[1]);
         if (part > 2047)
           throw new InvalidKnxAddressException(address);
-        var part2 = Buffer.alloc(2);
+        let part2 = Buffer.alloc(2);
         part2.writeUInt16BE(part, 0);
         if (part2.length > 2)
           throw new InvalidKnxAddressException(address);
@@ -126,7 +133,7 @@ export class KNXArnoldHelper {
         addr[1] = part2[1];
       }
       else {
-        var part = parseInt(parts[0]);
+        let part = parseInt(parts[0]);
         if (part > 31)
           throw new InvalidKnxAddressException(address);
         addr[0] = group

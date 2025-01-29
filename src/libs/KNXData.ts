@@ -32,14 +32,14 @@
  List 3-byte value                  3 Byte                  DPT 232	    DPT 232	RGB[0,0,0]...[255,255,255]
  */
 
-import { KNXArnoldHelper } from "./KNXArnoldHelper";
+import { KNXHelper } from "./KNXHelper";
 
 /**
  * Represent data send over knx bus and provide methods to interpret them as different dpt values.
  * (Representar datos enviados a través del bus knx y proporcionar métodos para interpretarlos como diferentes valores dpt)
  * -- Byte array value or integer
  */
-export class KnxArnoldData {
+export class KnxData {
   apdu;
   buffer: ArrayBuffer | undefined;
   constructor(apdu: any) {
@@ -81,7 +81,7 @@ export class KnxArnoldData {
     let exponent = (this.apdu[2] & 0b01111000) >> 3;
     let mantissa = 256 * (this.apdu[2] & 0b00000111) + this.apdu[3]
     mantissa = (sign == 1) ? ~(mantissa^2047) : mantissa;
-    return KNXArnoldHelper.Idexp((0.01 * mantissa), exponent)
+    return KNXHelper.Idexp((0.01 * mantissa), exponent)
   }
   /**
    * Interpret the underlying data as 4 byte signed integer

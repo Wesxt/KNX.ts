@@ -1,23 +1,25 @@
-import { KNXArnoldHelper } from "./KNXArnoldHelper";
+import { KNXHelper } from "./KNXHelper";
+import { KNXConnection } from "./KNXConnection";
 
-export class KNXSender {
+export abstract class KNXSender {
   connection;
   constructor(connection: KNXConnection) {
     this.connection = connection
   }
-  Action(destinationAddress: Buffer, data: Buffer, callback: () => any) {
-    this.SendData(this.CreateActionDatagram(destinationAddress, data), callback);
-  }
-  RequestStatus(destinationAddress: Buffer, callback: () => any) {
-    callback && this.connection.once('status.' + destinationAddress.toString(), callback);
-    this.SendData(this.CreateRequestStatusDatagram(destinationAddress));
-  }
-  SendData(arg0: any) {
-    throw new Error("Method not implemented.");
-  }
-  CreateActionDatagramCommon(destinationAddress: Buffer, data: Buffer, header: Buffer) {
+  // Métodos abstractos que las subclases deben implementar
+  protected abstract SendData(datagram: Buffer | null, callback?: () => any): void;
+  protected abstract CreateActionDatagram(destinationAddress: string, data: Buffer): Buffer<ArrayBuffer> | null;
+  // Action(destinationAddress: Buffer, data: Buffer, callback: () => any) {
+  //   this.SendData(this.CreateActionDatagram(destinationAddress, data), callback);
+  // }
+  // RequestStatus(destinationAddress: Buffer, callback: () => any) {
+  //   callback && this.connection.once('status.' + destinationAddress.toString(), callback);
+  //   this.SendData(this.CreateRequestStatusDatagram(destinationAddress));
+  // }
+
+  CreateActionDatagramCommon(destinationAddress: Buffer | string, data: Buffer, header: Buffer) {
     let i;
-    let dataLength = KNXArnoldHelper.GetDataLength(data);
+    let dataLength = KNXHelper.GetDataLength(data);
     // HEADER
     let datagram = Buffer.alloc(dataLength + 10 + header.length);
     for (i = 0; i < header.length; i++)
@@ -80,38 +82,35 @@ export class KNXSender {
     //                    information (APCI) and data passed as an argument from higher layers of
     //                    the KNX communication stack
     //
+
     datagram[i++] = this.connection.ActionMessageCode != 0x00 ? this.connection.ActionMessageCode : (0x11 & 255);
     datagram[i++] = 0x00;
     datagram[i++] = 0xAC;
-    datagram[i++] = KNXArnoldHelper.IsAddressIndividual(destinationAddress.toString()) ? (0x50 & 255) : 0xF0;
+    datagram[i++] = KNXHelper.IsAddressIndividual(destinationAddress as string) ? (0x50 & 255) : 0xF0;
     datagram[i++] = 0x00;
     datagram[i++] = 0x00;
-    let dst_address = KNXArnoldHelper.GetAddress(destinationAddress);
-    if(dst_address instanceof Buffer) {
-      datagram[i++] = dst_address[0];
-      datagram[i++] = dst_address[1];
-    } else {
-      datagram[i++] = 0
-      datagram[i++] = 0
-      console.error("dst_address is not instance of Buffer")
-    }
+    let dst_address = KNXHelper.GetAddress(destinationAddress);
+    datagram[i++] = dst_address ? dst_address[0] as number : 0;
+    datagram[i++] = dst_address ? dst_address[1] as number : 0;
     datagram[i++] = dataLength & 255;
     datagram[i++] = 0x00;
     datagram[i] = 0x80;
-    KNXArnoldHelper.WriteData(datagram, data, i);
+    KNXHelper.WriteData(datagram, data, i);
     this.connection.debug && console.log(`KnxSender.CreateActionDatagramCommon datagram ${datagram.toString('hex')}`);
     return datagram;
   }
-  CreateRequestStatusDatagramCommon(destinationAddress: Buffer, datagram: Buffer, cemi_start_pos: 6) {
-    let i= 0;
+  CreateRequestStatusDatagramCommon(destinationAddress: Buffer | string , datagram: Buffer, cemi_start_pos: number) {
+    let i = 0;
     datagram[cemi_start_pos + i++] = this.connection.ActionMessageCode != 0x00 ? this.connection.ActionMessageCode : (0x11 & 255);
+
     datagram[cemi_start_pos + i++] = 0x00;
     datagram[cemi_start_pos + i++] = 0xAC;
-    datagram[cemi_start_pos + i++] = KNXArnoldHelper.IsAddressIndividual(destinationAddress.toString()) ? (0x50 & 255) : (0xF0 & 255);
+
+    datagram[cemi_start_pos + i++] = KNXHelper.IsAddressIndividual(destinationAddress as string) ? (0x50 & 255) : (0xF0 & 255);
     datagram[cemi_start_pos + i++] = 0x00;
     datagram[cemi_start_pos + i++] = 0x00;
-    let dst_address = KNXArnoldHelper.GetAddress(destinationAddress);
-    if(dst_address instanceof Buffer) {
+    let dst_address = KNXHelper.GetAddress(destinationAddress);
+    if (dst_address instanceof Buffer) {
       datagram[cemi_start_pos + i++] = dst_address[0];
       datagram[cemi_start_pos + i++] = dst_address[1];
     } else {
@@ -122,7 +121,7 @@ export class KNXSender {
     datagram[cemi_start_pos + i++] = 0x01;
     datagram[cemi_start_pos + i++] = 0x00;
     datagram[cemi_start_pos + i] = 0x00;
-    this.connection.debug && console.log('KnxSender.CreateRequestStatusDatagramCommon datagram[%s]', datagram.toString('hex'));
+    this.connection.debug && console.log(`KnxSender.CreateRequestStatusDatagramCommon datagram ${datagram.toString('hex')}`);
     return datagram;
   }
 }

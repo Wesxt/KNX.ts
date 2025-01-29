@@ -1,14 +1,10 @@
 {
-  "scripts": {
-    "build": "tsc && babel src --extensions .ts --out-dir dist",
-    "start": "tsc && babel src --extensions .ts --out-dir dist && node dist/index.js",
-    "watch": "tsc -w"
-  },
+"scripts": {
+  "build": "tsc",
+  "start": "tsc && node dist/index.js",
+  "watch": "tsc -w"
+},
   "devDependencies": {
-    "@babel/cli": "^7.26.4",
-    "@babel/core": "^7.26.0",
-    "@babel/preset-env": "^7.26.0",
-    "@babel/preset-typescript": "^7.26.0",
     "@types/node": "^22.10.10",
     "typescript": "^5.7.3"
   }
