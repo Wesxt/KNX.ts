@@ -11,12 +11,13 @@ let value = false;
 function toggleValue() {
   value = !value
   connectionKnx.Action('0/0/1', value)
+  console.log("¡¡¡Soy Yo!!!")
 }
 
 
 connectionKnx.Connect(() => {
-  connectionKnx.ConnectRequest((event) => {
-    console.log(event)
-  })
+  // connectionKnx.ConnectRequest((event) => {
+  //   console.log(event)
+  // })
   setTimeout(toggleValue, 3000)
 })

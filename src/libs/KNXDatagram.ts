@@ -1,3 +1,5 @@
+import { KNXHelper } from "./KNXHelper";
+
 export class KnxDatagram {
   /**Header => int */
   header_length?: number;
@@ -96,7 +98,27 @@ export class KnxDatagram {
     // Ejemplo: Escribir datos en el buffer (esto debe adaptarse a tu protocolo)
     buffer.writeUInt8(this.header_length as number, 0); // Escribir la longitud del encabezado
     buffer.writeUInt8(this.protocol_version as number, 1); // Escribir la versión del protocolo
-
+    if (this.service_type) {
+      buffer.writeUInt8(this.service_type[0], 2);
+      buffer.writeUInt8(this.service_type[1], 3);
+    }
+    if(this.total_length) {
+      const totalLengthBuf = Buffer.alloc(2, this.total_length)
+      buffer[4] = totalLengthBuf[0]
+      buffer[5] = totalLengthBuf[1]
+    }
+    buffer.writeUint8(this.channel_id as number, 6)
+    buffer.writeUint8(this.status as number, 7)
+    buffer.writeUint8(0, 8) // sequence counter
+    
+    buffer.writeUint8(0, 9) // reserved
+    buffer.writeUint8(this.message_code as number, 10)
+    buffer[11] = this.additional_info?.readUint8() as number
+    buffer.writeUint8(this.control_field_1 as number, 12)
+    buffer.writeUint8(this.control_field_2 as number, 13)
+    const addressSource = KNXHelper.addressToBuffer(this.source_address as string)
+    buffer[14] = addressSource[0]
+    buffer[15] = addressSource[1]
     // Aquí deberás continuar escribiendo los campos según el formato esperado
     // y asegurarte de manejar correctamente los offsets en el buffer.
     // buffer.writeUint8(this.message_code, )

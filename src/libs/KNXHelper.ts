@@ -74,8 +74,7 @@ export class KNXHelper {
         address = (addr[0] >> 3).toString();
         address += separator;
         address += (((addr[0] & 0x07) << 8) + addr[1]).toString(); // this may not work, must be checked
-      }
-      else {
+      }else {
         // 3 level individual or group
         address = group
           ? ((addr[0] & 0xFF) >> 3).toString()
@@ -91,6 +90,34 @@ export class KNXHelper {
       return address;
     }
   }
+  /**
+   * Reverse conversion from string to buffer, the normal function is GetAddress
+   * @param address Group address or source address
+   * @param separator Specifies what separates each number from the address
+   * @param group 
+   * @param threeLevelAddressing 
+   * @returns 
+   */
+  static addressToBuffer(address: string, separator = ".", group = false, threeLevelAddressing = true) {
+    const parts = address.split(separator).map(Number);
+    let addr = Buffer.alloc(2); // Creamos un buffer de 2 bytes
+
+    if (group && !threeLevelAddressing) {
+        // 2 niveles de direccionamiento de grupo
+        addr[0] = (parts[0] << 3) | ((parts[1] >> 8) & 0x07);
+        addr[1] = parts[1] & 0xFF;
+    } else {
+        // 3 niveles de direccionamiento individual o de grupo
+        if (group) {
+            addr[0] = ((parts[0] & 0x1F) << 3) | (parts[1] & 0x07);
+        } else {
+            addr[0] = ((parts[0] & 0x0F) << 4) | (parts[1] & 0x0F);
+        }
+        addr[1] = parts[2] & 0xFF;
+    }
+
+    return addr;
+}
   /**
    * Converts a string group address to buffer
    * @param address Group address
@@ -247,7 +274,7 @@ export class KNXHelper {
   static GetData(dataLength: number, apdu: Buffer) {
     switch (dataLength) {
       case 0:
-        return '';
+        return '0';
       case 1:
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         // return parseInt(0x3F & apdu[1], 10).toString();
@@ -257,17 +284,18 @@ export class KNXHelper {
       case 2:
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         // Interpreta el tercer byte como un carácter Unicode.
-      return String.fromCharCode(apdu[2]);
+        return (apdu[2]).toString()
+      // return String.fromCharCode(apdu[2]);
       case 3:
-        var sign = apdu[2] >> 7;
-        var exponent = (apdu[2] & 0b01111000) >> 3;
-        var mantissa = 256 * (apdu[2] & 0b00000111) + apdu[3];
+        let sign = apdu[2] >> 7;
+        let exponent = (apdu[2] & 0b01111000) >> 3;
+        let mantissa = 256 * (apdu[2] & 0b00000111) + apdu[3];
         mantissa = (sign == 1) ? ~(mantissa ^ 2047) : mantissa;
 
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         return this.Idexp((0.01 * mantissa), exponent).toString();
       default:
-        var data = Buffer.alloc(apdu.length);
+        let data = Buffer.alloc(apdu.length);
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         apdu.copy(data);
         return data;

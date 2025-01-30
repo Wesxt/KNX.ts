@@ -8,6 +8,7 @@ export class KNXReceiverTunneling extends KNXReceiver {
   private udpClient: dgram.Socket;
   private localEndPoint: LocalEndPoint;
   private rxSequenceNumber: number | null = null;
+  private pendingAcks: Map<number, NodeJS.Timeout> = new Map();
   constructor(connection: KNXConnection, udpClient: dgram.Socket, localEndPoint: LocalEndPoint) {
     super(connection)
     this.udpClient = udpClient
@@ -37,7 +38,7 @@ export class KNXReceiverTunneling extends KNXReceiver {
   }
   ProcessDatagram(datagram: Buffer) {
     if (this.connection.debug)
-      console.log(`ProcessDatagram datagram ${datagram.toString('hex')}`);
+      console.log(`ProcessDatagram datagram: `, datagram);
     try {
       switch (KNXHelper.GetServiceType(datagram)) {
         case KNXHelper.SERVICE_TYPE.CONNECT_RESPONSE:
@@ -109,8 +110,40 @@ export class KNXReceiverTunneling extends KNXReceiver {
    * TODO: implement ack processing!
    * @param datagram 
    */
-  ProcessTunnelingAck(datagram: Buffer): undefined {
-    // do nothing
+  
+  ProcessTunnelingAck(datagram: Buffer): void {
+    const channelId = datagram[6];
+    const sequenceNumber = datagram[7];
+    const status = datagram[8];
+    if (channelId !== this.connection.ChannelId) {
+      console.warn(`Received ACK for unknown channel ID: ${channelId}`);
+      return;
+    }
+    // Limpiar el timeout pendiente para este sequence number
+    const pendingTimeout = this.pendingAcks.get(sequenceNumber);
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      this.pendingAcks.delete(sequenceNumber);
+    }
+    if (status !== 0x00) {
+      console.error(`Tunneling ACK received with error status: ${status}`);
+      this.connection.emit('error', new Error(`Tunneling ACK error: ${status}`));
+      return;
+    }
+    // Emitir evento de ACK recibido
+    this.connection.emit('ack_received', { sequenceNumber, status });
+  }
+  // Método para manejar los timeouts de ACK
+  waitForAck(sequenceNumber: number, timeout: number = 1000): void {
+    const timeoutHandler = setTimeout(() => {
+      if (this.pendingAcks.has(sequenceNumber)) {
+        this.pendingAcks.delete(sequenceNumber);
+        this.connection.emit('ack_timeout', { sequenceNumber });
+        // Opcional: Reintentar el envío
+        this.connection.emit('retry_required', { sequenceNumber });
+      }
+    }, timeout);
+    this.pendingAcks.set(sequenceNumber, timeoutHandler);
   }
   ProcessConnectionStateResponse(datagram: Buffer) {
     // HEADER
@@ -130,8 +163,9 @@ export class KNXReceiverTunneling extends KNXReceiver {
         this.connection.emit('alive');
         return;
     }
-    if (this.connection.debug)
-        console.log("KnxReceiverTunneling: Received connection state response - No active connection with channel ID %s", knxDatagram.channel_id);
+    if (this.connection.debug) {
+      console.log(`KnxReceiverTunneling: Received connection state response - No active connection with channel ID ${knxDatagram.channel_id}`);
+    }
     let thisClass = this
     new Promise(function (win: (value: unknown) => void) {
       if(thisClass.connection.Disconnect) {

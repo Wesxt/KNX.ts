@@ -129,6 +129,8 @@ export class KNXReceiver {
         console.log("Event Destination Address: " + datagram.destination_address);
         console.log("Event Data Length: " + datagram.data_length);
         console.log("Event APDU: 0x" + datagram.apdu.toString('hex'));
+        console.log("Event APDU the last byte: 0x" + datagram.apdu[datagram.apdu.length - 1].toString(16));
+        console.log("Event APDU the last byte convert to decimal: " + datagram.apdu[datagram.apdu.length - 1].toString(10));
         console.log("Event Data: " + datagram.data.toString('hex'));
         console.log("-----------------------------------------------------------------------------------------------------");
       }
