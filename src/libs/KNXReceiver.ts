@@ -109,6 +109,15 @@ export class KNXReceiver {
       datagram.dtpData = new KnxData(datagram.apdu);
 
       if (this.connection.debug) {
+        console.log("dataView: ", datagram.dtpData.dataView())
+        console.log("asDpt1: ", datagram.dtpData.asDpt1())
+        console.log("asDpt13: ", datagram.dtpData.asDpt13())
+        console.log("asDpt14: ", datagram.dtpData.asDpt14())
+        console.log("asDpt5: ", datagram.dtpData.asDpt5())
+        console.log("asDpt6: ", datagram.dtpData.asDpt6())
+        console.log("asDpt7: ", datagram.dtpData.asDpt7())
+        console.log("asDpt8: ", datagram.dtpData.asDpt8())
+        console.log("asDpt9: ", datagram.dtpData.asDpt9())
         console.log("-----------------------------------------------------------------------------------------------------");
         console.log("-----------Header----------------")
         console.log("Event Header Length: " + datagram.header_length);

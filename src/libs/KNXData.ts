@@ -42,9 +42,13 @@ import { KNXHelper } from "./KNXHelper";
 export class KnxData {
   apdu;
   buffer: ArrayBuffer | undefined;
-  constructor(apdu: any) {
+  constructor(apdu: Buffer) {
     this.apdu = apdu
+    
   }
+  /**
+ * Prepare the internal data to access it as specific type
+ */
   dataView() {
     let i;
     let len = this.apdu.length - 2;
@@ -55,12 +59,19 @@ export class KnxData {
     }
     return dataView;
   }
+
+  private toPercentage(value: number) {
+    return (value / 255) * 100 + "%";
+  }
+  private toAngle(value: number) {
+    return (value / 255) * 360 + "ª";
+}
   /**
    * Interpret the underlying data as boolean value
    * @returns 
    */
   asDpt1() {
-    // 0011 1111
+    // 0x3F = 0011 1111
     let data = 0x3f & this.apdu[1]
     return (data != 0)
   }
@@ -72,11 +83,103 @@ export class KnxData {
     let view = this.dataView()
     return view.getUint8(0)
   }
+  asDdt5001() {
+    return this.toPercentage(this.asDpt5())
+  }
+  asDpt5002() {
+    return this.toAngle(this.asDpt5())
+  }
+  asDpt6() {
+    const data = this.dataView()
+    return data.getInt8(0)
+  }
+  asDpt6001() {
+    return this.asDpt6() + "%"
+  }
+  asDpt6010() {
+    return this.asDpt6() + " counter pulses"
+  }
+  asDpt6020() {
+    const view = this.dataView();
+    // Extraer los primeros 5 bits (estado) de la primera posición
+    const status = view.getUint8(0) >> 3; // Desplazamos 3 bits a la derecha para obtener los primeros 5 bits
+    // Extraer los últimos 3 bits (modo) de la primera posición
+    const mode = view.getUint8(0) & 0b111; // Usamos una máscara para obtener los últimos 3 bits
+    // Asignar el modo (1: Modo 0, 2: Modo 1, 3: Modo 2)
+    let modeText = "";
+    switch (mode) {
+      case 0b001:
+        modeText = "Modo 0 activo";
+        break;
+      case 0b010:
+        modeText = "Modo 1 activo";
+        break;
+      case 0b100:
+        modeText = "Modo 2 activo";
+        break;
+      default:
+        modeText = "Modo desconocido";
+    }
+    // Devolver los resultados como un objeto con estado y modo
+    return {
+      status: status === 1 ? "Activo" : "Inactivo", // Si el bit de estado es 1, es activo
+      mode: modeText
+    };
+  }
+  asDpt7() {
+    const data = this.dataView()
+    return data.getUint16(0)
+  }
+  asDpt7001() {
+    const data = this.asDpt7()
+    return data + "pulses"
+  }
+  asDpt7002() {
+    return this.asDpt7() + "ms"
+  }
+  asDpt7003() {
+    return (this.asDpt7() / 100) + "s"
+  }
+  asDpt7004() {
+    return (this.asDpt7() / 10) + "s"
+  }
+  asDpt7005() {
+    return this.asDpt7() + "s"
+  }
+  asDpt7006() {
+    return this.asDpt7() + "min"
+  }
+  asDpt7007() {
+    return this.asDpt7() + "h"
+  }
+  asDpt7011() {
+    return this.asDpt7() + "mm"
+  }
+  asDpt7012() {
+    const data = this.asDpt7()
+    if(data === 0) {
+      return {
+        value: data,
+        status: 'No bus power supply functionality available'
+      }
+    } else {
+      return  {
+        value: data + "mA",
+        status: ''
+      }
+    }
+  }
+  asDpt7013() {
+    return this.asDpt7() + "lux"
+  }
+  asDpt8() {
+    return this.dataView().getInt16(0)
+  }
   /**
    * Interpret the underlying data as 2 byte floating point value
    * @returns 
    */
-  asDtp9() {
+  asDpt9() {
     let sign = this.apdu[2] >> 7;
     let exponent = (this.apdu[2] & 0b01111000) >> 3;
     let mantissa = 256 * (this.apdu[2] & 0b00000111) + this.apdu[3]
@@ -97,5 +200,18 @@ export class KnxData {
   asDpt14() {
     let view = this.dataView()
     return view.getFloat32(0)
+  }
+  asDpt232600() {
+    const data = this.dataView()
+    const rgb = {
+      R: data.getUint8(0),
+      G: data.getUint8(1),
+      B: data.getUint8(2)
+    }
+    const result = {
+      dataBuffer: data,
+      rgb: rgb
+    }
+    return result
   }
 }

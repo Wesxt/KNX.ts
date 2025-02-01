@@ -109,7 +109,7 @@ export class KnxDatagram {
     }
     buffer.writeUint8(this.channel_id as number, 6)
     buffer.writeUint8(this.status as number, 7)
-    buffer.writeUint8(0, 8) // sequence counter
+    buffer.writeUint8(1, 8) // sequence counter
     
     buffer.writeUint8(0, 9) // reserved
     buffer.writeUint8(this.message_code as number, 10)
@@ -117,8 +117,16 @@ export class KnxDatagram {
     buffer.writeUint8(this.control_field_1 as number, 12)
     buffer.writeUint8(this.control_field_2 as number, 13)
     const addressSource = KNXHelper.addressToBuffer(this.source_address as string)
+    const addressDestination = KNXHelper.addressToBuffer(this.destination_address as string)
     buffer[14] = addressSource[0]
     buffer[15] = addressSource[1]
+    buffer[16] = addressDestination[0]
+    buffer[17] = addressDestination[1]
+    buffer.writeUint8(this.data_length as number, 18)
+    if(this.apdu) {
+      buffer[19] = this.apdu[0]
+      buffer[20] = this.apdu[1]
+    }
     // Aquí deberás continuar escribiendo los campos según el formato esperado
     // y asegurarte de manejar correctamente los offsets en el buffer.
     // buffer.writeUint8(this.message_code, )
