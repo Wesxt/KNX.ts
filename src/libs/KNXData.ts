@@ -941,9 +941,6 @@ export class KnxData {
  */
   asDpt251600() {
     const view = this.dataView();
-    if (view.byteLength < 6) {
-      throw new Error("No hay suficientes datos para DPT 251.600 (RGBW).");
-    }
     const red = view.getUint8(0);
     const green = view.getUint8(1);
     const blue = view.getUint8(2);

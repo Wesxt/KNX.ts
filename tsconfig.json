@@ -7,7 +7,7 @@
     "strict": true,
     "esModuleInterop": true,
     "lib": ["ES2024"],
-    "incremental": true
+    "incremental": false
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules"]
