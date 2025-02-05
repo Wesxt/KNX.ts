@@ -32,7 +32,7 @@
  List 3-byte value                  3 Byte                  DPT 232	    DPT 232	RGB[0,0,0]...[255,255,255]
  */
 
-import { KNXHelper } from "./KNXHelper";
+import { KNXHelper } from './KNXHelper';
 
 /**
  * Represent data send over knx bus and provide methods to interpret them as different dpt values.
@@ -43,17 +43,16 @@ export class KnxData {
   apdu;
   buffer: ArrayBuffer | undefined;
   constructor(apdu: Buffer) {
-    this.apdu = apdu
-
+    this.apdu = apdu;
   }
   /**
- * Prepare the internal data to access it as specific type
- */
+   * Prepare the internal data to access it as specific type
+   */
   dataView() {
     let i;
-    let len = this.apdu.length - 2;
-    this.buffer = new ArrayBuffer(len)
-    const dataView = new DataView(this.buffer)
+    const len = this.apdu.length - 2;
+    this.buffer = new ArrayBuffer(len);
+    const dataView = new DataView(this.buffer);
     for (i = 0; i < len; i++) {
       dataView.setUint8(i, this.apdu[i + 2]);
     }
@@ -61,35 +60,35 @@ export class KnxData {
   }
 
   private toPercentage(value: number) {
-    return (value / 255) * 100 + "%";
+    return (value / 255) * 100 + '%';
   }
   private toAngle(value: number) {
-    return (value / 255) * 360 + "ª";
+    return (value / 255) * 360 + 'ª';
   }
   /**
    * Interpret the underlying data as boolean value
-   * @returns 
+   * @returns
    */
   asDpt1() {
     // 0x3F = 0011 1111
-    let data = 0x3f & this.apdu[1]
-    return (data != 0)
+    const data = 0x3f & this.apdu[1];
+    return data != 0;
   }
   /**
- * Interpretar la información del DPT2 (B2) y devolver un objeto con los campos:
- * - control (c): 0 o 1
- * - value (v): 0 o 1
- * - description: descripción basada en la combinación de bits
- *
- * Los datos se encuentran en el primer octeto (this.apdu[1]), y solo se toman en cuenta los dos bits menos significativos.
- */
+   * Interpretar la información del DPT2 (B2) y devolver un objeto con los campos:
+   * - control (c): 0 o 1
+   * - value (v): 0 o 1
+   * - description: descripción basada en la combinación de bits
+   *
+   * Los datos se encuentran en el primer octeto (this.apdu[1]), y solo se toman en cuenta los dos bits menos significativos.
+   */
   asDpt2() {
     // Extraer los dos bits menos significativos del primer octeto.
     const raw = this.apdu[1] & 0x03;
     const c = (raw >> 1) & 0x01; // Bit de control
-    const v = raw & 0x01;        // Bit de valor
+    const v = raw & 0x01; // Bit de valor
 
-    let description = "";
+    let description = '';
     // Según la combinación de bits, asignamos una descripción:
     // - c = 0: sin control.
     //   - v = 0: DPT_Enable_Control (2.003)
@@ -99,59 +98,60 @@ export class KnxData {
     //   - v = 1: DPT_BinaryValue_Control (2.006)
     if (c === 0) {
       if (v === 0) {
-        description = "No control (DPT_Enable_Control)";
+        description = 'No control (DPT_Enable_Control)';
       } else {
-        description = "No control (DPT_Ramp_Control)";
+        description = 'No control (DPT_Ramp_Control)';
       }
-    } else { // c === 1
+    } else {
+      // c === 1
       if (v === 0) {
-        description = "Control. Function value 0 (DPT_Alarm_Control)";
+        description = 'Control. Function value 0 (DPT_Alarm_Control)';
       } else {
-        description = "Control. Function value 1 (DPT_BinaryValue_Control)";
+        description = 'Control. Function value 1 (DPT_BinaryValue_Control)';
       }
     }
 
     return {
       control: c,
       value: v,
-      description: description
+      description: description,
     };
   }
   /**
- * Interpretar la información del DPT3007 (B1U3) y devolver un objeto con:
- * - control: 0 (Decrease) o 1 (Increase)
- * - stepCode: valor de 3 bits (0…7)
- * - action: descripción de la acción (Decrease o Increase)
- * - description: "Break" si stepCode es 0 o el detalle de step con el número de intervalos
- *
- * Se asume que el dato se encuentra en el primer octeto útil, es decir, en this.apdu[1].
- * Como la información es de 4 bits, se toma el nibble inferior del byte.
- */
+   * Interpretar la información del DPT3007 (B1U3) y devolver un objeto con:
+   * - control: 0 (Decrease) o 1 (Increase)
+   * - stepCode: valor de 3 bits (0…7)
+   * - action: descripción de la acción (Decrease o Increase)
+   * - description: "Break" si stepCode es 0 o el detalle de step con el número de intervalos
+   *
+   * Se asume que el dato se encuentra en el primer octeto útil, es decir, en this.apdu[1].
+   * Como la información es de 4 bits, se toma el nibble inferior del byte.
+   */
   asDpt3007() {
     // Extraemos el nibble inferior del byte en this.apdu[1].
     // El formato es: c StepCode, donde:
     // - c es el bit más significativo del nibble (bit 3) y
     // - StepCode son los 3 bits menos significativos (bits 0-2).
-    const rawNibble = this.apdu[1] & 0x0F;
-    const control = (rawNibble >> 3) & 0x01;  // Extrae el bit c.
-    const stepCode = rawNibble & 0x07;          // Extrae los 3 bits de StepCode.
+    const rawNibble = this.apdu[1] & 0x0f;
+    const control = (rawNibble >> 3) & 0x01; // Extrae el bit c.
+    const stepCode = rawNibble & 0x07; // Extrae los 3 bits de StepCode.
     // Determinar la acción según el bit de control.
-    const action = (control === 0) ? "Decrease" : "Increase";
+    const action = control === 0 ? 'Decrease' : 'Increase';
     // Descripción basada en el valor de StepCode:
     // - Si StepCode es 0, se interpreta como "Break".
     // - Si StepCode es 1..7, se calcula el número de intervalos como 2^(stepCode - 1)
-    let description = "";
+    let description = '';
     if (stepCode === 0) {
-      description = "Break";
+      description = 'Break';
     } else {
       const intervals = Math.pow(2, stepCode - 1);
       description = `StepCode ${stepCode} (Intervals: ${intervals})`;
     }
     return {
-      control,    // 0: Decrease, 1: Increase.
-      stepCode,   // Valor del StepCode (0...7).
-      action,     // Descripción breve: "Decrease" o "Increase".
-      description // Descripción completa: "Break" o detalle del step.
+      control, // 0: Decrease, 1: Increase.
+      stepCode, // Valor del StepCode (0...7).
+      action, // Descripción breve: "Decrease" o "Increase".
+      description, // Descripción completa: "Break" o detalle del step.
     };
   }
   /**
@@ -162,7 +162,7 @@ export class KnxData {
    * Campos:
    *  - c: 1 bit (0 = Up, 1 = Down)
    *  - stepCode: 3 bits
-   * 
+   *
    * Retorna un objeto con:
    *  - control: 0 o 1
    *  - stepCode: valor numérico de 0 a 7
@@ -175,27 +175,27 @@ export class KnxData {
     const byte = view.getUint8(0);
     // Extraer el nibble inferior (4 bits)
     // Si se requiere el nibble superior, se usaría: (byte >> 4) & 0x0F
-    const nibble = byte & 0x0F;
+    const nibble = byte & 0x0f;
     // Extraer el bit de control (c) y el StepCode (3 bits)
     const control = (nibble >> 3) & 0x01; // Bit más significativo del nibble
-    const stepCode = nibble & 0x07;         // Los 3 bits menos significativos
+    const stepCode = nibble & 0x07; // Los 3 bits menos significativos
     // Determinar la descripción y el número de intervalos
-    const description = control === 0 ? "Move Up" : "Move Down";
-    const intervals = stepCode === 0 ? "Break indication" : Math.pow(2, stepCode - 1);
+    const description = control === 0 ? 'Move Up' : 'Move Down';
+    const intervals = stepCode === 0 ? 'Break indication' : Math.pow(2, stepCode - 1);
     return {
       control: control,
       stepCode: stepCode,
       description: description,
-      intervals: intervals
+      intervals: intervals,
     };
   }
   /**
- * Interpreta la información del DPT4001 (DPT_Char_ASCII).
- * Se asume que el dato se encuentra en el primer octeto de la carga útil.
- * 
- * - Valida que el MSB sea 0 (valor en el rango 0...127).
- * - Retorna el carácter ASCII correspondiente.
- */
+   * Interpreta la información del DPT4001 (DPT_Char_ASCII).
+   * Se asume que el dato se encuentra en el primer octeto de la carga útil.
+   *
+   * - Valida que el MSB sea 0 (valor en el rango 0...127).
+   * - Retorna el carácter ASCII correspondiente.
+   */
   asDpt4001() {
     const view = this.dataView();
     const value = view.getUint8(0);
@@ -209,7 +209,7 @@ export class KnxData {
   /**
    * Interpreta la información del DPT4002 (DPT_Char_8859_1).
    * Se asume que el dato se encuentra en el primer octeto de la carga útil.
-   * 
+   *
    * - No se impone restricción en el MSB (valor en el rango 0...255).
    * - Retorna el carácter correspondiente en ISO-8859-1.
    */
@@ -222,27 +222,27 @@ export class KnxData {
 
   /**
    * Interpret the underlying data as 1 Byte unsigned value
-   * @returns 
+   * @returns
    */
   asDpt5() {
-    let view = this.dataView()
-    return view.getUint8(0)
+    const view = this.dataView();
+    return view.getUint8(0);
   }
   asDdt5001() {
-    return this.toPercentage(this.asDpt5())
+    return this.toPercentage(this.asDpt5());
   }
   asDpt5002() {
-    return this.toAngle(this.asDpt5())
+    return this.toAngle(this.asDpt5());
   }
   asDpt6() {
-    const data = this.dataView()
-    return data.getInt8(0)
+    const data = this.dataView();
+    return data.getInt8(0);
   }
   asDpt6001() {
-    return this.asDpt6() + "%"
+    return this.asDpt6() + '%';
   }
   asDpt6010() {
-    return this.asDpt6() + " counter pulses"
+    return this.asDpt6() + ' counter pulses';
   }
   asDpt6020() {
     const view = this.dataView();
@@ -251,139 +251,145 @@ export class KnxData {
     // Extraer los últimos 3 bits (modo) de la primera posición
     const mode = view.getUint8(0) & 0b111; // Usamos una máscara para obtener los últimos 3 bits
     // Asignar el modo (1: Modo 0, 2: Modo 1, 3: Modo 2)
-    let modeText = "";
+    let modeText = '';
     switch (mode) {
       case 0b001:
-        modeText = "Modo 0 activo";
+        modeText = 'Modo 0 activo';
         break;
       case 0b010:
-        modeText = "Modo 1 activo";
+        modeText = 'Modo 1 activo';
         break;
       case 0b100:
-        modeText = "Modo 2 activo";
+        modeText = 'Modo 2 activo';
         break;
       default:
-        modeText = "Modo desconocido";
+        modeText = 'Modo desconocido';
     }
     // Devolver los resultados como un objeto con estado y modo
     return {
-      status: status === 1 ? "Activo" : "Inactivo", // Si el bit de estado es 1, es activo
-      mode: modeText
+      status: status === 1 ? 'Activo' : 'Inactivo', // Si el bit de estado es 1, es activo
+      mode: modeText,
     };
   }
   asDpt7() {
-    const data = this.dataView()
-    return data.getUint16(0)
+    const data = this.dataView();
+    if (data.byteLength === 1) {
+      const buf = Buffer.alloc(1);
+      buf[0] = this.apdu[2];
+      return buf.readUInt8();
+    } else {
+      return data.getUint16(0);
+    }
   }
   asDpt7001() {
-    const data = this.asDpt7()
-    return data + "pulses"
+    const data = this.asDpt7();
+    return data + 'pulses';
   }
   asDpt7002() {
-    return this.asDpt7() + "ms"
+    return this.asDpt7() + 'ms';
   }
   asDpt7003() {
-    return (this.asDpt7() / 100) + "s"
+    return this.asDpt7() / 100 + 's';
   }
   asDpt7004() {
-    return (this.asDpt7() / 10) + "s"
+    return this.asDpt7() / 10 + 's';
   }
   asDpt7005() {
-    return this.asDpt7() + "s"
+    return this.asDpt7() + 's';
   }
   asDpt7006() {
-    return this.asDpt7() + "min"
+    return this.asDpt7() + 'min';
   }
   asDpt7007() {
-    return this.asDpt7() + "h"
+    return this.asDpt7() + 'h';
   }
   asDpt7011() {
-    return this.asDpt7() + "mm"
+    return this.asDpt7() + 'mm';
   }
   asDpt7012() {
-    const data = this.asDpt7()
+    const data = this.asDpt7();
     if (data === 0) {
       return {
         value: data,
-        status: 'No bus power supply functionality available'
-      }
+        status: 'No bus power supply functionality available',
+      };
     } else {
       return {
-        value: data + "mA",
-        status: ''
-      }
+        value: data + 'mA',
+        status: '',
+      };
     }
   }
   asDpt7013() {
-    return this.asDpt7() + "lux"
+    return this.asDpt7() + 'lux';
   }
   asDpt8() {
-    return this.dataView().getInt16(0)
+    return this.dataView().getInt16(0);
   }
   /**
    * Interpret the underlying data as 2 byte floating point value
-   * @returns 
+   * @returns
    */
   asDpt9() {
-    let sign = this.apdu[2] >> 7;
-    let exponent = (this.apdu[2] & 0b01111000) >> 3;
-    let mantissa = 256 * (this.apdu[2] & 0b00000111) + this.apdu[3]
-    mantissa = (sign == 1) ? ~(mantissa ^ 2047) : mantissa;
-    return KNXHelper.Idexp((0.01 * mantissa), exponent)
+    const sign = this.apdu[2] >> 7;
+    const exponent = (this.apdu[2] & 0b01111000) >> 3;
+    let mantissa = 256 * (this.apdu[2] & 0b00000111) + this.apdu[3];
+    mantissa = sign == 1 ? ~(mantissa ^ 2047) : mantissa;
+    return KNXHelper.Idexp(0.01 * mantissa, exponent);
   }
   /**
- * Interpreta la información del DPT 10001 (Time of Day).
- * Se asume que la carga útil contiene 3 octetos codificados según:
- * 
- * Octeto 1: NNNUUUUU -> 3 bits para el Día y 5 bits para la Hora.
- * Octeto 2: rrUUUUUU -> 6 bits para los Minutos (dos bits reservados).
- * Octeto 3: rrUUUUUU -> 6 bits para los Segundos (dos bits reservados).
- *
- * Retorna un objeto con:
- *   - day: número del día (0 = no day, 1 = lunes, …, 7 = domingo)
- *   - dayName: nombre del día (o "No day")
- *   - hour: hora (0...23)
- *   - minutes: minutos (0...59)
- *   - seconds: segundos (0...59)
- */
+   * Interpreta la información del DPT 10001 (Time of Day).
+   * Se asume que la carga útil contiene 3 octetos codificados según:
+   *
+   * Octeto 1: NNNUUUUU -> 3 bits para el Día y 5 bits para la Hora.
+   * Octeto 2: rrUUUUUU -> 6 bits para los Minutos (dos bits reservados).
+   * Octeto 3: rrUUUUUU -> 6 bits para los Segundos (dos bits reservados).
+   *
+   * Retorna un objeto con:
+   *   - day: número del día (0 = no day, 1 = lunes, …, 7 = domingo)
+   *   - dayName: nombre del día (o "No day")
+   *   - hour: hora (0...23)
+   *   - minutes: minutos (0...59)
+   *   - seconds: segundos (0...59)
+   */
   asDpt10001() {
     const view = this.dataView();
     if (view.byteLength < 3) {
-      throw new Error("No hay suficientes datos para DPT10001");
+      throw new Error('No hay suficientes datos para DPT10001');
     }
     // Octeto 1: Día y Hora
     const byte0 = view.getUint8(0);
-    const day = (byte0 >> 5) & 0x07;    // Extrae los 3 bits superiores
-    const hour = byte0 & 0x1F;          // Extrae los 5 bits inferiores
+    const day = (byte0 >> 5) & 0x07; // Extrae los 3 bits superiores
+    const hour = byte0 & 0x1f; // Extrae los 5 bits inferiores
     // Octeto 2: Minutos (6 bits)
     const byte1 = view.getUint8(1);
-    const minutes = byte1 & 0x3F;       // Máscara 0011 1111
+    const minutes = byte1 & 0x3f; // Máscara 0011 1111
     // Octeto 3: Segundos (6 bits)
     const byte2 = view.getUint8(2);
-    const seconds = byte2 & 0x3F;       // Máscara 0011 1111
+    const seconds = byte2 & 0x3f; // Máscara 0011 1111
     // Opcional: conversión del número del día a nombre
     const days: { [key: number]: string } = {
-      0: "No day",
-      1: "Monday",
-      2: "Tuesday",
-      3: "Wednesday",
-      4: "Thursday",
-      5: "Friday",
-      6: "Saturday",
-      7: "Sunday"
+      0: 'No day',
+      1: 'Monday',
+      2: 'Tuesday',
+      3: 'Wednesday',
+      4: 'Thursday',
+      5: 'Friday',
+      6: 'Saturday',
+      7: 'Sunday',
     };
     return {
       day: day,
-      dayName: days[day] || "Unknown",
+      dayName: days[day] || 'Unknown',
       hour: hour,
       minutes: minutes,
-      seconds: seconds
+      seconds: seconds,
     };
   }
   /**
    * Interpreta la información del DPT 11001 (Date).
    * Se asume que la carga útil contiene 3 octetos codificados según:
-   * 
+   *
    * Octeto 1: r3U5 => Day: 5 bits (bits [4:0])
    * Octeto 2: r4U4 => Month: 4 bits (bits [3:0])
    * Octeto 3: r1U7 => Year: 7 bits (bits [6:0])
@@ -397,28 +403,28 @@ export class KnxData {
   asDpt11001() {
     const view = this.dataView();
     if (view.byteLength < 3) {
-      throw new Error("No hay suficientes datos para DPT11001");
+      throw new Error('No hay suficientes datos para DPT11001');
     }
     // Octeto 1: Extraer el día (los 5 bits menos significativos)
     const byte0 = view.getUint8(0);
-    const day = byte0 & 0x1F;  // 0x1F equivale a 0001 1111
+    const day = byte0 & 0x1f; // 0x1F equivale a 0001 1111
     // Octeto 2: Extraer el mes (los 4 bits menos significativos)
     const byte1 = view.getUint8(1);
-    const month = byte1 & 0x0F;  // 0x0F equivale a 0000 1111
+    const month = byte1 & 0x0f; // 0x0F equivale a 0000 1111
     // Octeto 3: Extraer el año (los 7 bits menos significativos)
     const byte2 = view.getUint8(2);
-    const rawYear = byte2 & 0x7F; // 0x7F equivale a 0111 1111
+    const rawYear = byte2 & 0x7f; // 0x7F equivale a 0111 1111
     // Interpretar el siglo:
     // Si rawYear >= 90 => 1900 + rawYear (siglo XX: 1990-1999)
     // Si rawYear < 90  => 2000 + rawYear (siglo XXI: 2000-2089)
-    const century = (rawYear >= 90) ? 1900 : 2000;
+    const century = rawYear >= 90 ? 1900 : 2000;
     const year = century + rawYear;
     return {
       day,
       month,
       year,
       // Formateamos la fecha en formato DD/MM/YYYY
-      dateString: `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`
+      dateString: `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`,
     };
   }
   /**
@@ -430,13 +436,13 @@ export class KnxData {
   asDpt12001() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 12.001");
+      throw new Error('No hay suficientes datos para DPT 12.001');
     }
     // getUint32() interpreta el valor en formato big-endian (MSB primero).
     const value = view.getUint32(0);
     return {
       value,
-      unit: "pulses"
+      unit: 'pulses',
     };
   }
   /**
@@ -451,50 +457,50 @@ export class KnxData {
    *
    * @returns Un objeto con el valor sin signo y la unidad seleccionada.
    */
-  asDpt12002(variant: "sec" | "min" | "hrs" = "sec") {
+  asDpt12002(variant: 'sec' | 'min' | 'hrs' = 'sec') {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para el DPT LongTimePeriod");
+      throw new Error('No hay suficientes datos para el DPT LongTimePeriod');
     }
     const value = view.getUint32(0);
     let unit: string;
     switch (variant) {
-      case "sec":
-        unit = "s";
+      case 'sec':
+        unit = 's';
         break;
-      case "min":
-        unit = "min";
+      case 'min':
+        unit = 'min';
         break;
-      case "hrs":
-        unit = "h";
+      case 'hrs':
+        unit = 'h';
         break;
     }
     return {
       value,
-      unit
+      unit,
     };
   }
   /**
    * Interpret the underlying data as 4 byte signed integer
-   * @returns 
+   * @returns
    */
   asDpt13() {
-    let view = this.dataView()
-    return view.getInt32(0)
+    const view = this.dataView();
+    return view.getInt32(0);
   }
   /**
- * DPT 13.001: DPT_Value_4_Count
- * Interpreta un contador de pulsos (valor de 4 octetos con signo).
- */
+   * DPT 13.001: DPT_Value_4_Count
+   * Interpreta un contador de pulsos (valor de 4 octetos con signo).
+   */
   asDpt13001() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.001");
+      throw new Error('No hay suficientes datos para DPT 13.001');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "pulses"
+      unit: 'pulses',
     };
   }
   /**
@@ -504,13 +510,13 @@ export class KnxData {
   asDpt13002() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.002");
+      throw new Error('No hay suficientes datos para DPT 13.002');
     }
     const rawValue = view.getInt32(0);
     const value = rawValue * 0.0001;
     return {
       value,
-      unit: "m³/h"
+      unit: 'm³/h',
     };
   }
   /**
@@ -520,12 +526,12 @@ export class KnxData {
   asDpt1310() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.010");
+      throw new Error('No hay suficientes datos para DPT 13.010');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "Wh"
+      unit: 'Wh',
     };
   }
   /**
@@ -535,12 +541,12 @@ export class KnxData {
   asDpt1311() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.011");
+      throw new Error('No hay suficientes datos para DPT 13.011');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "VAh"
+      unit: 'VAh',
     };
   }
   /**
@@ -550,12 +556,12 @@ export class KnxData {
   asDpt1312() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.012");
+      throw new Error('No hay suficientes datos para DPT 13.012');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "VARh"
+      unit: 'VARh',
     };
   }
   /**
@@ -565,12 +571,12 @@ export class KnxData {
   asDpt1313() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.013");
+      throw new Error('No hay suficientes datos para DPT 13.013');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "kWh"
+      unit: 'kWh',
     };
   }
   /**
@@ -580,12 +586,12 @@ export class KnxData {
   asDpt1314() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.014");
+      throw new Error('No hay suficientes datos para DPT 13.014');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "kVAh"
+      unit: 'kVAh',
     };
   }
   /**
@@ -595,12 +601,12 @@ export class KnxData {
   asDpt1315() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.015");
+      throw new Error('No hay suficientes datos para DPT 13.015');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "kVARh"
+      unit: 'kVARh',
     };
   }
   /**
@@ -610,12 +616,12 @@ export class KnxData {
   asDpt1316() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.016");
+      throw new Error('No hay suficientes datos para DPT 13.016');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "MWh"
+      unit: 'MWh',
     };
   }
   /**
@@ -625,12 +631,12 @@ export class KnxData {
   asDpt13100() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.100");
+      throw new Error('No hay suficientes datos para DPT 13.100');
     }
     const value = view.getInt32(0);
     return {
       value,
-      unit: "s"
+      unit: 's',
     };
   }
 
@@ -638,17 +644,17 @@ export class KnxData {
    * Interpret the underlying data as 4 byte floating point number
    */
   asDpt14() {
-    let view = this.dataView()
-    return view.getFloat32(0)
+    const view = this.dataView();
+    return view.getFloat32(0);
   }
   /**
- * DPT 15.000: DPT_Access_Data
- * Decodifica un valor de 4 bytes con información de acceso.
- */
+   * DPT 15.000: DPT_Access_Data
+   * Decodifica un valor de 4 bytes con información de acceso.
+   */
   asDpt15000() {
     const view = this.dataView();
     if (view.byteLength < 4) {
-      throw new Error("No hay suficientes datos para DPT 15.000 (Access Data).");
+      throw new Error('No hay suficientes datos para DPT 15.000 (Access Data).');
     }
     const d6 = view.getUint8(0); // Octeto 4
     const d5 = (view.getUint8(1) & 0b11110000) >> 4;
@@ -667,7 +673,7 @@ export class KnxData {
       permission: p,
       readDirection: d,
       encryption: c,
-      index: index
+      index: index,
     };
   }
   /**
@@ -677,9 +683,9 @@ export class KnxData {
   asDpt16() {
     const view = this.dataView();
     if (view.byteLength < 14) {
-      throw new Error("Datos insuficientes para DPT 16 (String).");
+      throw new Error('Datos insuficientes para DPT 16 (String).');
     }
-    let str = "";
+    let str = '';
     for (let i = 0; i < 14; i++) {
       const charCode = view.getUint8(i);
       if (charCode === 0x00) break; // Ignorar caracteres NULL
@@ -692,138 +698,185 @@ export class KnxData {
    * (No oficial en la especificacion del DataPointType de Knx en la version 02.02.01)
    */
   asDpt16002() {
-    const buffer = this.dataView()
+    const buffer = this.dataView();
     if (buffer.byteLength < 14) {
-      throw new Error("Datos insuficientes para DPT 16.002 (Se esperan 14 bytes).");
+      throw new Error('Datos insuficientes para DPT 16.002 (Se esperan 14 bytes).');
     }
-    let hexString = "";
+    let hexString = '';
     let decimalValue = BigInt(0);
     for (let i = 0; i < 14; i++) {
       if (buffer.getUint8(i) === 0x00) break; // Ignorar caracteres NULL
-      hexString += buffer.getUint8(i).toString(16).padStart(2, "0").toUpperCase();
+      hexString += buffer.getUint8(i).toString(16).padStart(2, '0').toUpperCase();
     }
     if (hexString) {
-      decimalValue = BigInt("0x" + hexString); // Convertir de Hex a Decimal
+      decimalValue = BigInt('0x' + hexString); // Convertir de Hex a Decimal
     }
     return { hex: hexString, decimal: decimalValue.toString() };
   }
   asDpt20() {
-    const data = this.dataView()
-    return data.getUint8(0)
+    const data = this.dataView();
+    return data.getUint8(0);
   }
   asDpt20001(): string {
     const value = this.dataView().getUint8(0);
-    return ["autonomous", "slave", "master"][value] || "reserved";
+    return ['autonomous', 'slave', 'master'][value] || 'reserved';
   }
   asDpt20002(): string {
     const value = this.dataView().getUint8(0);
-    return ["Building in use", "Building not used", "Building protection"][value] || "reserved";
+    return ['Building in use', 'Building not used', 'Building protection'][value] || 'reserved';
   }
   asDpt20003(): string {
     const value = this.dataView().getUint8(0);
-    return ["occupied", "standby", "not occupied"][value] || "reserved";
+    return ['occupied', 'standby', 'not occupied'][value] || 'reserved';
   }
   asDpt20004(): string {
     const value = this.dataView().getUint8(0);
-    return ["High", "Medium", "Low", "void"][value] || "reserved";
+    return ['High', 'Medium', 'Low', 'void'][value] || 'reserved';
   }
   asDpt20005(): string {
     const value = this.dataView().getUint8(0);
-    return ["normal", "presence simulation", "night round"][value] || "manufacturer specific";
+    return ['normal', 'presence simulation', 'night round'][value] || 'manufacturer specific';
   }
   asDpt20006(): string {
     const value = this.dataView().getUint8(0);
     const mapping: { [key: number]: string } = {
-      0: "no fault",
-      1: "system and functions of common interest",
-      10: "HVAC general FBs",
-      11: "HVAC Hot Water Heating",
-      12: "HVAC Direct Electrical Heating",
-      13: "HVAC Terminal Units",
-      14: "HVAC VAC",
-      20: "Lighting",
-      30: "Security",
-      40: "Load Management",
-      50: "Shutters and blinds",
+      0: 'no fault',
+      1: 'system and functions of common interest',
+      10: 'HVAC general FBs',
+      11: 'HVAC Hot Water Heating',
+      12: 'HVAC Direct Electrical Heating',
+      13: 'HVAC Terminal Units',
+      14: 'HVAC VAC',
+      20: 'Lighting',
+      30: 'Security',
+      40: 'Load Management',
+      50: 'Shutters and blinds',
     };
-    return mapping[value] || "reserved";
+    return mapping[value] || 'reserved';
   }
   asDpt20007(): string {
     const value = this.dataView().getUint8(0);
-    return ["reserved", "simple alarm", "basic alarm", "extended alarm"][value] || "reserved";
+    return ['reserved', 'simple alarm', 'basic alarm', 'extended alarm'][value] || 'reserved';
   }
   asDpt20008(): string {
     const value = this.dataView().getUint8(0);
-    return ["disabled", "enabled", "auto"][value] || "reserved";
+    return ['disabled', 'enabled', 'auto'][value] || 'reserved';
   }
   asDpt20011(): string {
     const value = this.dataView().getUint8(0);
     const mapping = [
-      "no fault",
-      "general device fault",
-      "communication fault",
-      "configuration fault",
-      "hardware fault",
-      "software fault",
-      "insufficient non-volatile memory",
-      "insufficient volatile memory",
-      "memory allocation size 0 received",
-      "CRC-error",
-      "watchdog reset detected",
-      "invalid opcode detected",
-      "general protection fault",
-      "maximal table length exceeded",
-      "undefined load command received",
-      "Group Address Table not sorted",
-      "invalid connection number (TSAP)",
-      "invalid Group Object number (ASAP)",
-      "Group Object Type exceeds limit",
+      'no fault',
+      'general device fault',
+      'communication fault',
+      'configuration fault',
+      'hardware fault',
+      'software fault',
+      'insufficient non-volatile memory',
+      'insufficient volatile memory',
+      'memory allocation size 0 received',
+      'CRC-error',
+      'watchdog reset detected',
+      'invalid opcode detected',
+      'general protection fault',
+      'maximal table length exceeded',
+      'undefined load command received',
+      'Group Address Table not sorted',
+      'invalid connection number (TSAP)',
+      'invalid Group Object number (ASAP)',
+      'Group Object Type exceeds limit',
     ];
-    return mapping[value] || "reserved";
+    return mapping[value] || 'reserved';
   }
   asDpt20012(): string {
     const value = this.dataView().getUint8(0);
-    return ["no fault", "sensor fault", "process/controller fault", "actuator fault", "other fault"][value] || "reserved";
+    return ['no fault', 'sensor fault', 'process/controller fault', 'actuator fault', 'other fault'][value] || 'reserved';
   }
   asDpt20013(): string {
     const value = this.dataView().getUint8(0);
     const mapping = [
-      "not active", "1 s", "2 s", "3 s", "5 s", "10 s", "15 s", "20 s", "30 s", "45 s",
-      "1 min", "1.25 min", "1.5 min", "2 min", "2.5 min", "3 min", "5 min", "15 min", "20 min",
-      "30 min", "1 h", "2 h", "3 h", "5 h", "12 h", "24 h"
+      'not active',
+      '1 s',
+      '2 s',
+      '3 s',
+      '5 s',
+      '10 s',
+      '15 s',
+      '20 s',
+      '30 s',
+      '45 s',
+      '1 min',
+      '1.25 min',
+      '1.5 min',
+      '2 min',
+      '2.5 min',
+      '3 min',
+      '5 min',
+      '15 min',
+      '20 min',
+      '30 min',
+      '1 h',
+      '2 h',
+      '3 h',
+      '5 h',
+      '12 h',
+      '24 h',
     ];
-    return mapping[value] || "reserved";
+    return mapping[value] || 'reserved';
   }
   asDpt20014(): string {
     const value = this.dataView().getUint8(0);
-    return [
-      "calm (no wind)", "light air", "light breeze", "gentle breeze", "moderate breeze",
-      "fresh breeze", "strong breeze", "near gale / moderate gale", "fresh gale",
-      "strong gale", "whole gale / storm", "violent storm", "hurricane"
-    ][value] || "reserved";
+    return (
+      [
+        'calm (no wind)',
+        'light air',
+        'light breeze',
+        'gentle breeze',
+        'moderate breeze',
+        'fresh breeze',
+        'strong breeze',
+        'near gale / moderate gale',
+        'fresh gale',
+        'strong gale',
+        'whole gale / storm',
+        'violent storm',
+        'hurricane',
+      ][value] || 'reserved'
+    );
   }
   asDpt20017(): string {
     const value = this.dataView().getUint8(0);
-    return ["inactive", "digital input not inverted", "digital input inverted", "analog input 0%-100%", "temperature sensor input"][value] || "reserved";
+    return (
+      ['inactive', 'digital input not inverted', 'digital input inverted', 'analog input 0%-100%', 'temperature sensor input'][value] || 'reserved'
+    );
   }
   asDpt20020(): string {
     const value = this.dataView().getUint8(0);
-    return ["reserved", "SensorConnection", "ControllerConnection"][value] || "reserved";
+    return ['reserved', 'SensorConnection', 'ControllerConnection'][value] || 'reserved';
   }
   asDpt20021(): string {
     const value = this.dataView().getUint8(0);
-    return [
-      "Cloudless", "Sunny", "Sunshiny", "Lightly cloudy", "Scattered clouds",
-      "Cloudy", "Heavily cloudy", "Almost overcast", "Overcast", "Sky obstructed from view"
-    ][value] || "reserved";
+    return (
+      [
+        'Cloudless',
+        'Sunny',
+        'Sunshiny',
+        'Lightly cloudy',
+        'Scattered clouds',
+        'Cloudy',
+        'Heavily cloudy',
+        'Almost overcast',
+        'Overcast',
+        'Sky obstructed from view',
+      ][value] || 'reserved'
+    );
   }
   asDpt20022(): string {
     const value = this.dataView().getUint8(0);
-    return ["do not send", "send always", "send if value changed during powerdown"][value] || "reserved";
+    return ['do not send', 'send always', 'send if value changed during powerdown'][value] || 'reserved';
   }
-  asDpt27001(): { outputs: boolean[], masks: boolean[] } {
+  asDpt27001(): { outputs: boolean[]; masks: boolean[] } {
     // Leer los 4 octetos (32 bits)
-    const binaryValue = this.dataView().getUint32(0, false);  // Big-endian
+    const binaryValue = this.dataView().getUint32(0, false); // Big-endian
     // Decodificar los 16 bits de salidas (outputs)
     const outputs = [];
     for (let i = 0; i < 16; i++) {
@@ -837,7 +890,7 @@ export class KnxData {
     return { outputs, masks };
   }
   asDpt28001(): string {
-    let utf8Bytes = new Uint8Array(this.dataView().buffer);
+    const utf8Bytes = new Uint8Array(this.dataView().buffer);
     // Convertir los bytes a una cadena de texto usando UTF-8
     const decodedString = new TextDecoder('utf-8').decode(utf8Bytes);
     // Retornar la cadena decodificada
@@ -846,7 +899,7 @@ export class KnxData {
   asDpt29(): number {
     const signedValue = this.dataView().getBigInt64(0, false); // Big-endian, 8 bytes
     return Number(signedValue); // Convertir a número
-  }  
+  }
   asDpt29010(): number {
     const signedValue = this.dataView().getBigInt64(0, false); // Big-endian, 8 bytes
     return Number(signedValue); // Convertir a número
@@ -859,16 +912,16 @@ export class KnxData {
     const signedValue = this.dataView().getBigInt64(0, false); // Big-endian, 8 bytes
     return Number(signedValue); // Convertir a número
   }
-  asDpt238600(): { addr: number, lf: boolean, bf: boolean } {
+  asDpt238600(): { addr: number; lf: boolean; bf: boolean } {
     const byte = this.dataView().getUint8(0); // Leer 1 octeto
     // Decodificar los campos
-    const addr = byte & 0x3F; // Los primeros 6 bits (b0 a b5) para la dirección del dispositivo
+    const addr = byte & 0x3f; // Los primeros 6 bits (b0 a b5) para la dirección del dispositivo
     const lf = (byte >> 6) & 0x01; // El bit b6 para fallo de lámpara
     const bf = (byte >> 7) & 0x01; // El bit b7 para fallo de balasto
     return {
       addr,
       lf: lf === 1,
-      bf: bf === 1
+      bf: bf === 1,
     };
   }
   asDpt245600() {
@@ -880,21 +933,21 @@ export class KnxData {
     const SF = (byte1 >> 0) & 0x03; // Los 2 primeros bits para SF
     const SD = (byte1 >> 2) & 0x03; // Los siguientes 2 bits para SD
     const SP = (byte1 >> 4) & 0x03; // Los siguientes 2 bits para SP
-    const LDTR = (byte1 >> 6) & 0x3F; // Los 6 bits restantes para LDTR
+    const LDTR = (byte1 >> 6) & 0x3f; // Los 6 bits restantes para LDTR
     // Los 12 bits siguientes contienen los campos LTRF, LTRD y LTRP
     const byte2 = dataView.getUint8(2);
-    const LTRF = (byte2 >> 12) & 0x0F; // Primeros 4 bits para LTRF
-    const LTRD = (byte2 >> 8) & 0x0F;  // Siguientes 4 bits para LTRD
-    const LTRP = (byte2 >> 4) & 0x0F;  // Últimos 4 bits para LTRP
+    const LTRF = (byte2 >> 12) & 0x0f; // Primeros 4 bits para LTRF
+    const LTRD = (byte2 >> 8) & 0x0f; // Siguientes 4 bits para LTRD
+    const LTRP = (byte2 >> 4) & 0x0f; // Últimos 4 bits para LTRP
     return {
-      LTRF: LTRF,   // Resultado de la última prueba de función
-      LTRD: LTRD,   // Resultado de la última prueba de duración
-      LTRP: LTRP,   // Resultado de la última prueba parcial de duración
-      SF: SF,       // Método de inicio de la última prueba de función
-      SD: SD,       // Método de inicio de la última prueba de duración
-      SP: SP,       // Método de inicio de la última prueba parcial de duración
-      LDTR: LDTR,   // Tiempo de descarga de batería
-      LPDTR: LPDTR  // Nivel de carga restante después de la última prueba PDT
+      LTRF: LTRF, // Resultado de la última prueba de función
+      LTRD: LTRD, // Resultado de la última prueba de duración
+      LTRP: LTRP, // Resultado de la última prueba parcial de duración
+      SF: SF, // Método de inicio de la última prueba de función
+      SD: SD, // Método de inicio de la última prueba de duración
+      SP: SP, // Método de inicio de la última prueba parcial de duración
+      LDTR: LDTR, // Tiempo de descarga de batería
+      LPDTR: LPDTR, // Nivel de carga restante después de la última prueba PDT
     };
   }
   asDpt250600() {
@@ -902,43 +955,49 @@ export class KnxData {
     // Decodificar el tercer octeto (last byte) para obtener los campos
     const byte3 = dataView.getUint8(2);
     // r4B1U3r4B1U3B8
-    const r4_1 = (byte3 >> 7) & 0x01;  // r (bit 7)
-    const r4_2 = (byte3 >> 6) & 0x01;  // r (bit 6)
-    const r4_3 = (byte3 >> 5) & 0x01;  // r (bit 5)
-    const r4_4 = (byte3 >> 4) & 0x01;  // r (bit 4)
-    const C = (byte3 >> 3) & 0x01;     // C: Colour Temperature (bit 3)
-    const StepCodeColourTemp = (byte3 >> 0) & 0x07;  // Step Code Colour Temperature (bits 2-0)
+    const r4_1 = (byte3 >> 7) & 0x01; // r (bit 7)
+    const r4_2 = (byte3 >> 6) & 0x01; // r (bit 6)
+    const r4_3 = (byte3 >> 5) & 0x01; // r (bit 5)
+    const r4_4 = (byte3 >> 4) & 0x01; // r (bit 4)
+    const C = (byte3 >> 3) & 0x01; // C: Colour Temperature (bit 3)
+    const StepCodeColourTemp = (byte3 >> 0) & 0x07; // Step Code Colour Temperature (bits 2-0)
     // Decodificar el segundo octeto
     const byte2 = dataView.getUint8(1);
-    const r4_5 = (byte2 >> 7) & 0x01;  // r (bit 7)
-    const r4_6 = (byte2 >> 6) & 0x01;  // r (bit 6)
-    const r4_7 = (byte2 >> 5) & 0x01;  // r (bit 5)
-    const r4_8 = (byte2 >> 4) & 0x01;  // r (bit 4)
-    const B = (byte2 >> 3) & 0x01;     // Brightness (bit 3)
-    const StepCodeBrightness = (byte2 >> 0) & 0x07;  // Step Code Brightness (bits 2-0)
+    const r4_5 = (byte2 >> 7) & 0x01; // r (bit 7)
+    const r4_6 = (byte2 >> 6) & 0x01; // r (bit 6)
+    const r4_7 = (byte2 >> 5) & 0x01; // r (bit 5)
+    const r4_8 = (byte2 >> 4) & 0x01; // r (bit 4)
+    const B = (byte2 >> 3) & 0x01; // Brightness (bit 3)
+    const StepCodeBrightness = (byte2 >> 0) & 0x07; // Step Code Brightness (bits 2-0)
     // Decodificar el primer octeto
     const byte1 = dataView.getUint8(0);
     // Los 6 bits más altos deben ser 0 (reservado)
-    const reserved = (byte1 >> 2) & 0x3F; // Bits 7-2
-    const validityColourTemp = (byte1 >> 1) & 0x01;  // Validez de los campos CCT (bit 1)
-    const validityBrightness = byte1 & 0x01;         // Validez de los campos CB (bit 0)
+    const reserved = (byte1 >> 2) & 0x3f; // Bits 7-2
+    const validityColourTemp = (byte1 >> 1) & 0x01; // Validez de los campos CCT (bit 1)
+    const validityBrightness = byte1 & 0x01; // Validez de los campos CB (bit 0)
     return {
-      r4_1, r4_2, r4_3, r4_4,    // r valores (bits 7 a 4)
-      C,                          // Colour Temp Increase or Decrease (bit 3)
-      StepCodeColourTemp,         // Step Code for Colour Temp (bits 2-0)
-      r4_5, r4_6, r4_7, r4_8,    // r valores (bits 7 a 4) del segundo byte
-      B,                          // Brightness Increase or Decrease (bit 3)
-      StepCodeBrightness,         // Step Code for Brightness (bits 2-0)
-      reserved,                   // Bits reservados (bits 7-2)
-      validityColourTemp,         // Validación CCT (bit 1)
-      validityBrightness          // Validación CB (bit 0)
+      r4_1,
+      r4_2,
+      r4_3,
+      r4_4, // r valores (bits 7 a 4)
+      C, // Colour Temp Increase or Decrease (bit 3)
+      StepCodeColourTemp, // Step Code for Colour Temp (bits 2-0)
+      r4_5,
+      r4_6,
+      r4_7,
+      r4_8, // r valores (bits 7 a 4) del segundo byte
+      B, // Brightness Increase or Decrease (bit 3)
+      StepCodeBrightness, // Step Code for Brightness (bits 2-0)
+      reserved, // Bits reservados (bits 7-2)
+      validityColourTemp, // Validación CCT (bit 1)
+      validityBrightness, // Validación CB (bit 0)
     };
   }
-  
+
   /**
- * DPT 251.600: DPT_Colour_RGBW
- * Decodifica un valor RGBW de 6 bytes con indicadores de validez.
- */
+   * DPT 251.600: DPT_Colour_RGBW
+   * Decodifica un valor RGBW de 6 bytes con indicadores de validez.
+   */
   asDpt251600() {
     const view = this.dataView();
     const red = view.getUint8(0);
@@ -951,20 +1010,20 @@ export class KnxData {
       R: { value: red, valid: (validityBits & 0b00001000) !== 0 },
       G: { value: green, valid: (validityBits & 0b00000100) !== 0 },
       B: { value: blue, valid: (validityBits & 0b00000010) !== 0 },
-      W: { value: white, valid: (validityBits & 0b00000001) !== 0 }
+      W: { value: white, valid: (validityBits & 0b00000001) !== 0 },
     };
   }
   asDpt232600() {
-    const data = this.dataView()
+    const data = this.dataView();
     const rgb = {
       R: data.getUint8(0),
       G: data.getUint8(1),
-      B: data.getUint8(2)
-    }
+      B: data.getUint8(2),
+    };
     const result = {
       dataBuffer: data,
-      rgb: rgb
-    }
-    return result
+      rgb: rgb,
+    };
+    return result;
   }
 }

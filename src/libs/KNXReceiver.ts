@@ -1,7 +1,7 @@
-import { KNXHelper } from "./KNXHelper";
-import { KNXConnection } from "./KNXConnection";
-import KnxDatagram from "./KNXDatagram";
-import { KnxData } from "./KNXData";
+import { KNXHelper } from './KNXHelper';
+import { KNXConnection } from './KNXConnection';
+import KnxDatagram from './KNXDatagram';
+import { KnxData } from './KNXData';
 
 interface extendDatagram extends KnxDatagram {
   dtpData?: KnxData;
@@ -10,7 +10,7 @@ interface extendDatagram extends KnxDatagram {
 export class KNXReceiver {
   connection: KNXConnection;
   constructor(connection: KNXConnection) {
-    this.connection = connection
+    this.connection = connection;
   }
   ProcessCEMI(datagram: extendDatagram, cemi: Buffer) {
     try {
@@ -72,13 +72,13 @@ export class KNXReceiver {
       //                    information (APCI) and data passed as an argument from higher layers of
       //                    the KNX communication stack
       //
-      datagram.message_code = cemi[0]
-      datagram.additional_info_length = cemi[1]
+      datagram.message_code = cemi[0];
+      datagram.additional_info_length = cemi[1];
 
       if (datagram.additional_info_length > 0) {
-        datagram.additional_info = Buffer.alloc(datagram.additional_info_length)
+        datagram.additional_info = Buffer.alloc(datagram.additional_info_length);
         for (let i = 0; i < datagram.additional_info_length; i++) {
-          datagram.additional_info[i] = cemi[2 + i]
+          datagram.additional_info[i] = cemi[2 + i];
         }
       }
 
@@ -94,11 +94,11 @@ export class KNXReceiver {
       buf[1] = cemi[7 + datagram.additional_info_length];
 
       datagram.destination_address =
-        (KNXHelper.GetKnxDestinationAddressType(datagram.control_field_2) === KNXHelper.KnxDestinationAddressType.INDIVIDUAL) ?
-          KNXHelper.GetIndividualAddress(buf) :
-          KNXHelper.GetGroupAddress(buf, this.connection.ThreeLevelGroupAddressing);
+        KNXHelper.GetKnxDestinationAddressType(datagram.control_field_2) === KNXHelper.KnxDestinationAddressType.INDIVIDUAL
+          ? KNXHelper.GetIndividualAddress(buf)
+          : KNXHelper.GetGroupAddress(buf, this.connection.ThreeLevelGroupAddressing);
 
-      datagram.data_length = cemi[8 + datagram.additional_info_length]
+      datagram.data_length = cemi[8 + datagram.additional_info_length];
       datagram.apdu = Buffer.alloc(datagram.data_length + 1);
 
       for (let i = 0; i < datagram.apdu.length; i++) {
@@ -110,15 +110,15 @@ export class KNXReceiver {
 
       if (this.connection.debug) {
         try {
-          console.log("dataView: ", datagram.dtpData.dataView())
+          console.log('dataView: ', datagram.dtpData.dataView());
           // console.log("asDpt1: ", datagram.dtpData.asDpt1())
-          // console.log("asDpt2: ", datagram.dtpData.asDpt2())
+          // console.log('asDpt2: ', datagram.dtpData.asDpt2());
           // console.log("asDpt3007: ", datagram.dtpData.asDpt3007())
           // console.log("asDpt3008: ", datagram.dtpData.asDpt3008())
           // console.log("asDpt4001", datagram.dtpData.asDpt4001())
-          // console.log("asDpt5", datagram.dtpData.asDpt5())
+          console.log('asDpt5', datagram.dtpData.asDpt5());
           // console.log("asDpt6", datagram.dtpData.asDpt6())
-          // console.log("asDpt7", datagram.dtpData.asDpt7())
+          // console.log('asDpt7', datagram.dtpData.asDpt7());
           // console.log("asDpt8", datagram.dtpData.asDpt8())
           // console.log("asDpt9", datagram.dtpData.asDpt9())
           // console.log("asDpt10001", datagram.dtpData.asDpt10001())
@@ -135,39 +135,39 @@ export class KNXReceiver {
           // console.log("asDpt232600: ", datagram.dtpData.asDpt232600())
           // console.log("asDpt245600: ", datagram.dtpData.asDpt245600())
           // console.log("asDpt250600: ", datagram.dtpData.asDpt250600())
-          console.log("asDpt251600: ", datagram.dtpData.asDpt251600())
+          // console.log("asDpt251600: ", datagram.dtpData.asDpt251600())
         } catch (error) {
-          console.error(error)
+          console.error(error);
         }
-        console.log("-----------------------------------------------------------------------------------------------------");
-        console.log("-----------Header----------------")
-        console.log("Event Header Length: " + datagram.header_length);
-        console.log("Event Protocol Version: " + datagram.protocol_version);
-        console.log("Event Service Type: 0x" + (datagram.service_type ? datagram.service_type.toString('hex') : 'undefined'));
-        console.log("Event Total Length: " + datagram.total_length);
+        console.log('-----------------------------------------------------------------------------------------------------');
+        console.log('-----------Header----------------');
+        console.log('Event Header Length: ' + datagram.header_length);
+        console.log('Event Protocol Version: ' + datagram.protocol_version);
+        console.log('Event Service Type: 0x' + (datagram.service_type ? datagram.service_type.toString('hex') : 'undefined'));
+        console.log('Event Total Length: ' + datagram.total_length);
 
-        console.log("-----------CEMI: " + cemi.toString('hex') + "------------");
-        console.log("Event Message Code: " + datagram.message_code);
-        console.log("Event Aditional Info Length: " + datagram.additional_info_length);
+        console.log('-----------CEMI: ' + cemi.toString('hex') + '------------');
+        console.log('Event Message Code: ' + datagram.message_code);
+        console.log('Event Aditional Info Length: ' + datagram.additional_info_length);
 
         if (datagram.additional_info_length > 0)
-          console.log("Event Aditional Info: 0x" + (datagram.additional_info ? datagram.additional_info.toString('hex') : 'undefined'));
+          console.log('Event Aditional Info: 0x' + (datagram.additional_info ? datagram.additional_info.toString('hex') : 'undefined'));
 
-        console.log("Event Control Field 1: " + datagram.control_field_1);
-        console.log("Event Control Field 2: " + datagram.control_field_2);
-        console.log("Event Source Address: " + datagram.source_address);
-        console.log("Event Destination Address: " + datagram.destination_address);
-        console.log("Event Data Length: " + datagram.data_length);
-        console.log("Event APDU: 0x" + datagram.apdu.toString('hex'));
-        console.log("Event APDU the last byte: 0x" + datagram.apdu[datagram.apdu.length - 1].toString(16));
-        console.log("Event APDU the last byte convert to decimal: " + datagram.apdu[datagram.apdu.length - 1].toString(10));
-        console.log("Event Data: " + datagram.data.toString('hex'));
-        console.log("-----------------------------------------------------------------------------------------------------");
+        console.log('Event Control Field 1: ' + datagram.control_field_1);
+        console.log('Event Control Field 2: ' + datagram.control_field_2);
+        console.log('Event Source Address: ' + datagram.source_address);
+        console.log('Event Destination Address: ' + datagram.destination_address);
+        console.log('Event Data Length: ' + datagram.data_length);
+        console.log('Event APDU: 0x' + datagram.apdu.toString('hex'));
+        console.log('Event APDU the last byte: 0x' + datagram.apdu[datagram.apdu.length - 1].toString(16));
+        console.log('Event APDU the last byte convert to decimal: ' + datagram.apdu[datagram.apdu.length - 1].toString(10));
+        console.log('Event Data: ' + datagram.data.toString('hex'));
+        console.log('-----------------------------------------------------------------------------------------------------');
       }
       if (datagram.message_code != 0x29) {
         return;
       }
-      let type = datagram.apdu[1] >> 4;
+      const type = datagram.apdu[1] >> 4;
       switch (type) {
         case 8:
           this.connection.emit('event', datagram.destination_address, datagram.data, datagram);
@@ -185,7 +185,7 @@ export class KNXReceiver {
           console.log('Unknown type[' + type + '] received in datagram[' + datagram.data.toString('hex') + ']');
           break;
       }
-    } catch (error) {
+    } catch {
       // ignore, missing warning information
       // console.error(error)
     }

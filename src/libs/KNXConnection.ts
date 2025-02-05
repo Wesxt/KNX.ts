@@ -1,10 +1,7 @@
-import EventEmitter from "events";
-import { InvalidKnxDataException } from "./InvalidKnxDataExeption";
-import { KNXSender } from "./KNXSender";
-import { DataPointTranslator } from "./DataPointTranslator";
-import { KNXSenderTunneling } from "./KNXSenderTunneling";
-import { KnxConnectionTunneling } from "./KNXConnectionTunneling";
-import { getLocalIP } from "../utils/localIp";
+import EventEmitter from 'events';
+import { DataPointTranslator } from './DataPointTranslator';
+import { KNXSenderTunneling } from './KNXSenderTunneling';
+import { AllDpts, KnxDataEncoder } from './KNXDataEncode';
 
 export class KNXConnection extends EventEmitter {
   host: string;
@@ -14,42 +11,41 @@ export class KNXConnection extends EventEmitter {
   ActionMessageCode = 0x00;
   ThreeLevelGroupAddressing = true;
   debug = false;
-  dataPointTranslator = new DataPointTranslator()
+  dataPointTranslator = new DataPointTranslator();
   ChannelId = 0x00;
-  knxSender: KNXSenderTunneling | null = null
+  knxSender: KNXSenderTunneling | null = null;
   Disconnect: ((callback: (...any: any[]) => any) => void) | null = null;
   Connect: ((callback?: (...any: any[]) => any) => void) | null = null;
   ResetSequenceNumber: (() => number) | null = null;
   GenerateSequenceNumber: (() => number) | null = null;
-  RevertSingleSequenceNumber:(() => number) | null = null
+  RevertSingleSequenceNumber: (() => number) | null = null;
   private callKnxSender = () => {
-    if(this.knxSender instanceof KNXSenderTunneling) {
-      return this.knxSender
+    if (this.knxSender instanceof KNXSenderTunneling) {
+      return this.knxSender;
     } else {
-      console.error("knxSender is not instance of KNXSenderTunneling")
+      console.error('knxSender is not instance of KNXSenderTunneling');
     }
-  }
+  };
   constructor(host: string, port: number) {
-    super()
+    super();
     this.host = host;
     this.port = port;
     this.RemoteEndpoint = {
       host: host,
       port: port,
       toBytes() {
-        if (!this.host || this.host === '')
-          throw 'Cannot proceed toString for endPoint with empy host'
+        if (!this.host || this.host === '') throw 'Cannot proceed toString for endPoint with empy host';
         if (this.host.indexOf('.') === -1 || this.host.split('.').length < 4)
-          throw 'Cannot proceed toString for endPoint with host[' + this.host + '], it should contain ip address'
-        var result = Buffer.alloc(4);
-        var arr = this.host.split('.');
+          throw 'Cannot proceed toString for endPoint with host[' + this.host + '], it should contain ip address';
+        const result = Buffer.alloc(4);
+        const arr = this.host.split('.');
         result[0] = parseInt(arr[0]) & 255;
         result[1] = parseInt(arr[1]) & 255;
         result[2] = parseInt(arr[2]) & 255;
         result[3] = parseInt(arr[3]) & 255;
-        return result
-      }
-    }
+        return result;
+      },
+    };
   }
   private isInt(n: number) {
     return Number(n) === n && n % 1 === 0;
@@ -92,49 +88,63 @@ export class KNXConnection extends EventEmitter {
  Unlimited string 8859_1            .                       DPT 24	    DPT 24
  List 3-byte value                  3 Byte                  DPT 232	    DPT 232	RGB[0,0,0]...[255,255,255]
  */
-  Action(address: Buffer | string, data: boolean | number | string | Buffer, callback?: () => any) {
-    if (!Buffer.isBuffer(data)) {
-      var buf = null;
-      switch (typeof (data)) {
-        case 'boolean':
-          buf = Buffer.alloc(1);
-          buf.writeInt8(data ? 1 : 0, 0);
-          break
-        case 'number':
-          //if integer
-          if (this.isInt(data)) {
-            buf = Buffer.alloc(2);
-            if (data <= 255) {
-              buf[0] = 0x00;
-              buf[1] = data & 255;
-            }
-            else if (data <= 65535) {
-              buf[0] = data & 255;
-              buf[1] = (data >> 8) & 255;
-            }
-            else
-              throw new InvalidKnxDataException(data.toString());
-          }
-          //if float
-          else if (this.isFloat(data)) {
-            buf = Buffer.alloc(4);
-            buf.writeFloatLE(data, 0);
-          }
-          else
-            throw new InvalidKnxDataException(data.toString());
-          break
-        case 'string':
-          buf = Buffer.alloc(parseInt(data));
-          break
+  Action<T extends (typeof KnxDataEncoder.dptEnum)[number] | null>(address: Buffer | string, dataInput: AllDpts<T>, dpt: T, callback?: () => any) {
+    let data;
+    if (!Buffer.isBuffer(dataInput)) {
+      // var buf = null;
+      // switch (typeof (data)) {
+      //   case 'boolean':
+      //     buf = Buffer.alloc(1);
+      //     buf.writeInt8(data ? 1 : 0, 0);
+      //     break
+      //   case 'number':
+      //     //if integer
+      //     if (this.isInt(data)) {
+      //       buf = Buffer.alloc(2);
+      //       if (data <= 255) {
+      //         buf[0] = 0x00;
+      //         buf[1] = data & 255;
+      //       }
+      //       else if (data <= 65535) {
+      //         buf[0] = data & 255;
+      //         buf[1] = (data >> 8) & 255;
+      //       }
+      //       else
+      //         throw new InvalidKnxDataException(data.toString());
+      //     }
+      //     //if float
+      //     else if (this.isFloat(data)) {
+      //       buf = Buffer.alloc(4);
+      //       buf.writeFloatLE(data, 0);
+      //     }
+      //     else
+      //       throw new InvalidKnxDataException(data.toString());
+      //     break
+      //   case 'string':
+      //     buf = Buffer.alloc(parseInt(data));
+      //     break
+      // }
+      const dataEncoder = new KnxDataEncoder();
+      try {
+        if (dpt !== null) {
+          const buf = dataEncoder.encodeThis(dpt, dataInput);
+          data = buf;
+        } else {
+          throw new Error('DPT cannot be null');
+        }
+      } catch (error) {
+        console.error(error);
       }
-      data = buf;
     }
     if (this.debug) {
       console.log(`${this.constructor.name} Sending ${JSON.stringify(data)} to ${JSON.stringify(address)}.`);
     }
-    const knxSender = this.callKnxSender()
-    if(knxSender) {
+    const knxSender = this.callKnxSender();
+    if (knxSender && data instanceof Buffer) {
       knxSender.Action(address, data, callback);
+    } else {
+      console.log(data);
+      throw new Error(`The data is not valid Buffer`);
     }
     if (this.debug) {
       console.log(`${this.constructor.name} Sent ${JSON.stringify(data)} to ${JSON.stringify(address)}.`);
@@ -147,15 +157,15 @@ export class KNXConnection extends EventEmitter {
   /// <param name="address"></param>
   /**
    *  Send a request to KNX asking for specified address current status
-   * @param address 
-   * @param callback 
+   * @param address
+   * @param callback
    */
   RequestStatus(address: Buffer, callback: () => any) {
     if (this.debug) {
       console.log(`${this.constructor.name} Sending request status to ${JSON.stringify(address)}.`);
     }
-    const knxSender = this.callKnxSender()
-    if(knxSender) {
+    const knxSender = this.callKnxSender();
+    if (knxSender) {
       knxSender.RequestStatus(address, callback);
     }
     if (this.debug) {
@@ -167,18 +177,18 @@ export class KNXConnection extends EventEmitter {
    * get a temperature value in Celsius
    * @param type Datapoint type, e.g.: 9.001
    * @param data Data to convert
-   * @returns 
+   * @returns
    */
   FromDataPoint(type: string, data: Buffer) {
     return this.dataPointTranslator.FromDataPoint(type, data);
   }
   /**
-* Convert a value to send to KNX using datapoint translator, e.g.,
-* get a temperature value in Celsius in a byte representation
- * @param type Datapoint type, e.g.: 9.001
- * @param value Value to convert
- * @returns {Buffer}
- */
+   * Convert a value to send to KNX using datapoint translator, e.g.,
+   * get a temperature value in Celsius in a byte representation
+   * @param type Datapoint type, e.g.: 9.001
+   * @param value Value to convert
+   * @returns {Buffer}
+   */
   ToDataPoint(type: string, value: any): Buffer {
     return this.dataPointTranslator.ToDataPoint(type, value);
   }
