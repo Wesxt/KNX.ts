@@ -111,16 +111,16 @@ export class KNXReceiver {
       if (this.connection.debug) {
         try {
           console.log('dataView: ', datagram.dtpData.dataView());
-          // console.log("asDpt1: ", datagram.dtpData.asDpt1())
+          // console.log('asDpt1: ', datagram.dtpData.asDpt1());
           // console.log('asDpt2: ', datagram.dtpData.asDpt2());
           // console.log("asDpt3007: ", datagram.dtpData.asDpt3007())
           // console.log("asDpt3008: ", datagram.dtpData.asDpt3008())
           // console.log("asDpt4001", datagram.dtpData.asDpt4001())
-          console.log('asDpt5', datagram.dtpData.asDpt5());
+          // console.log('asDpt5', datagram.dtpData.asDpt5());
           // console.log("asDpt6", datagram.dtpData.asDpt6())
           // console.log('asDpt7', datagram.dtpData.asDpt7());
-          // console.log("asDpt8", datagram.dtpData.asDpt8())
-          // console.log("asDpt9", datagram.dtpData.asDpt9())
+          console.log('asDpt8', datagram.dtpData.asDpt8());
+          // console.log('asDpt9', datagram.dtpData.asDpt9());
           // console.log("asDpt10001", datagram.dtpData.asDpt10001())
           // console.log("asDpt11001", datagram.dtpData.asDpt11001())
           // console.log("asDpt12001", datagram.dtpData.asDpt12001())

@@ -31,6 +31,29 @@ export interface DPT6020 {
 export interface DPT7 {
   valueDpt7: number; // 0-65535
 }
+export interface DPT8 {
+  valueDpt8: number;
+}
+export interface DPT9 {
+  valueDpt9: number;
+}
+export interface DPT10001 {
+  day: number;
+  hour: number;
+  minutes: number;
+  seconds: number;
+}
+export interface DPT11001 {
+  day: number;
+  month: number;
+  year: number;
+}
+export interface DPT12001 {
+  valueDpt12001: number;
+}
+export interface DPT13001 {
+  valueDpt13001: number;
+}
 export type AllDpts<Dpt extends (typeof KnxDataEncoder.dptEnum)[number] | null> = Dpt extends 1
   ? DPT1
   : Dpt extends 2
@@ -51,7 +74,19 @@ export type AllDpts<Dpt extends (typeof KnxDataEncoder.dptEnum)[number] | null> 
                   ? DPT6020
                   : Dpt extends 7 | 7001 | 7002 | 7003 | 7004 | 7005 | 7006 | 7007 | 7011 | 7012 | 7013
                     ? DPT7
-                    : Buffer;
+                    : Dpt extends 8
+                      ? DPT8
+                      : Dpt extends 9
+                        ? DPT9
+                        : Dpt extends 10001
+                          ? DPT10001
+                          : Dpt extends 11001
+                            ? DPT11001
+                            : Dpt extends 12 | 12001 | 12100 | 12101 | 12102
+                              ? DPT12001
+                              : Dpt extends 13 | 13001 | 13002 | 13010 | 13011 | 13012 | 13013 | 13014 | 13015 | 13016 | 13100
+                                ? DPT13001
+                                : Buffer;
 export class KnxDataEncoder {
   private typeErrorData = new TypeError('The object does not contain valid parameters to encode the dpt');
 
@@ -128,13 +163,80 @@ export class KnxDataEncoder {
       case 7013:
         if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return this.encodeDpt7013(data as DPT7);
         break;
+      case 8:
+        if ('valueDpt8' in data && typeof data.valueDpt8 === 'number') return this.encodeDpt8(data as DPT8);
+        break;
+      case 9:
+        if ('valueDpt9' in data && typeof data.valueDpt9 === 'number') return this.encodeDpt9(data as DPT9);
+      case 10001:
+        if (
+          'day' in data &&
+          'hour' in data &&
+          'minutes' in data &&
+          'seconds' in data &&
+          Object.values(data).every((item) => typeof item === 'number')
+        )
+          return this.encodeDpt10001(data);
+        break;
+      case 11001:
+        if ('day' in data && 'month' in data && 'year' in data && Object.values(data).every((item) => typeof item === 'number'))
+          return this.encodeDpt11001(data as DPT11001);
+        break;
+      case 12:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return this.encodeDpt12001(data as DPT12001);
+        break;
+      case 12001:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return this.encodeDpt12001(data as DPT12001);
+        break;
+      case 12100:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return this.encodeDpt12001(data as DPT12001);
+        break;
+      case 12101:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return this.encodeDpt12001(data as DPT12001);
+        break;
+      case 12102:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return this.encodeDpt12001(data as DPT12001);
+        break;
+      case 13001:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13001(data);
+        break;
+      case 13002:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13002(data);
+        break;
+      case 13010:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13010(data);
+        break;
+      case 13011:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13011(data);
+        break;
+      case 13012:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13012(data);
+        break;
+      case 13013:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13013(data);
+        break;
+      case 13014:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13014(data);
+        break;
+      case 13015:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13015(data);
+        break;
+      case 13016:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13016(data);
+        break;
+      case 13100:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return this.encodeDpt13100(data);
+        break;
       default:
         throw this.typeErrorData;
     }
     throw this.typeErrorData;
   }
   static get dptEnum() {
-    return [1, 2, 3007, 3008, 4001, 5, 5001, 5002, 6, 6001, 6010, 6020, 7, 7001, 7002, 7003, 7004, 7005, 7006, 7007, 7011, 7012, 7013] as const;
+    return [
+      1, 2, 3007, 3008, 4001, 5, 5001, 5002, 6, 6001, 6010, 6020, 7, 7001, 7002, 7003, 7004, 7005, 7006, 7007, 7011, 7012, 7013, 8, 9, 10001, 11001,
+      12, 12001, 12100, 12101, 12102, 13001, 13002, 13010, 13011, 13012, 13013, 13014, 13015, 13016, 13100,
+    ] as const;
   }
   /**
    * Codifica un valor booleano en DPT1.
@@ -347,5 +449,344 @@ export class KnxDataEncoder {
    */
   encodeDpt7013(data: DPT7): Buffer {
     return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+  }
+
+  /**
+   * Codifica un valor de 2 octetos (DPT8) en notación de complemento a dos.
+   * Rango: [-32768 … 32767]
+   *
+   * @param param0 Objeto con la propiedad value a codificar.
+   * @returns Buffer con el valor codificado en 2 octetos (big-endian).
+   */
+  encodeDpt8({ valueDpt8 }: DPT8): Buffer {
+    if (valueDpt8 < -32768 || valueDpt8 > 32767) {
+      throw new Error('DPT8 value must be between -32768 and 32767');
+    }
+    const buffer = Buffer.alloc(2);
+    buffer.writeInt16BE(valueDpt8, 0);
+    return buffer;
+  }
+
+  encodeDpt9({ valueDpt9 }: DPT9): Buffer {
+    // Si el valor es cero, se codifica como 0
+    if (valueDpt9 === 0) {
+      return Buffer.from([0x00, 0x00]);
+    }
+    let sign = 0;
+    if (valueDpt9 < 0) {
+      sign = 1;
+      valueDpt9 = -valueDpt9; // Trabajamos con el valor absoluto
+    }
+    // Inicialmente, la mantisa es el valor absoluto dividido por 0.01, redondeado al entero más cercano.
+    let m = Math.round(valueDpt9 / 0.01);
+    let e = 0;
+    // Normalizar: asegurar que la mantisa quepa en 11 bits (0 a 2047)
+    while (m > 2047 && e < 15) {
+      m = Math.floor(m / 2);
+      e++;
+    }
+    if (m > 2047) {
+      m = 2047; // Limitar en caso de que pese demasiado
+    }
+    // Para números negativos, se codifica la mantisa como 2047 - m (inversa en complemento a dos en 11 bits)
+    const mEncoded = sign === 1 ? 2047 - m : m;
+    // Construir el valor de 16 bits: bit 15 = signo, bits 14-11 = exponente, bits 10-0 = mantisa
+    const encoded = (sign << 15) | (e << 11) | (mEncoded & 0x7ff);
+    // Crear un buffer de 2 bytes y escribir en big-endian
+    const buffer = Buffer.alloc(2);
+    buffer.writeUInt16BE(encoded, 0);
+    return buffer;
+  }
+
+  /**
+   * Codifica DPT10001 (Time of Day) en 3 octetos.
+   *
+   * Estructura:
+   *  - Octeto 1: bits 7-5 = Day (3 bits), bits 4-0 = Hour (5 bits)
+   *  - Octeto 2: bits 7-6 = reserved (0), bits 5-0 = Minutes (6 bits)
+   *  - Octeto 3: bits 7-6 = reserved (0), bits 5-0 = Seconds (6 bits)
+   *
+   * Rango:
+   *  - Day: 0 a 7
+   *  - Hour: 0 a 23
+   *  - Minutes: 0 a 59
+   *  - Seconds: 0 a 59
+   *
+   * @param param0 Objeto con day, hour, minutes y seconds.
+   * @returns Buffer con los 3 octetos codificados.
+   */
+  encodeDpt10001({ day, hour, minutes, seconds }: DPT10001): Buffer {
+    // Validar rangos:
+    if (day < 0 || day > 7) {
+      throw new Error('Day must be between 0 and 7');
+    }
+    if (hour < 0 || hour > 23) {
+      throw new Error('Hour must be between 0 and 23');
+    }
+    if (minutes < 0 || minutes > 59) {
+      throw new Error('Minutes must be between 0 and 59');
+    }
+    if (seconds < 0 || seconds > 59) {
+      throw new Error('Seconds must be between 0 and 59');
+    }
+
+    const buffer = Buffer.alloc(3);
+
+    // Octeto 1: Day en bits 7-5 y Hour en bits 4-0.
+    // day ocupa 3 bits (0-7) y se coloca desplazado 5 bits a la izquierda.
+    // hour ocupa 5 bits (0-23).
+    buffer[0] = ((day & 0x07) << 5) | (hour & 0x1f);
+
+    // Octeto 2: Bits 7-6 reservados (0), Bits 5-0: Minutes
+    buffer[1] = minutes & 0x3f; // 0x3F = 0b00111111
+
+    // Octeto 3: Bits 7-6 reservados (0), Bits 5-0: Seconds
+    buffer[2] = seconds & 0x3f;
+
+    return buffer;
+  }
+  /**
+   * Codifica DPT11001 (Date) en 3 octetos.
+   *
+   * Formato: r3U5  r4U4  r1U7
+   *   - Octeto 1: 3 bits reservados (0) y 5 bits para el día (1–31)
+   *   - Octeto 2: 4 bits reservados (0) y 4 bits para el mes (1–12)
+   *   - Octeto 3: 1 bit reservado (0) y 7 bits para el año (0–99)
+   *       * Si el valor codificado en el octeto 3 es ≥ 90, se interpreta como 1900 + valor.
+   *       * Si es < 90, se interpreta como 2000 + valor.
+   *
+   * @param param0 Objeto con { day, month, year }.
+   *               - day: número del día (1 a 31)
+   *               - month: número del mes (1 a 12)
+   *               - year: año completo (entre 1990 y 2089)
+   * @returns Buffer de 3 octetos con el dato codificado.
+   */
+  encodeDpt11001({ day, month, year }: DPT11001): Buffer {
+    // Validación de rangos
+    if (day < 1 || day > 31) {
+      throw new Error('Day must be between 1 and 31');
+    }
+    if (month < 1 || month > 12) {
+      throw new Error('Month must be between 1 and 12');
+    }
+    if (year < 1990 || year > 2089) {
+      throw new Error('Year must be between 1990 and 2089');
+    }
+
+    // Codificar el año en 7 bits:
+    // Si el año es menor a 2000, se codifica como (year - 1900), lo que dará valores de 90 a 99.
+    // Si el año es 2000 o superior, se codifica como (year - 2000), dando valores de 0 a 89.
+    let encodedYear: number;
+    if (year < 2000) {
+      encodedYear = year - 1900; // Ejemplo: 1999 → 99
+    } else {
+      encodedYear = year - 2000; // Ejemplo: 2004 → 4
+    }
+
+    // Construcción de los 3 octetos:
+    // Octeto 1: 3 bits reservados (0) y 5 bits para el día.
+    const octet1 = day & 0x1f; // 0x1F = 0001 1111
+    // Octeto 2: 4 bits reservados (0) y 4 bits para el mes.
+    const octet2 = month & 0x0f; // 0x0F = 0000 1111
+    // Octeto 3: 1 bit reservado (0) y 7 bits para el año.
+    const octet3 = encodedYear & 0x7f; // 0x7F = 0111 1111
+
+    return Buffer.from([octet1, octet2, octet3]);
+  }
+  /**
+   * Codifica DPT 12.001: DPT_Value_4_Ucount
+   * Formato: 4 octetos (U32)
+   * Rango: [0 ... 4 294 967 295]
+   * Uso: counter pulses, resolución 1 pulse.
+   *
+   * @param param0 Objeto con { value }
+   * @returns Buffer de 4 octetos con el valor codificado.
+   */
+  encodeDpt12001({ valueDpt12001 }: DPT12001): Buffer {
+    if (valueDpt12001 < 0 || valueDpt12001 > 0xffffffff) {
+      throw new Error('DPT 12.001 value must be between 0 and 4294967295');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeUInt32BE(valueDpt12001, 0);
+    return buffer;
+  }
+  /**
+   * Codifica DPT 12.100: DPT_LongTimePeriod_Sec
+   * Formato: 4 octetos (U32)
+   * Rango: [0 ... 4 294 967 295]
+   * Uso: Operative hours en segundos, 1 s de resolución.
+   *
+   * @param param0 Objeto con { value } representando segundos.
+   * @returns Buffer de 4 octetos con el valor codificado.
+   */
+  encodeDpt12100({ valueDpt12001 }: DPT12001): Buffer {
+    return this.encodeDpt12001({ valueDpt12001 });
+  }
+
+  /**
+   * Codifica DPT 12.101: DPT_LongTimePeriod_Min
+   * Formato: 4 octetos (U32)
+   * Rango: [0 ... 4 294 967 295]
+   * Uso: Operative hours en minutos, 1 min de resolución.
+   *
+   * @param param0 Objeto con { value } representando minutos.
+   * @returns Buffer de 4 octetos con el valor codificado.
+   */
+  encodeDpt12101({ valueDpt12001 }: DPT12001): Buffer {
+    return this.encodeDpt12001({ valueDpt12001 });
+  }
+
+  /**
+   * Codifica DPT 12.102: DPT_LongTimePeriod_Hrs
+   * Formato: 4 octetos (U32)
+   * Rango: [0 ... 4 294 967 295]
+   * Uso: Operative hours en horas, 1 h de resolución.
+   *
+   * @param param0 Objeto con { value } representando horas.
+   * @returns Buffer de 4 octetos con el valor codificado.
+   */
+  encodeDpt12102({ valueDpt12001 }: DPT12001): Buffer {
+    return this.encodeDpt12001({ valueDpt12001 });
+  }
+  /**
+   * Codifica DPT 13.001: DPT_Value_4_Count
+   * Formato: 4 octetos (V32)
+   * Rango: [-2,147,483,648 … 2,147,483,647]
+   * Unidad: counter pulses (1 pulse de resolución)
+   *
+   * @param param0 Objeto con la propiedad { value } que contiene el valor a codificar.
+   * @returns Buffer de 4 octetos con el valor codificado en formato big-endian.
+   */
+  encodeDpt13001({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.001 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * Codifica DPT 13.002: DPT_FlowRate_m3/h
+   * Formato: 4 octetos (V32)
+   * Rango: [-2,147,483,648 … 2,147,483,647]
+   * Resolución: 0.0001 m³/h (se espera que el valor se suministre en m³/h)
+   *
+   * Para codificar se multiplica el valor (en m³/h) por 10,000 y se redondea.
+   *
+   * @param param0 Objeto con la propiedad { value } que contiene el flujo en m³/h.
+   * @returns Buffer de 4 octetos con el valor codificado en formato big-endian.
+   */
+  encodeDpt13002({ valueDpt13001 }: DPT13001): Buffer {
+    const rawValue = Math.round(valueDpt13001 * 10000);
+    if (rawValue < -2147483648 || rawValue > 2147483647) {
+      throw new Error('DPT 13.002 value, after scaling, must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(rawValue, 0);
+    return buffer;
+  }
+  /**
+   * DPT 13.010: DPT_ActiveEnergy
+   * Unidad: Wh, resolución 1 Wh
+   */
+  encodeDpt13010({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.010 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.011: DPT_ApparantEnergy
+   * Unidad: VAh, resolución 1 VAh
+   */
+  encodeDpt13011({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.011 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.012: DPT_ReactiveEnergy
+   * Unidad: VARh, resolución 1 VARh
+   */
+  encodeDpt13012({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.012 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.013: DPT_ActiveEnergy_kWh
+   * Unidad: kWh, resolución 1 kWh
+   */
+  encodeDpt13013({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.013 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.014: DPT_ApparantEnergy_kVAh
+   * Unidad: kVAh, resolución 1 kVAh
+   */
+  encodeDpt13014({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.014 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.015: DPT_ReactiveEnergy_kVARh
+   * Unidad: kVARh, resolución 1 kVARh
+   */
+  encodeDpt13015({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.015 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.016: DPT_ActiveEnergy_MWh
+   * Unidad: MWh, resolución 1 MWh
+   */
+  encodeDpt13016({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.016 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
+  }
+
+  /**
+   * DPT 13.100: DPT_ActiveEnergy_MWh
+   * Unidad: s, resolución 1 s
+   */
+  encodeDpt13100({ valueDpt13001 }: DPT13001): Buffer {
+    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+      throw new Error('DPT 13.016 value must be between -2147483648 and 2147483647');
+    }
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
+    return buffer;
   }
 }

@@ -32,8 +32,6 @@
  List 3-byte value                  3 Byte                  DPT 232	    DPT 232	RGB[0,0,0]...[255,255,255]
  */
 
-import { KNXHelper } from './KNXHelper';
-
 /**
  * Represent data send over knx bus and provide methods to interpret them as different dpt values.
  * (Representar datos enviados a través del bus knx y proporcionar métodos para interpretarlos como diferentes valores dpt)
@@ -327,16 +325,40 @@ export class KnxData {
     return this.dataView().getInt16(0);
   }
   /**
-   * Interpret the underlying data as 2 byte floating point value
-   * @returns
+   * Decodifica un DPT9 (2-octetos) según la especificación KNX:
+   *   FloatValue = 0.01 * M * 2^(E)
+   *   E (4 bits) = [0…15]
+   *   M (12 bits, en complemento a dos) = [-2048 … 2047]
+   * Si el valor codificado es 0x7FFF, se considera inválido.
+   *
+   * @returns El valor en punto flotante.
    */
-  asDpt9() {
-    const sign = this.apdu[2] >> 7;
-    const exponent = (this.apdu[2] & 0b01111000) >> 3;
-    let mantissa = 256 * (this.apdu[2] & 0b00000111) + this.apdu[3];
-    mantissa = sign == 1 ? ~(mantissa ^ 2047) : mantissa;
-    return KNXHelper.Idexp(0.01 * mantissa, exponent);
+  asDpt9(): number {
+    const view = this.apdu[2];
+    // Se asume que los 2 bytes que contienen el dato empiezan en la posición 0 del DataView.
+    const raw = view; // Big-endian
+
+    // Si el valor es 0x7FFF, se considera dato inválido.
+    if (raw === 0x7fff) {
+      throw new Error('DPT9: Invalid data (0x7FFF encountered)');
+    }
+
+    // Extraer el exponente (4 bits superiores)
+    const exponent = (raw >> 12) & 0x0f;
+    // Extraer la mantisa (12 bits inferiores)
+    let mantissa = raw & 0x0fff;
+
+    // Interpretar la mantisa como un entero de 12 bits con signo:
+    if (mantissa & 0x0800) {
+      // Si el bit de signo (bit 11) está a 1
+      mantissa = mantissa - 4096;
+    }
+
+    // Calcular el valor real:
+    const value = 0.01 * mantissa * Math.pow(2, exponent);
+    return value;
   }
+
   /**
    * Interpreta la información del DPT 10001 (Time of Day).
    * Se asume que la carga útil contiene 3 octetos codificados según:
@@ -523,7 +545,7 @@ export class KnxData {
    * DPT 13.010: DPT_ActiveEnergy
    * Interpreta la energía activa en Wh.
    */
-  asDpt1310() {
+  asDpt13010() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.010');
@@ -538,7 +560,7 @@ export class KnxData {
    * DPT 13.011: DPT_ApparantEnergy
    * Interpreta la energía aparente en VAh.
    */
-  asDpt1311() {
+  asDpt13011() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.011');
@@ -553,7 +575,7 @@ export class KnxData {
    * DPT 13.012: DPT_ReactiveEnergy
    * Interpreta la energía reactiva en VARh.
    */
-  asDpt1312() {
+  asDpt13012() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.012');
@@ -568,7 +590,7 @@ export class KnxData {
    * DPT 13.013: DPT_ActiveEnergy_kWh
    * Interpreta la energía activa en kWh.
    */
-  asDpt1313() {
+  asDpt13013() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.013');
@@ -583,7 +605,7 @@ export class KnxData {
    * DPT 13.014: DPT_ApparantEnergy_kVAh
    * Interpreta la energía aparente en kVAh.
    */
-  asDpt1314() {
+  asDpt13014() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.014');
@@ -598,7 +620,7 @@ export class KnxData {
    * DPT 13.015: DPT_ReactiveEnergy_kVARh
    * Interpreta la energía reactiva en kVARh.
    */
-  asDpt1315() {
+  asDpt13015() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.015');
@@ -613,7 +635,7 @@ export class KnxData {
    * DPT 13.016: DPT_ActiveEnergy_MWh
    * Interpreta la energía activa en MWh.
    */
-  asDpt1316() {
+  asDpt13016() {
     const view = this.dataView();
     if (view.byteLength < 4) {
       throw new Error('No hay suficientes datos para DPT 13.016');
