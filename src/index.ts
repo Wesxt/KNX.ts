@@ -16,14 +16,15 @@ connectionKnx.on('status', (status) => {
 
 let value = 1;
 function toggleValue() {
-  value += 1;
-  connectionKnx.Action('1/1/7', { valueDpt8: value }, 8);
+  value += 0.1;
+  connectionKnx.Action('1/1/7', { valueDpt14: value }, 14);
 }
 
 // Iniciar la conexión y notificar al padre
 connectionKnx.Connect(() => {
   console.log('Conexión establecida con KNX');
   process.send?.({ type: 'info', message: 'KNX conectado' });
+  // toggleValue();
   setInterval(toggleValue, 1500);
   // Manejar mensajes del proceso padre
   // process.on(

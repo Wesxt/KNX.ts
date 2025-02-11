@@ -934,6 +934,19 @@ export class KnxData {
     const signedValue = this.dataView().getBigInt64(0, false); // Big-endian, 8 bytes
     return Number(signedValue); // Convertir a número
   }
+  asDpt232600() {
+    const data = this.dataView();
+    const rgb = {
+      R: data.getUint8(0),
+      G: data.getUint8(1),
+      B: data.getUint8(2),
+    };
+    const result = {
+      dataBuffer: data,
+      rgb: rgb,
+    };
+    return result;
+  }
   asDpt238600(): { addr: number; lf: boolean; bf: boolean } {
     const byte = this.dataView().getUint8(0); // Leer 1 octeto
     // Decodificar los campos
@@ -1034,18 +1047,5 @@ export class KnxData {
       B: { value: blue, valid: (validityBits & 0b00000010) !== 0 },
       W: { value: white, valid: (validityBits & 0b00000001) !== 0 },
     };
-  }
-  asDpt232600() {
-    const data = this.dataView();
-    const rgb = {
-      R: data.getUint8(0),
-      G: data.getUint8(1),
-      B: data.getUint8(2),
-    };
-    const result = {
-      dataBuffer: data,
-      rgb: rgb,
-    };
-    return result;
   }
 }
