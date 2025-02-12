@@ -1,7 +1,7 @@
 import { KnxConnectionTunneling } from './libs/KNXConnectionTunneling';
 // import { AllDpts, KnxDataEncoder } from './libs/KNXDataEncode';
 
-const connectionKnx = new KnxConnectionTunneling('192.168.0.174', 3671);
+const connectionKnx = new KnxConnectionTunneling('192.168.0.81', 3671);
 connectionKnx.debug = true;
 
 connectionKnx.on('event', (event) => {
@@ -14,10 +14,11 @@ connectionKnx.on('status', (status) => {
   process.send?.({ type: 'status', data: status });
 });
 
-let value = 1;
+let value = true;
 function toggleValue() {
-  value += 0.1;
-  connectionKnx.Action('1/1/7', { valueDpt14: value }, 14);
+  value = !value;
+  connectionKnx.Action('1/0/1', { value: value }, 1);
+  connectionKnx.Action('1/0/2', { value: value }, 1);
 }
 
 // Iniciar la conexión y notificar al padre
@@ -25,7 +26,7 @@ connectionKnx.Connect(() => {
   console.log('Conexión establecida con KNX');
   process.send?.({ type: 'info', message: 'KNX conectado' });
   // toggleValue();
-  setInterval(toggleValue, 1500);
+  setInterval(toggleValue, 2000);
   // Manejar mensajes del proceso padre
   // process.on(
   //   'message',
