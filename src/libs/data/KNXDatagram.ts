@@ -12,7 +12,7 @@ export class KnxDatagram {
   /**Connection => byte */
   channel_id?: number;
   /**Connection => byte */
-  status?: number;
+  sequenceNumber?: number;
   /** CEMI => byte */
   message_code?: number;
   /**CEMI => int */
@@ -76,7 +76,7 @@ export class KnxDatagram {
 
     // CONNECTION
     this.channel_id = options.channel_id;
-    this.status = options.status;
+    this.sequenceNumber = options.status;
 
     // CEMI
     this.message_code = options.message_code;
@@ -110,7 +110,7 @@ export class KnxDatagram {
       buffer[5] = totalLengthBuf[1]
     }
     buffer.writeUint8(this.channel_id as number, 6)
-    buffer.writeUint8(this.status as number, 7)
+    buffer.writeUint8(this.sequenceNumber as number, 7)
     buffer.writeUint8(1, 8) // sequence counter
     
     buffer.writeUint8(0, 9) // reserved
@@ -125,9 +125,10 @@ export class KnxDatagram {
     buffer[16] = addressDestination[0]
     buffer[17] = addressDestination[1]
     buffer.writeUint8(this.data_length as number, 18)
-    if(this.apdu) {
-      buffer[19] = this.apdu[0]
-      buffer[20] = this.apdu[1]
+    if (this.apdu) {
+      for (let i = 0; i < this.apdu.length; i++) {
+        buffer[19 + i] = this.apdu[i]
+      }
     }
     return buffer;
   }
@@ -151,7 +152,7 @@ export class KnxDatagram {
 
       -------------Connection--------------
       Channel ID: ${this.channel_id}
-      Status: ${this.status}
+      Status: ${this.sequenceNumber}
       -------------Connection--------------
 
       -------------CEMI--------------------

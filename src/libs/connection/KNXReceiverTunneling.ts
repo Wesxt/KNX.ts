@@ -7,7 +7,8 @@ import KnxDatagram from "../data/KNXDatagram";
 export class KNXReceiverTunneling extends KNXReceiver {
   private udpClient: dgram.Socket;
   private localEndPoint: LocalEndPoint;
-  private rxSequenceNumber: number | null = null;
+  /** Keep track of the sequence number to check for client/server overflow */
+  private countSequenceNumber: number | null = null;
   private pendingAcks: Map<number, NodeJS.Timeout> = new Map();
   constructor(connection: KNXConnection, udpClient: dgram.Socket, localEndPoint: LocalEndPoint) {
     super(connection)
@@ -18,7 +19,7 @@ export class KNXReceiverTunneling extends KNXReceiver {
   SetClient(client: typeof this.udpClient) {
     this.udpClient = client
   }
-  Start(callback: (...any: any[]) => any) {
+  Start(callback: (...args: any[]) => void) {
     let thisClass = this;
     this.socketReceiveLstnr = function (msg, rinfo) {
       try {
@@ -62,7 +63,7 @@ export class KNXReceiverTunneling extends KNXReceiver {
       }
     }
     catch (e) {
-      console.error('Error processing datagram[' + datagram.toString('hex') + '] inside of KnxReceiverTunneling.prototype.ProcessDatagram, cause: ' + (e as Error).toLocaleString());
+      console.error(new Error('Error processing datagram[' + datagram.toString('hex') + '] inside of KnxReceiverTunneling.ProcessDatagram', {cause: (e as Error).toLocaleString()}));
     }
   }
   ProcessDatagramHeaders(datagram: Buffer) {
@@ -83,10 +84,10 @@ export class KNXReceiverTunneling extends KNXReceiver {
     }
     let sequenceNumber = datagram[8];
     let process = true;
-    if (sequenceNumber && this.rxSequenceNumber && sequenceNumber <= this.rxSequenceNumber) {
+    if (sequenceNumber && this.countSequenceNumber && sequenceNumber <= this.countSequenceNumber) {
       process = false;
     }
-    this.rxSequenceNumber = sequenceNumber;
+    this.countSequenceNumber = sequenceNumber;
     if (process) {
       // TODO: Magic number 10, what is it?
       let cemi = Buffer.alloc(datagram.length - 10);
@@ -194,7 +195,7 @@ ProcessConnectResponse(datagram: Buffer) {
         status: datagram[7]
     });
 
-    if (knxDatagram.channel_id == 0x00 && knxDatagram.status == 0x24)
+    if (knxDatagram.channel_id == 0x00 && knxDatagram.sequenceNumber == 0x24)
         throw "KnxReceiverTunneling: Received connect response - No more connections available";
     else {
         this.connection.ChannelId = knxDatagram.channel_id as number;

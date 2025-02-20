@@ -4,19 +4,61 @@ import { KnxDataEncoder } from '../data/KNXDataEncode';
 import { KNXHelper } from '../utils/class/KNXHelper';
 import { KnxData } from '../data/KNXData';
 import { AllDpts } from '../@types/types/AllDpts';
+import { MessageCode } from '../@types/types/CEMI';
 
 export class KNXConnection extends EventEmitter {
   host: string;
   port: number;
   RemoteEndpoint;
   connected = false;
-  ActionMessageCode = 0x00;
+  /**
+ * Represents the message code used in cEMI (Common External Message Interface) frames 
+ * within KNX/IP tunneling communication.
+ *
+ * This property defines the type of action or message being transmitted between 
+ * the network and data link layers in a KNX system.
+ *
+ * Common message codes include:
+ * - `0x11` → `L_Data.req` (Data request)
+ * - `0x29` → `L_Data.ind` (Data indication)
+ * - `0x2E` → `L_Data.con` (Data confirmation)
+ * - `0x2B` → `L_Busmon.ind` (Bus monitoring indication)
+ * - `0x10` → `L_Raw.req` (Raw request)
+ *
+ * @type {number}
+ * @default 0x00
+ */
+  ActionMessageCode: MessageCode = 0x00;
   /**
    * This indicates whether the group addresses are three-level, i.e. "0/0/1" for example.
    */
   ThreeLevelGroupAddressing = true;
+  /** Indicates the debug mode */
   debug = false;
-  ChannelId = 0x00;
+  /**
+ * Represents the Channel ID used in KNX/IP datagrams to identify a tunneling session.
+ *
+ * The Channel ID is assigned by the KNX/IP server when a connection is established
+ * and is included in all tunneling messages to associate them with the correct session.
+ *
+ * ## Purpose:
+ * - Identifies an active KNX/IP tunneling session.
+ * - Ensures proper message routing between the client and server.
+ * - Allows multiple clients to maintain independent tunnels.
+ * - Used in `TUNNELING_REQUEST`, `TUNNELING_ACK`, and `DISCONNECT_REQUEST` messages.
+ *
+ * ## Lifecycle:
+ * 1. **Assigned** in `CONNECT_RESPONSE` when a client requests a connection.
+ * 2. **Used** in all subsequent tunneling messages for session tracking.
+ * 3. **Released** when a `DISCONNECT_REQUEST` is sent or after a timeout.
+ *
+ * @type {number}
+ * @default 0x00
+ */
+  ChannelId: number = 0x00;
+  /**
+   * This property is intended to be extended, it represents an instance of a class that handles the data sending logic.
+   */
   knxSender: KNXSenderTunneling | null = null;
   /**
    * This property is intended to be extended, here is the logic of the disconnection
@@ -29,6 +71,7 @@ export class KNXConnection extends EventEmitter {
   ResetSequenceNumber: (() => number) | null = null;
   GenerateSequenceNumber: (() => number) | null = null;
   RevertSingleSequenceNumber: (() => number) | null = null;
+  /** This function only checks the instance of the class that handles sending data and returns it if it is instantiated. */
   private callKnxSender = () => {
     if (this.knxSender instanceof KNXSenderTunneling) {
       return this.knxSender;
@@ -95,39 +138,6 @@ export class KNXConnection extends EventEmitter {
   Action<T extends (typeof KnxDataEncoder.dptEnum)[number] | null>(address: Buffer | string, dpt: T, dataInput: AllDpts<T>, callback?: () => any) {
     let data;
     if (!Buffer.isBuffer(dataInput)) {
-      // var buf = null;
-      // switch (typeof (data)) {
-      //   case 'boolean':
-      //     buf = Buffer.alloc(1);
-      //     buf.writeInt8(data ? 1 : 0, 0);
-      //     break
-      //   case 'number':
-      //     //if integer
-      //     if (this.isInt(data)) {
-      //       buf = Buffer.alloc(2);
-      //       if (data <= 255) {
-      //         buf[0] = 0x00;
-      //         buf[1] = data & 255;
-      //       }
-      //       else if (data <= 65535) {
-      //         buf[0] = data & 255;
-      //         buf[1] = (data >> 8) & 255;
-      //       }
-      //       else
-      //         throw new InvalidKnxDataException(data.toString());
-      //     }
-      //     //if float
-      //     else if (this.isFloat(data)) {
-      //       buf = Buffer.alloc(4);
-      //       buf.writeFloatLE(data, 0);
-      //     }
-      //     else
-      //       throw new InvalidKnxDataException(data.toString());
-      //     break
-      //   case 'string':
-      //     buf = Buffer.alloc(parseInt(data));
-      //     break
-      // }
       const dataEncoder = new KnxDataEncoder();
       try {
         if (dpt !== null) {

@@ -69,13 +69,30 @@ export class KnxConnectionTunneling extends KNXConnection {
    */
   private stateRequestTimer: NodeJS.Timeout | null = null;
   /**
-   * UdpClient
+   * The KNXnet/ip communicates via UDP or TCP, this is the UDP client
    */
   private udpClient: null | dgram.Socket = null;
   /**
-   * byte
-   */
-  private sequenceNumber = 0x00;
+ * Represents the sequence number used in KNX/IP tunneling messages.
+ *
+ * The sequence number is included in `TUNNELING_REQUEST` messages to ensure 
+ * proper synchronization between the KNX/IP client and server.
+ *
+ * ## Purpose:
+ * - Prevents message duplication by tracking sent packets.
+ * - Ensures correct acknowledgment (`TUNNELING_ACK`) from the server.
+ * - Helps detect lost or out-of-order messages for retransmission.
+ *
+ * ## Behavior:
+ * - The client increments this number with each new `TUNNELING_REQUEST`.
+ * - The server must reply with the same sequence number in `TUNNELING_ACK`.
+ * - Wraps around to `0x00` after reaching `0xFF` (8-bit counter).
+ *
+ * @private
+ * @type {number}
+ * @default 0x00
+ */
+  private sequenceNumber: number = 0x00;
   GenerateSequenceNumber = () => {
     return this.sequenceNumber++;
   }
@@ -104,7 +121,7 @@ export class KnxConnectionTunneling extends KNXConnection {
    * @param callback 
    * @returns 
    */
-  Connect = (callback?: (msg?: {msg: string, reason: string}) => void) => {
+  Connect = (callback?: (msg?: { msg: string, reason: string }) => void) => {
     let thisClass = this;
     if (this.connected && this.udpClient) {
       callback && callback()
@@ -145,6 +162,7 @@ export class KnxConnectionTunneling extends KNXConnection {
     catch (e) {
       throw new ConnectionErrorException(JSON.stringify(this.localEndpoint), e);
     }
+    // Here the classes that handle sending and receiving data are initialized.
     if (this.knxReceiver == null || this.knxSender == null) {
       this.knxReceiver = new KNXReceiverTunneling(this, this.udpClient, this.localEndpoint);
       this.knxSender = new KNXSenderTunneling(this, this.udpClient, this.RemoteEndpoint);
@@ -184,8 +202,8 @@ export class KnxConnectionTunneling extends KNXConnection {
       thisClass.once('disconnect', callback);
     try {
       this.TerminateStateRequest();
-      new Promise(function (fulfill, reject) {
-        thisClass.ConnectRequest(fulfill);
+      new Promise(function (resolve, reject) {
+        thisClass.ConnectRequest(resolve);
       })
         .then(function () {
           if (thisClass.knxReceiver instanceof KNXReceiverTunneling) {
@@ -209,20 +227,18 @@ export class KnxConnectionTunneling extends KNXConnection {
     }
   }
   delay(time: number) {
-    return new Promise(function (fulfill, reject) {
-      setTimeout(fulfill, time);
+    return new Promise(function (resolve, reject) {
+      setTimeout(resolve, time);
     });
   }
-  timeout(func: (fn: (...any: any[]) => any) => any, time: number, timeoutFunc: Function) {
+  timeout(fnForSuccessPromise: (fn: () => void) => void, time: number, timeoutFunc: () => void) {
     let success: boolean | null = null;
-    let succPromise = new Promise(function (fulfill, reject) {
-      func(function () {
+    let succPromise = new Promise(function (resolve, reject) {
+      fnForSuccessPromise(function () {
         if (success === null) {
           success = true;
-          fulfill(success);
-        }
-        else
-          reject();
+          resolve(success);
+        } else { reject(); }
       });
     });
     let timeoutPromise = this.delay(time);
@@ -232,20 +248,25 @@ export class KnxConnectionTunneling extends KNXConnection {
     });
     return Promise.race([succPromise, timeoutPromise]);
   }
+  /**
+   * Check the connection every 60 seconds and send a status request, which if it does not receive a response after 10000ms, it attempts to restart the connection.
+   */
   InitializeStateRequest() {
-    var thisClass = this;
+    let thisClass = this;
     this.stateRequestTimer = setInterval(function () {
-      thisClass.timeout(function (fulfill) {
+      thisClass.timeout(function (resolve) {
         thisClass.removeAllListeners('alive');
         thisClass.StateRequest(function (err) {
-          if (!err)
-            thisClass.once('alive', fulfill);
+          if (!err) {
+            thisClass.once('alive', resolve);
+          }
         });
       }, 2 * CONNECT_TIMEOUT, function () {
-        if (thisClass.debug)
-          console.log('connection stale, so disconnect and then try to reconnect again');
-        new Promise(function (fulfill) {
-          thisClass.Disconnect(fulfill);
+        if (thisClass.debug) {
+          console.log('Connection stale, so disconnect and then try to reconnect again');
+        }
+        new Promise(function (resolve) {
+          thisClass.Disconnect(resolve);
         }).then(function () {
           thisClass.Connect();
         });
@@ -253,12 +274,15 @@ export class KnxConnectionTunneling extends KNXConnection {
     }, 60000); // same time as ETS with group monitor open
   }
   TerminateStateRequest() {
-    if (this.stateRequestTimer == null)
-      return;
+    if (this.stateRequestTimer == null) return;
     clearTimeout(this.stateRequestTimer);
   }
   // TODO: I wonder if we can extract all these types of requests
-  ConnectRequest(callback?: (...any: any[]) => any) {
+  /**
+   * 
+   * @param resolve - This property is a resolver function of a promise, it is designed to receive an error if there is a problem in the sending.
+   */
+  ConnectRequest(resolve?: (value?: unknown) => void) {
     // HEADER
     let datagram = Buffer.alloc(26);
     datagram[0] = 0x06;
@@ -290,14 +314,18 @@ export class KnxConnectionTunneling extends KNXConnection {
     datagram[25] = 0x00;
     try {
       if (this.knxSender instanceof KNXSenderTunneling) {
-        this.knxSender.SendDataSingle(datagram, callback);
+        this.knxSender.SendDataSingle(datagram, resolve);
       }
     }
     catch (e) {
-      callback && callback();
+      resolve && resolve();
     }
   }
-  StateRequest(callback: (...any: any[]) => any) {
+  /**
+   * 
+   * @param resolve - This property is a resolver function of a promise, it is designed to receive an error if there is a problem in the sending.
+   */
+  StateRequest(resolve: (value?: unknown) => void) {
     // HEADER
     let datagram = Buffer.alloc(16);
     datagram[0] = 0x06;
@@ -320,17 +348,21 @@ export class KnxConnectionTunneling extends KNXConnection {
 
     try {
       if (this.knxSender instanceof KNXSenderTunneling) {
-        this.knxSender.SendData(datagram, callback);
+        this.knxSender.SendData(datagram, resolve);
       }
     }
     catch (e) {
-      callback(e)
+      resolve(e)
     }
   }
-  DisconnectRequest(callback: (...any: any[]) => any) {
-    if(!this.connected) {
-        callback && callback();
-        return false;
+  /**
+ * 
+ * @param resolve - This property is a resolver function of a promise, it is designed to receive an error if there is a problem in the sending.
+ */
+  DisconnectRequest(resolve: (value?: unknown) => void) {
+    if (!this.connected) {
+      resolve && resolve();
+      return false;
     }
     // HEADER
     var datagram = Buffer.alloc(16);
@@ -353,12 +385,12 @@ export class KnxConnectionTunneling extends KNXConnection {
     datagram[15] = this.localEndpoint.port & 255;
     try {
       if (this.knxSender instanceof KNXSenderTunneling) {
-        this.knxSender.SendData(datagram, callback);
+        this.knxSender.SendData(datagram, resolve);
       }
     }
     catch (e) {
-        callback(e)
+      resolve(e)
     }
-}
+  }
 }
 
