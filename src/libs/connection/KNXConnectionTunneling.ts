@@ -1,30 +1,35 @@
-/**
- * Created by aborovsky on 24.08.2015.
- */
-
 const CONNECT_TIMEOUT = 5000;
-// var KnxConnection = require('./KnxConnection');
-// var KnxReceiverTunneling = require('./KnxReceiverTunneling');
-// var KnxSenderTunneling = require('./KnxSenderTunneling');
-// var ConnectionErrorException = require('./ConnectionErrorException');
-// var dgram = require('dgram');
+
 import { KNXConnection } from './KNXConnection';
 import { KNXSenderTunneling } from './KNXSenderTunneling';
 import { KNXReceiverTunneling } from './KNXReceiverTunneling';
-import { ConnectionErrorException } from './ConnectionErrorException';
+import { ConnectionErrorException } from '../errors/ConnectionErrorException';
 import dgram from 'node:dgram';
-import { getLocalIP } from '../utils/localIp';
-import { LocalEndPoint } from '../interfaces/localEndPoint';
-
-
-/// <summary>
-///     Initializes a new KNX tunneling connection with provided values. Make sure the local system allows
-///     UDP messages to the localIpAddress and localPort provided
-/// </summary>
-/// <param name="remoteIpAddress">Remote gateway IP address</param>
-/// <param name="remotePort">Remote gateway port</param>
-/// <param name="localIpAddress">Local IP address to bind to</param>
-/// <param name="localPort">Local port to bind to</param>
+import { getLocalIP } from '../utils/function/localIp';
+import { LocalEndPoint } from '../@types/interfaces/localEndPoint';
+/**
+ * Represents a KNX tunneling connection.
+ * 
+ * @class KnxConnectionTunneling
+ * @extends {KNXConnection}
+ * 
+ * @param {string} remoteIpAddress - Remote gateway IP address.
+ * @param {number} remotePort - Remote gateway port.
+ * @param {string} [localIpAddress=getLocalIP()] - Local IP address to bind to.
+ * @param {number} [localPort=13671] - Local port to bind to.
+ * 
+ * @property {string} localIpAddress - Local IP address.
+ * @property {number} localPort - Local port.
+ * @property {NodeJS.Timeout | null} reConnectTimeout - Reconnect timeout.
+ * @property {NodeJS.Timeout | null} connectTimeout - Connect timeout.
+ * @property {KNXReceiverTunneling | null} knxReceiver - KNX receiver.
+ * @property {KNXSenderTunneling | null} knxSender - KNX sender.
+ * @property {LocalEndPoint} localEndpoint - Local endpoint.
+ * @property {number} ChannelId - Channel ID.
+ * @property {NodeJS.Timeout | null} stateRequestTimer - State request timer.
+ * @property {dgram.Socket | null} udpClient - UDP client.
+ * @property {number} sequenceNumber - Sequence number.
+ */
 export class KnxConnectionTunneling extends KNXConnection {
   localIpAddress: string;
   localPort: number;
@@ -99,7 +104,7 @@ export class KnxConnectionTunneling extends KNXConnection {
    * @param callback 
    * @returns 
    */
-  Connect = (callback?: (...any: any[]) => any) => {
+  Connect = (callback?: (msg?: {msg: string, reason: string}) => void) => {
     let thisClass = this;
     if (this.connected && this.udpClient) {
       callback && callback()
@@ -171,7 +176,7 @@ export class KnxConnectionTunneling extends KNXConnection {
    * Stop the connection
    * @param callback 
    */
-  Disconnect = (callback: (...any: any[]) => any) => {
+  Disconnect = (callback: (...any: any[]) => void) => {
     let thisClass = this;
     thisClass.ClearConnectTimeout();
     thisClass.ClearReconnectTimeout();

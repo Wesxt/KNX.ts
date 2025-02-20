@@ -1,5 +1,5 @@
-import { KNXHelper } from "./KNXHelper";
-
+import { KNXHelper } from "../utils/class/KNXHelper";
+// TODO: Its implementation must be improved and validations added to make it a guaranteed valid datagram.
 export class KnxDatagram {
   /**Header => int */
   header_length?: number;
@@ -91,13 +91,15 @@ export class KnxDatagram {
     this.data = options.data;
   }
 
-  // Método para construir un datagrama en formato Buffer
-  toBuffer() {
-    const buffer = Buffer.alloc(this.total_length as number); // Crear un buffer con la longitud total
+  /**
+   * Returns a buffer of the created instance, it is not guaranteed to be exactly a valid datagram of the protocol
+   * @returns {Buffer}
+   */
+  toBuffer(): Buffer<ArrayBuffer> {
+    const buffer = Buffer.alloc(this.total_length as number);
 
-    // Ejemplo: Escribir datos en el buffer (esto debe adaptarse a tu protocolo)
-    buffer.writeUInt8(this.header_length as number, 0); // Escribir la longitud del encabezado
-    buffer.writeUInt8(this.protocol_version as number, 1); // Escribir la versión del protocolo
+    buffer.writeUInt8(this.header_length as number, 0); 
+    buffer.writeUInt8(this.protocol_version as number, 1);
     if (this.service_type) {
       buffer.writeUInt8(this.service_type[0], 2);
       buffer.writeUInt8(this.service_type[1], 3);
@@ -127,13 +129,17 @@ export class KnxDatagram {
       buffer[19] = this.apdu[0]
       buffer[20] = this.apdu[1]
     }
-    // Aquí deberás continuar escribiendo los campos según el formato esperado
-    // y asegurarte de manejar correctamente los offsets en el buffer.
-    // buffer.writeUint8(this.message_code, )
     return buffer;
   }
 
-  // Método para mostrar información del datagrama como texto legible
+  
+  /**
+   * Returns a string representation of the KNX datagram.
+   *
+   * The string includes detailed information about the header, connection, and CEMI (Common External Message Interface) sections of the datagram.
+   *
+   * @returns {string} A formatted string containing the datagram details.
+   */
   toString() {
     return `
       -------------Header------------------

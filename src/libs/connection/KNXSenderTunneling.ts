@@ -1,6 +1,6 @@
 import { KNXSender } from "./KNXSender";
 import dgram from 'node:dgram';
-import { KNXHelper } from "./KNXHelper";
+import { KNXHelper } from "../utils/class/KNXHelper";
 import { KnxConnectionTunneling } from "./KNXConnectionTunneling";
 
 export class KNXSenderTunneling extends KNXSender {
@@ -11,36 +11,36 @@ export class KNXSenderTunneling extends KNXSender {
   }) {
     super(connection)
   }
-  Action(destinationAddress: Buffer | string, data: Buffer, callback?: () => any) {
+  Action(destinationAddress: Buffer | string, data: Buffer, callback?: (err: Error | null) => void) {
     this.SendData(this.CreateActionDatagram(destinationAddress as string, data) as Buffer, callback);
   }
-  RequestStatus(destinationAddress: Buffer | string, callback: () => any) {
+  RequestStatus(destinationAddress: Buffer | string, callback: (...args: any[]) => void) {
     callback && this.connection.once('status.' + destinationAddress.toString(), callback);
     this.SendData(this.CreateRequestStatusDatagram(destinationAddress as string) as Buffer);
   }
   SetClient(client: typeof this.udpClient) {
     this.udpClient = client
   }
-  SendDataSingle(datagram: Buffer, callback?: (any: any) => any) {
+  SendDataSingle(datagram: Buffer, callback?: (error: Error | null) => void) {
     let thisClass = this
-    function cb(error: Error | null, bytes?: number) {
+    function callbackError(error: Error | null, bytes?: number) {
       if (thisClass.connection.debug)
         console.log('udp sent, err[' + (error ? error.toString() : 'no_err') + '], bytes[' + bytes + ']');
       callback && callback(error);
     }
-    this.udpClient.send(datagram, 0, datagram.length, this.remoteEndpoint.port, this.remoteEndpoint.host, cb)
+    this.udpClient.send(datagram, 0, datagram.length, this.remoteEndpoint.port, this.remoteEndpoint.host, callbackError)
   }
-  SendData(datagram: Buffer, callback?: (...any: any) => any) {
+  SendData(datagram: Buffer, callback?: (error: Error | null) => void) {
     if (!datagram) {
-      return cb(new Error('Cannot send empty datagram'));
+      return callbackError(new Error('Cannot send empty datagram'));
     }
     let thisClass = this;
-    function cb(err: Error | null, bytes?: number) {
+    function callbackError(err: Error | null, bytes?: number) {
       if (thisClass.connection.debug)
         console.log('udp sent, err[' + (err ? err.toString() : 'no_err') + ']');
       callback && callback(err);
     }
-    this.udpClient.send(datagram, 0, datagram.length, this.remoteEndpoint.port, this.remoteEndpoint.host, cb);
+    this.udpClient.send(datagram, 0, datagram.length, this.remoteEndpoint.port, this.remoteEndpoint.host, callbackError);
   }
   SendTunnelingAck(sequenceNumber: number) {
     // HEADER

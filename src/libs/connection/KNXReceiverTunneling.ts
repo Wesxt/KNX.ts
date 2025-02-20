@@ -1,9 +1,9 @@
 import { KNXReceiver } from "./KNXReceiver";
 import { KNXConnection } from "./KNXConnection";
 import dgram from 'node:dgram';
-import { KNXHelper } from "./KNXHelper";
-import { LocalEndPoint } from "../interfaces/localEndPoint";
-import KnxDatagram from "./KNXDatagram";
+import { KNXHelper } from "../utils/class/KNXHelper";
+import { LocalEndPoint } from "../@types/interfaces/localEndPoint";
+import KnxDatagram from "../data/KNXDatagram";
 export class KNXReceiverTunneling extends KNXReceiver {
   private udpClient: dgram.Socket;
   private localEndPoint: LocalEndPoint;

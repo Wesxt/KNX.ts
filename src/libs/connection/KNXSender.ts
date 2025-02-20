@@ -1,4 +1,4 @@
-import { KNXHelper } from "./KNXHelper";
+import { KNXHelper } from "../utils/class/KNXHelper";
 import { KNXConnection } from "./KNXConnection";
 
 export abstract class KNXSender {

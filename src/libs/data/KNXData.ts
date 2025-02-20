@@ -35,13 +35,246 @@
 /**
  * Represent data send over knx bus and provide methods to interpret them as different dpt values.
  * (Representar datos enviados a través del bus knx y proporcionar métodos para interpretarlos como diferentes valores dpt)
- * -- Byte array value or integer
  */
 export class KnxData {
   apdu;
   buffer: ArrayBuffer | undefined;
-  constructor(apdu: Buffer) {
-    this.apdu = apdu;
+  constructor(apdu: Buffer, isOnlyDataPoint?: boolean) {
+    if (isOnlyDataPoint) {
+      const bufferCorrect = Buffer.alloc(apdu.length + 2)
+      for (let i = 0; i < bufferCorrect.length - 2; i++) {
+        bufferCorrect.writeUInt8(i, apdu[i]);
+      }
+      this.apdu = bufferCorrect
+    } else {
+      this.apdu = apdu;
+    }
+  }
+  decodeThis(dpt: typeof KnxData.dptEnum[number]) {
+    switch (dpt) {
+      case 1:
+        return this.asDpt1()
+        break;
+      case 2:
+        return this.asDpt2()
+        break
+      case 3007:
+        return this.asDpt3007()
+      break
+      case 3008:
+        return this.asDpt3008()
+      break
+      case 4001:
+        return this.asDpt4001()
+      break
+      case 4002:
+        return this.asDpt4002()
+      break
+      case 5:
+        return this.asDpt5()
+      break
+      case 5001:
+        return this.asDpt5001()
+      break
+      case 5002:
+        return this.asDpt5002()
+      case 6:
+        return this.asDpt6()
+      break
+      case 6001:
+        return this.asDpt6001()
+      break
+      case 6010:
+        return this.asDpt6010()
+      break
+      case 6020:
+        return this.asDpt6020()
+      break
+      case 7:
+        return this.asDpt7()
+      break
+      case 7001:
+        return this.asDpt7001()
+      break
+      case 7002:
+        return this.asDpt7002()
+      break
+      case 7003:
+        return this.asDpt7003()
+      break
+      case 7004:
+        return this.asDpt7004()
+      break
+      case 7005:
+        return this.asDpt7005()
+      break
+      case 7006:
+        return this.asDpt7006()
+      break
+      case 7007:
+        return this.asDpt7007()
+      break
+      case 7011:
+        return this.asDpt7011()
+      break
+      case 7012:
+        return this.asDpt7012()
+      break
+      case 7013:
+        return this.asDpt7013()
+      break
+      case 8:
+        return this.asDpt8()
+      break
+      case 9:
+        return this.asDpt9()
+      break
+      case 10001:
+        return this.asDpt10001()
+      break
+      case 11001:
+        return this.asDpt11001()
+      break
+      case 12001:
+        return this.asDpt12001()
+      break
+      case 12002:
+        return this.asDpt12002()
+      break
+      case 13:
+        return this.asDpt13()
+      break
+      case 13001:
+        return this.asDpt13001()
+      break
+      case 13002:
+        return this.asDpt13002()
+      break
+      case 13010:
+        return this.asDpt13010()
+      break
+      case 13011:
+        return this.asDpt13011()
+      break
+      case 13012:
+        return this.asDpt13012()
+      break
+      case 13013:
+        return this.asDpt13013()
+      break
+      case 13014:
+        return this.asDpt13014()
+      break
+      case 13015:
+        return this.asDpt13015()
+      break
+      case 13016:
+        return this.asDpt13016()
+      break
+      case 13100:
+        return this.asDpt13100()
+      case 14:
+        return this.asDpt14()
+      break
+      case 15000:
+        return this.asDpt15000()
+      break
+      case 16:
+        return this.asDpt16()
+      break
+      case 16002:
+        return this.asDpt16002()
+      break
+      case 20:
+        return this.asDpt20()
+      break
+      case 20001:
+        return this.asDpt20001()
+      break
+      case 20002:
+        return this.asDpt20002()
+      break
+      case 20003:
+        return this.asDpt20003()
+      break
+      case 20004:
+        return this.asDpt20004()
+      break
+      case 20005:
+        return this.asDpt20005()
+      break
+      case 20006:
+        return this.asDpt20006()
+      break
+      case 20007:
+        return this.asDpt20007()
+      break
+      case 20008:
+        return this.asDpt20008()
+      break
+      case 20011:
+        return this.asDpt20011()
+      break
+      case 20012:
+        return this.asDpt20012()
+      break
+      case 20013:
+        return this.asDpt20013()
+      break
+      case 20014:
+        return this.asDpt20014()
+      break
+      case 20017:
+        return this.asDpt20017()
+      break
+      case 20020:
+        return this.asDpt20020()
+      break
+      case 20021:
+        return this.asDpt20021()
+      break
+      case 20022:
+        return this.asDpt20022()
+      break
+      case 27001:
+        return this.asDpt27001()
+      break
+      case 28001:
+        return this.asDpt28001()
+      break
+      case 29:
+        return this.asDpt29()
+      break
+      case 29010:
+        return this.asDpt29010()
+      break
+      case 29011:
+        return this.asDpt29011()
+      break
+      case 29012:
+        return this.asDpt29012()
+      break
+      case 232600:
+        return this.asDpt232600()
+      break
+      case 238600:
+        return this.asDpt238600()
+      break
+      case 245600:
+        return this.asDpt245600()
+      break
+      case 250600:
+        return this.asDpt250600()
+      break
+      case 251600:
+        return this.asDpt251600()
+        break
+      default:
+        throw new Error("The indicated dpt is not listed for decoding or the data provided is invalid")
+    }
+  }
+  static get dptEnum() {
+    return [1, 2, 3007, 3008, 4001, 4002, 5, 5001, 5002, 6, 6001, 6010, 6020, 7, 7001, 7002, 7003, 7004, 7005, 7006, 7007, 7011, 7012, 7013, 8, 9, 10001, 11001, 12001, 12002, 13, 13001, 13002, 13010, 13011, 13012, 13013, 13014, 13015, 13016, 13100, 14, 15000, 16, 16002, 20, 20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20011, 20012, 20013, 20014, 20017, 20020, 20021, 20022, 27001, 28001, 29, 29010, 29011, 29012, 232600, 238600, 245600, 250600, 251600] as const
   }
   /**
    * Prepare the internal data to access it as specific type
@@ -226,7 +459,7 @@ export class KnxData {
     const view = this.dataView();
     return view.getUint8(0);
   }
-  asDdt5001() {
+  asDpt5001() {
     return this.toPercentage(this.asDpt5());
   }
   asDpt5002() {

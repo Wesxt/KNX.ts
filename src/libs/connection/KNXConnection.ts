@@ -1,7 +1,9 @@
 import EventEmitter from 'events';
-import { DataPointTranslator } from './DataPointTranslator';
 import { KNXSenderTunneling } from './KNXSenderTunneling';
-import { AllDpts, KnxDataEncoder } from './KNXDataEncode';
+import { KnxDataEncoder } from '../data/KNXDataEncode';
+import { KNXHelper } from '../utils/class/KNXHelper';
+import { KnxData } from '../data/KNXData';
+import { AllDpts } from '../@types/types/AllDpts';
 
 export class KNXConnection extends EventEmitter {
   host: string;
@@ -9,13 +11,21 @@ export class KNXConnection extends EventEmitter {
   RemoteEndpoint;
   connected = false;
   ActionMessageCode = 0x00;
+  /**
+   * This indicates whether the group addresses are three-level, i.e. "0/0/1" for example.
+   */
   ThreeLevelGroupAddressing = true;
   debug = false;
-  dataPointTranslator = new DataPointTranslator();
   ChannelId = 0x00;
   knxSender: KNXSenderTunneling | null = null;
-  Disconnect: ((callback: (...any: any[]) => any) => void) | null = null;
-  Connect: ((callback?: (...any: any[]) => any) => void) | null = null;
+  /**
+   * This property is intended to be extended, here is the logic of the disconnection
+   */
+  Disconnect: ((callback: (...any: any[]) => void) => void) | null = null;
+  /**
+   * This property is intended to be extended, here is the connection logic
+   */
+  Connect: ((callback?: (...args: any[]) => void) => void) | null = null;
   ResetSequenceNumber: (() => number) | null = null;
   GenerateSequenceNumber: (() => number) | null = null;
   RevertSingleSequenceNumber: (() => number) | null = null;
@@ -47,18 +57,6 @@ export class KNXConnection extends EventEmitter {
       },
     };
   }
-  private isInt(n: number) {
-    return Number(n) === n && n % 1 === 0;
-  }
-  private isFloat(n: number) {
-    return n === Number(n) && n % 1 !== 0;
-  }
-  /**
-   * Send a byte array value as data to specified address
-   * @param address KNX Address
-   * @param data Byte array value or integer
-   * @param callback callback
-   */
   /*
  Datatypes
 
@@ -88,7 +86,13 @@ export class KNXConnection extends EventEmitter {
  Unlimited string 8859_1            .                       DPT 24	    DPT 24
  List 3-byte value                  3 Byte                  DPT 232	    DPT 232	RGB[0,0,0]...[255,255,255]
  */
-  Action<T extends (typeof KnxDataEncoder.dptEnum)[number] | null>(address: Buffer | string, dataInput: AllDpts<T>, dpt: T, callback?: () => any) {
+  /**
+   * Send a byte array value as data to specified address
+   * @param address KNX Address
+   * @param data Byte array value or integer
+   * @param callback callback
+   */
+  Action<T extends (typeof KnxDataEncoder.dptEnum)[number] | null>(address: Buffer | string, dpt: T, dataInput: AllDpts<T>, callback?: () => any) {
     let data;
     if (!Buffer.isBuffer(dataInput)) {
       // var buf = null;
@@ -160,7 +164,14 @@ export class KNXConnection extends EventEmitter {
    * @param address
    * @param callback
    */
-  RequestStatus(address: Buffer, callback: () => any) {
+  RequestStatus(address: Buffer | string, callback: () => any) {
+    if (typeof address === "string") {
+      KNXHelper.isValidGroupAddress(address)
+    } else if (address instanceof Buffer) {
+      KNXHelper.isValidGroupAddressBuffer(address)
+    } else {
+      throw new TypeError("Address is invalid")
+    }
     if (this.debug) {
       console.log(`${this.constructor.name} Sending request status to ${JSON.stringify(address)}.`);
     }
@@ -177,19 +188,20 @@ export class KNXConnection extends EventEmitter {
    * get a temperature value in Celsius
    * @param type Datapoint type, e.g.: 9.001
    * @param data Data to convert
-   * @returns
    */
-  FromDataPoint(type: string, data: Buffer) {
-    return this.dataPointTranslator.FromDataPoint(type, data);
+  FromDataPoint(type: typeof KnxData.dptEnum[number], data: Buffer) {
+    const knxDataDecode = new KnxData(data, true)
+    return knxDataDecode.decodeThis(type);
   }
   /**
    * Convert a value to send to KNX using datapoint translator, e.g.,
    * get a temperature value in Celsius in a byte representation
    * @param type Datapoint type, e.g.: 9.001
    * @param value Value to convert
-   * @returns {Buffer}
+   * @returns {Buffer<ArrayBufferLike> | Error}
    */
-  ToDataPoint(type: string, value: any): Buffer {
-    return this.dataPointTranslator.ToDataPoint(type, value);
+  ToDataPoint<T extends (typeof KnxDataEncoder.dptEnum)[number]>(type: T, value: AllDpts<T>): Buffer<ArrayBufferLike> | Error {
+    const dataEncoder = new KnxDataEncoder();
+    return dataEncoder.encodeThis(type, value);
   }
 }

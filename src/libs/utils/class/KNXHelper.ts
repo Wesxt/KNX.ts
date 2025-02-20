@@ -10,7 +10,7 @@
 //           |(Area Adrs)|(Line Adrs)|                       |
 //           +-----------------------+-----------------------+
 
-import { InvalidKnxAddressException } from "./InvalidKnxAddresExeption";
+import { InvalidKnxAddressException } from "../../errors/InvalidKnxAddresExeption";
 
 //           +-----------------------------------------------+
 // 16 bits   |             GROUP ADDRESS (3 level)           |
@@ -461,9 +461,57 @@ export class KNXHelper {
     }
     return this.SERVICE_TYPE.UNKNOWN;
   }
-  GetChannelID(datagram: Buffer) {
+  static GetChannelID(datagram: Buffer) {
     if (datagram.length > 6)
       return datagram[6];
     return -1;
   }
+
+  /**
+ * Verifica si una dirección de grupo KNX es válida.
+ * Los formatos admitidos son:
+ *   - 3 niveles: "main/middle/sub" donde:
+ *       main: 0-31, middle: 0-7, sub: 0-255.
+ *   - 2 niveles: "main/sub" donde:
+ *       main: 0-31, sub: 0-2047.
+ *   - 1 nivel: un número entre 0 y 65535.
+ *
+ * @param address Dirección de grupo en formato string.
+ * @returns true si la dirección es válida; false en caso contrario.
+ */
+static isValidGroupAddress(address: string): boolean {
+  const threeLevelRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{1,3})$/;
+  const twoLevelRegex = /^(\d{1,2})\/(\d{1,4})$/;
+  const oneLevelRegex = /^\d+$/;
+
+  let match;
+  if ((match = address.match(threeLevelRegex))) {
+    const main = parseInt(match[1], 10);
+    const middle = parseInt(match[2], 10);
+    const sub = parseInt(match[3], 10);
+    return main >= 0 && main <= 31 && middle >= 0 && middle <= 7 && sub >= 0 && sub <= 255;
+  } else if ((match = address.match(twoLevelRegex))) {
+    const main = parseInt(match[1], 10);
+    const sub = parseInt(match[2], 10);
+    return main >= 0 && main <= 31 && sub >= 0 && sub <= 2047;
+  } else if (oneLevelRegex.test(address)) {
+    const value = parseInt(address, 10);
+    return value >= 0 && value <= 65535;
+  }
+  return false;
+}
+
+/**
+ * Verifica si un Buffer de 2 octetos representa una dirección de grupo KNX válida.
+ *
+ * Se asume que la dirección se codifica en 2 bytes (0–65535).
+ *
+ * @param buffer Buffer con la dirección de grupo.
+ * @returns true si el buffer es válido; false en caso contrario.
+ */
+static isValidGroupAddressBuffer(buffer: Buffer): boolean {
+  if (buffer.length !== 2) return false;
+  const value = buffer.readUInt16BE(0);
+  return value >= 0 && value <= 65535;
+}
 }

@@ -1,9 +1,9 @@
-import { KNXHelper } from './KNXHelper';
+import { KNXHelper } from '../utils/class/KNXHelper';
 import { KNXConnection } from './KNXConnection';
-import KnxDatagram from './KNXDatagram';
-import { KnxData } from './KNXData';
+import KnxDatagram from '../data/KNXDatagram';
+import { KnxData } from '../data/KNXData';
 
-interface extendDatagram extends KnxDatagram {
+interface ExtendDatagram extends KnxDatagram {
   dtpData?: KnxData;
 }
 
@@ -12,7 +12,7 @@ export class KNXReceiver {
   constructor(connection: KNXConnection) {
     this.connection = connection;
   }
-  ProcessCEMI(datagram: extendDatagram, cemi: Buffer) {
+  ProcessCEMI(datagram: ExtendDatagram, cemi: Buffer) {
     try {
       // CEMI
       // +--------+--------+--------+--------+----------------+----------------+--------+----------------+

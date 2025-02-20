@@ -1,226 +1,14 @@
-// #region Interfaces of DPTs
-export interface DPT1 {
-  value: boolean;
-}
-export interface DPT2 {
-  control: 0 | 1;
-  valueDpt2: 0 | 1;
-}
-export interface DPT3 {
-  control: 0 | 1;
-  stepCode: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
-}
-export interface DPT4 {
-  char: string;
-}
-export interface DPT5 {
-  valueDpt5: number; // 0-255
-}
-export interface DPT5001 {
-  valueDpt5001: number; // 0-100 (Percentage)
-}
-export interface DPT5002 {
-  valueDpt5002: number; // 0-360 (Angle)
-}
-export interface DPT6 {
-  valueDpt6: number; // -128 to 127
-}
-export interface DPT6020 {
-  status: 0 | 1; // 0-1 (1 bit)
-  mode: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7; // 0-7 (3 bits)
-}
-export interface DPT7 {
-  valueDpt7: number; // 0-65535
-}
-export interface DPT8 {
-  valueDpt8: number;
-}
-export interface DPT9 {
-  valueDpt9: number;
-}
-export interface DPT10001 {
-  day: number;
-  hour: number;
-  minutes: number;
-  seconds: number;
-}
-export interface DPT11001 {
-  day: number;
-  month: number;
-  year: number;
-}
-export interface DPT12001 {
-  valueDpt12001: number;
-}
-export interface DPT13001 {
-  valueDpt13001: number;
-}
-export interface DPT14 {
-  valueDpt14: number;
-}
-export interface DPT15 {
-  D6: number; // 0-9
-  D5: number; // 0-9
-  D4: number; // 0-9
-  D3: number; // 0-9
-  D2: number; // 0-9
-  D1: number; // 0-9
-  E: 0 | 1;
-  P: 0 | 1;
-  D: 0 | 1;
-  C: 0 | 1;
-  index: number; // 0-15
-}
-export interface DPT16 {
-  text: string;
-}
-export interface DPT16002 {
-  hex: string; // Cadena hexadecimal (por ejemplo: "4A5F3C2E1AFF")
-}
-export interface DPT20 {
-  valueDpt20: number;
-}
-export interface DPT27001 {
-  mask: number; // valor entre 0 y 65535
-  status: number; // valor entre 0 y 65535
-}
-export interface DPT28001 {
-  textDpt28001: string;
-}
-export interface DPT29 {
-  valueDpt29: bigint;
-}
-export interface DPT238600 {
-  BF: 0 | 1;
-  LF: 0 | 1;
-  Addr: number; // Debe estar entre 0 y 63
-}
-export interface DPT245600 {
-  LTRF: number; // 4 bits, 0..15
-  LTRD: number; // 4 bits, 0..15
-  LTRP: number; // 4 bits, 0..15
-  SF: number; // 2 bits, 0..3
-  SD: number; // 2 bits, 0..3
-  SP: number; // 2 bits, 0..3
-  LDTR: number; // 16 bits, 0..65535 (en la práctica, 0..510 min, pero se codifica en 16 bits)
-  LPDTR: number; // 8 bits, 0..255
-}
-export interface DPT250600 {
-  /** Control de Colour Temperature: 0 = decrease, 1 = increase */
-  cCT: 0 | 1;
-  /**
-   * Step Code para Colour Temperature:
-   * - 0: Break
-   * - 1..7: Número de intervalos (step)
-   */
-  stepCodeCT: number; // 0 a 7
-  /** Control de Brightness: 0 = decrease, 1 = increase */
-  cB: 0 | 1;
-  /**
-   * Step Code para Brightness:
-   * - 0: Break
-   * - 1..7: Número de intervalos (step)
-   */
-  stepCodeB: number; // 0 a 7
-  /**
-   * Validez de los campos de Colour Temperature (bit 1 del octeto LSB):
-   * 0: inválido, 1: válido
-   */
-  validCT: 0 | 1;
-  /**
-   * Validez de los campos de Brightness (bit 0 del octeto LSB):
-   * 0: inválido, 1: válido
-   */
-  validB: 0 | 1;
-}
-export interface DPT251600 {
-  R: number; // Red, valor entre 0 y 255
-  G: number; // Green, valor entre 0 y 255
-  B: number; // Blue, valor entre 0 y 255
-  W: number; // White, valor entre 0 y 255
-  mR: 0 | 1; // Validez del canal Red
-  mG: 0 | 1; // Validez del canal Green
-  mB: 0 | 1; // Validez del canal Blue
-  mW: 0 | 1; // Validez del canal White
-}
-// #endregion
-// #region Type dinamic of all DPTs
-export type AllDpts<Dpt extends (typeof KnxDataEncoder.dptEnum)[number] | null> = Dpt extends 1
-  ? DPT1
-  : Dpt extends 2
-    ? DPT2
-    : Dpt extends 3007 | 3008
-      ? DPT3
-      : Dpt extends 4001 | 4
-        ? DPT4
-        : Dpt extends 5
-          ? DPT5
-          : Dpt extends 5001
-            ? DPT5001
-            : Dpt extends 5002
-              ? DPT5002
-              : Dpt extends 6 | 6010
-                ? DPT6
-                : Dpt extends 6020
-                  ? DPT6020
-                  : Dpt extends 7 | 7001 | 7002 | 7003 | 7004 | 7005 | 7006 | 7007 | 7011 | 7012 | 7013
-                    ? DPT7
-                    : Dpt extends 8
-                      ? DPT8
-                      : Dpt extends 9
-                        ? DPT9
-                        : Dpt extends 10001
-                          ? DPT10001
-                          : Dpt extends 11001
-                            ? DPT11001
-                            : Dpt extends 12 | 12001 | 12100 | 12101 | 12102
-                              ? DPT12001
-                              : Dpt extends 13 | 13001 | 13002 | 13010 | 13011 | 13012 | 13013 | 13014 | 13015 | 13016 | 13100
-                                ? DPT13001
-                                : Dpt extends 14
-                                  ? DPT14
-                                  : Dpt extends 15
-                                    ? DPT15
-                                    : Dpt extends 16
-                                      ? DPT16
-                                      : Dpt extends 16002
-                                        ? DPT16002
-                                        : Dpt extends
-                                              | 20
-                                              | 20001
-                                              | 20002
-                                              | 20003
-                                              | 20004
-                                              | 20005
-                                              | 20006
-                                              | 20007
-                                              | 20008
-                                              | 20011
-                                              | 20012
-                                              | 20013
-                                              | 20014
-                                              | 20017
-                                              | 20020
-                                              | 20021
-                                              | 20022
-                                          ? DPT20
-                                          : Dpt extends 27001
-                                            ? DPT27001
-                                            : Dpt extends 28001
-                                              ? DPT28001
-                                              : Dpt extends 238600
-                                                ? DPT238600
-                                                : Dpt extends 245600
-                                                  ? DPT245600
-                                                  : Dpt extends 250600
-                                                    ? DPT250600
-                                                    : Dpt extends 251600
-                                                      ? DPT251600
-                                                      : Buffer;
-// #endregion
+import { format } from "util";
+import { DPT1, DPT2, DPT3, DPT4, DPT5, DPT5001, DPT5002, DPT6, DPT6020, DPT7, DPT8, DPT9, DPT11001, DPT12001, DPT29, DPT251600, DPT10001, DPT13001, DPT14, DPT15, DPT16, DPT16002, DPT20, DPT27001, DPT28001, DPT238600, DPT245600, DPT250600 } from "../@types/interfaces/DPTs";
+import { AllDpts } from "../@types/types/AllDpts";
+
+
 export class KnxDataEncoder {
   private typeErrorData = new TypeError('The object does not contain valid parameters to encode the dpt');
-
+  private allPropertiesTypeVerify(data: Object, type: "string" | "number" | "bigint" | "boolean" | "symbol" | "undefined" | "object" | "function") {
+    if (typeof data !== "object") throw new TypeError("The parameter 'data' is not object", { cause: format('%s', data) });
+    return Object.values(data).every((item) => typeof item === type)
+  }
   // #region Method for encoding dpts
   encodeThis(dpt: (typeof KnxDataEncoder.dptEnum)[number], data: AllDpts<typeof dpt>): Buffer | Error {
     switch (dpt) {
@@ -228,15 +16,15 @@ export class KnxDataEncoder {
         if ('value' in data && typeof data.value === 'boolean') return this.encodeDpt1(data as DPT1);
         break;
       case 2:
-        if ('control' in data && 'valueDpt2' in data && typeof data.control === 'number' && typeof data.valueDpt2 === 'number')
+        if ('control' in data && 'valueDpt2' in data && this.allPropertiesTypeVerify(data, "number"))
           return this.encodeDpt2(data as DPT2);
         break;
       case 3007:
-        if ('control' in data && 'stepCode' in data && typeof data.control === 'number' && typeof data.stepCode === 'number')
+        if ('control' in data && 'stepCode' in data && this.allPropertiesTypeVerify(data, "number"))
           return this.encodeDpt3007(data as DPT3);
         break;
       case 3008:
-        if ('control' in data && 'stepCode' in data && typeof data.control === 'number' && typeof data.stepCode === 'number')
+        if ('control' in data && 'stepCode' in data && this.allPropertiesTypeVerify(data, "number"))
           return this.encodeDpt3008(data as DPT3);
         break;
       case 4001:
@@ -438,7 +226,7 @@ export class KnxDataEncoder {
         if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return this.encodeDpt20022(data);
         break;
       case 27001:
-        if ('mask' in data && 'status' in data && Object.values(data).every((item) => typeof item === 'number')) return this.encodeDpt27001(data);
+        if ('mask' in data && 'status' in data && this.allPropertiesTypeVerify(data, "number")) return this.encodeDpt27001(data);
         break;
       case 28001:
         if ('textDpt28001' in data && typeof data.textDpt28001 === 'string') return this.encodeDpt28001(data);
@@ -447,7 +235,7 @@ export class KnxDataEncoder {
         if ('valueDpt29' in data && typeof data.valueDpt29 === 'bigint') return this.encodeDpt29(data as DPT29);
         break;
       case 238600:
-        if ('BF' in data && 'LF' in data && 'Addr' in data && Object.values(data).every((item) => typeof item === 'number'))
+        if ('BF' in data && 'LF' in data && 'Addr' in data && this.allPropertiesTypeVerify(data, "number"))
           return this.encodeDpt238600(data);
         break;
       case 245600:
@@ -460,7 +248,7 @@ export class KnxDataEncoder {
           'SP' in data &&
           'LDTR' in data &&
           'LPDTR' in data &&
-          Object.values(data).every((item) => typeof item === 'number')
+          this.allPropertiesTypeVerify(data, "number")
         )
           return this.encodeDpt245600(data);
         break;
@@ -472,7 +260,7 @@ export class KnxDataEncoder {
           'stepCodeB' in data &&
           'validCT' in data &&
           'validB' in data &&
-          Object.values(data).every((item) => typeof item === 'number')
+          this.allPropertiesTypeVerify(data, "number")
         )
           return this.encodeDpt250600(data);
         break;
@@ -486,7 +274,7 @@ export class KnxDataEncoder {
           'mG' in data &&
           'mB' in data &&
           'mW' in data &&
-          Object.values(data).every((item) => typeof item === 'number')
+          this.allPropertiesTypeVerify(data, "number")
         )
           return this.encodeDpt251600(data as DPT251600);
         break;

@@ -1,4 +1,4 @@
-import { KnxConnectionTunneling } from './libs/KNXConnectionTunneling';
+import { KnxConnectionTunneling } from './libs/connection/KNXConnectionTunneling';
 // import { AllDpts, KnxDataEncoder } from './libs/KNXDataEncode';
 
 const connectionKnx = new KnxConnectionTunneling('192.168.0.81', 3671);
