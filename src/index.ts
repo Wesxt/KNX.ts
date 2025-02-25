@@ -17,8 +17,7 @@ connectionKnx.on('status', (status) => {
 let value = true;
 function toggleValue() {
   value = !value;
-  connectionKnx.Action('1/0/1', { value: value }, 1);
-  connectionKnx.Action('1/0/2', { value: value }, 1);
+  connectionKnx.Action('1/1/1', 1, {value});
 }
 
 // Iniciar la conexión y notificar al padre
