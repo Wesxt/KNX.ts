@@ -1,6 +1,6 @@
 import { SerialPort } from 'serialport';
 import EventEmitter from 'events';
-import { KNXHelper } from './libs/utils/class/KNXHelper';
+import { KNXHelper } from '../utils/class/KNXHelper';
 
 // Constantes del protocolo UART
 const UART_SERVICES = {

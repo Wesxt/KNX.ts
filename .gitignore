@@ -10,3 +10,5 @@ dist/
 # Ignore system-specific files
 .DS_Store
 Thumbs.db
+
+tsconfig.tsbuildinfo
