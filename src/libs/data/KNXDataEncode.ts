@@ -284,6 +284,300 @@ export class KnxDataEncoder {
     throw this.typeErrorData;
   }
   // #endregion
+  encodeThisOnlyVerify<T extends (typeof KnxDataEncoder.dptEnum)[number] | null>(
+    dpt: T,
+    data: AllDpts<T>
+  ): typeof data | Error {
+    switch (dpt) {
+      case 1:
+        if ('value' in data && typeof data.value === 'boolean') return data;
+        break;
+      case 2:
+        if ('control' in data && 'valueDpt2' in data && this.allPropertiesTypeVerify(data, "number"))
+          return data;
+        break;
+      case 3007:
+        if ('control' in data && 'stepCode' in data && this.allPropertiesTypeVerify(data, "number"))
+          return data;
+        break;
+      case 3008:
+        if ('control' in data && 'stepCode' in data && this.allPropertiesTypeVerify(data, "number"))
+          return data;
+        break;
+      case 4001:
+        if ('char' in data && typeof data.char === 'string') return data;
+        break;
+      case 5:
+        if (
+          'valueDpt5' in data &&
+          typeof data.valueDpt5 === 'number' &&
+          data.valueDpt5 <= 255 &&
+          data.valueDpt5 >= 0
+        )
+          return data;
+        break;
+      case 5001:
+        if (
+          'valueDpt5001' in data &&
+          typeof data.valueDpt5001 === 'number' &&
+          data.valueDpt5001 <= 100 &&
+          data.valueDpt5001 >= 0
+        )
+          return data;
+        break;
+      case 5002:
+        if ('valueDpt5002' in data && typeof data.valueDpt5002 === 'number') return data;
+        break;
+      case 6:
+        if ('valueDpt6' in data && typeof data.valueDpt6 === 'number') return data;
+        break;
+      case 6010:
+        if ('valueDpt6' in data && typeof data.valueDpt6 === 'number') return data;
+        break;
+      case 6020:
+        if ('status' in data && 'mode' in data) return data;
+        break;
+      case 7:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7001:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7002:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7003:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7004:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7005:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7006:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7007:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7011:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7012:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 7013:
+        if ('valueDpt7' in data && typeof data.valueDpt7 === 'number') return data;
+        break;
+      case 8:
+        if ('valueDpt8' in data && typeof data.valueDpt8 === 'number') return data;
+        break;
+      case 9:
+        if ('valueDpt9' in data && typeof data.valueDpt9 === 'number') return data;
+        break;
+      case 10001:
+        if (
+          'day' in data &&
+          'hour' in data &&
+          'minutes' in data &&
+          'seconds' in data &&
+          Object.values(data).every((item) => typeof item === 'number')
+        )
+          return data;
+        break;
+      case 11001:
+        if (
+          'day' in data &&
+          'month' in data &&
+          'year' in data &&
+          Object.values(data).every((item) => typeof item === 'number')
+        )
+          return data;
+        break;
+      case 12:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return data;
+        break;
+      case 12001:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return data;
+        break;
+      case 12100:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return data;
+        break;
+      case 12101:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return data;
+        break;
+      case 12102:
+        if ('valueDpt12001' in data && typeof data.valueDpt12001 === 'number') return data;
+        break;
+      case 13001:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13002:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13010:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13011:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13012:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13013:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13014:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13015:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13016:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 13100:
+        if ('valueDpt13001' in data && typeof data.valueDpt13001 === 'number') return data;
+        break;
+      case 14:
+        if ('valueDpt14' in data && typeof data.valueDpt14 === 'number') return data;
+        break;
+      case 15:
+        if (
+          'D6' in data &&
+          'D5' in data &&
+          'D4' in data &&
+          'D3' in data &&
+          'D2' in data &&
+          'D1' in data &&
+          'E' in data &&
+          'P' in data &&
+          'D' in data &&
+          'c' in data &&
+          'index' in data &&
+          Object.values(data).every((item) => typeof item === 'number')
+        ) {
+          return data;
+        }
+        break;
+      case 16:
+        if ('text' in data && typeof data.text === 'string') return data;
+        break;
+      case 16002:
+        if ('hex' in data && typeof data.hex === 'number') return data;
+        break;
+      case 20:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20001:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20002:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20003:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20004:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20005:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20006:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20007:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20008:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20011:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20012:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20013:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20014:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20017:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20020:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20021:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 20022:
+        if ('valueDpt20' in data && typeof data.valueDpt20 === 'number') return data;
+        break;
+      case 27001:
+        if ('mask' in data && 'status' in data && this.allPropertiesTypeVerify(data, "number"))
+          return data;
+        break;
+      case 28001:
+        if ('textDpt28001' in data && typeof data.textDpt28001 === 'string') return data;
+        break;
+      case 29:
+        if ('valueDpt29' in data && typeof data.valueDpt29 === 'bigint') return data;
+        break;
+      case 238600:
+        if ('BF' in data && 'LF' in data && 'Addr' in data && this.allPropertiesTypeVerify(data, "number"))
+          return data;
+        break;
+      case 245600:
+        if (
+          'LTRF' in data &&
+          'LTRD' in data &&
+          'LTRP' in data &&
+          'SF' in data &&
+          'SD' in data &&
+          'SP' in data &&
+          'LDTR' in data &&
+          'LPDTR' in data &&
+          this.allPropertiesTypeVerify(data, "number")
+        )
+          return data;
+        break;
+      case 250600:
+        if (
+          'cCt' in data &&
+          'stepCodeCT' in data &&
+          'cB' in data &&
+          'stepCodeB' in data &&
+          'validCT' in data &&
+          'validB' in data &&
+          this.allPropertiesTypeVerify(data, "number")
+        )
+          return data;
+        break;
+      case 251600:
+        if (
+          'R' in data &&
+          'G' in data &&
+          'B' in data &&
+          'W' in data &&
+          'mR' in data &&
+          'mG' in data &&
+          'mB' in data &&
+          'mW' in data &&
+          this.allPropertiesTypeVerify(data, "number")
+        )
+          return data;
+        break;
+      default:
+        throw this.typeErrorData;
+    }
+    throw this.typeErrorData;
+  }
+  
   // #region DPTEnum
   static get dptEnum() {
     return [
