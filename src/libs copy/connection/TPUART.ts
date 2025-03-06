@@ -2,9 +2,9 @@ import { SerialPort } from 'serialport';
 import EventEmitter from 'events';
 import { KNXHelper } from '../utils/class/KNXHelper';
 import { KNXTPCIHandler, TPCIType } from '../data/KNXTPCI';
-import { FrameType, Priority, TelegramType } from '../data/enum/KNXEnumControlField';
-import { KNXControlField } from '../data/KNXControlField';
-import { KNXExtendedControlFieldHandler } from '../data/KNXControlFieldExtended';
+import { FrameKind, FrameType, Priority } from '../data/enum/KNXEnumControlField';
+import { KNXTP1ControlField } from '../data/KNXTP1ControlField';
+import { KNXExtendedControlField } from '../data/KNXControlFieldExtended';
 
 // Constantes del protocolo UART
 const UART_SERVICES = {
@@ -92,8 +92,8 @@ export class TPUARTConnection extends EventEmitter {
         });
     }
 
-    async sendGroupValue(groupAddress: number[], data: Buffer, priority: Priority = Priority.NORMAL, sourceAddr = [0x11, 0x01]): Promise<void> {
-        const telegram = this.createGroupValueTelegram(groupAddress, data, priority, sourceAddr);
+    async sendGroupValue(groupAddress: number[], data: Buffer, priority: Priority = Priority.NORMAL, repeat: boolean = false, sourceAddr = [0x11, 0x01]): Promise<void> {
+        const telegram = this.createGroupValueTelegram(groupAddress, data, priority, repeat, sourceAddr);
         console.log("telegram: ", telegram)
         await this.sendTelegram(telegram);
     }
@@ -102,6 +102,7 @@ export class TPUARTConnection extends EventEmitter {
         groupAddress: number[],
         data: Buffer,
         priority: Priority,
+        repeat: boolean,
         sourceAddr: number[]
     ): Buffer {
         if (groupAddress.length !== 2) {
@@ -110,9 +111,6 @@ export class TPUARTConnection extends EventEmitter {
         if (sourceAddr.length !== 2) {
             throw new Error("sourceAddr debe tener exactamente 2 elementos");
         }
-
-        // Para el GroupValue, se asume que la dirección destino es de grupo (AT = 1)
-        const destAddressType = 1; // 1 = Group Address
 
         // Si la TPDU (datos) es de hasta 15 octetos, usamos el formato estándar
         if (data.length <= 15) {
@@ -134,12 +132,11 @@ export class TPUARTConnection extends EventEmitter {
             let offset = 0;
 
             // Construir Control Field para formato estándar (FT flag = 1)
-            const controlField = new KNXControlField();
-            // Aseguramos que el bit 7 (FT) esté establecido para L_Data_Standard:
+            const controlField = new KNXTP1ControlField();
+            controlField.frameKind = FrameKind.L_DATA_FRAME
+            controlField.frameType = FrameType.STANDARD
             controlField.priority = priority;
-            controlField.repeat = false;
-            controlField.telegramType = TelegramType.L_Data_Frame;
-            controlField.frameType = FrameType.STANDARD;
+            controlField.repeat = repeat;
             console.log(controlField.describe())
 
             telegram[offset++] = controlField.rawValue;
@@ -177,15 +174,14 @@ export class TPUARTConnection extends EventEmitter {
             // Usamos el formato L_Data_Extended:
             // Estructura:
             // [0] CTRL (Control Field, con FT = 0 para frame extendido)
-            // [1] CTRLE (Extended Control Field; aquí se fija el bit AT según destAddressType)
-            // [2] Source Address (alta)
-            // [3] Source Address (baja)
-            // [4] Destination Address (alta)
-            // [5] Destination Address (baja)
-            // [6] Longitud extendida: 8 bits completos (data.length, debe ser ≤ 254)
-            // [7] TPCI
-            // [8] APCI (por ejemplo, 0x80 para GroupValueWrite)
-            // [9..9+data.length-1] NPDU (datos, escritos con KNXHelper.WriteData)
+            // [1] Source Address (alta)
+            // [2] Source Address (baja)
+            // [3] Destination Address (alta)
+            // [4] Destination Address (baja)
+            // [5] Longitud extendida: 8 bits completos (data.length, debe ser ≤ 254)
+            // [6] TPCI
+            // [7] APCI (por ejemplo, 0x80 para GroupValueWrite)
+            // [6..9+data.length-1] NPDU (datos, escritos con KNXHelper.WriteData)
             // [final] Check Octet
             if (data.length > 254) {
                 throw new Error("El TPDU extendido admite máximo 254 octetos");
@@ -196,21 +192,12 @@ export class TPUARTConnection extends EventEmitter {
             let offset = 0;
 
             // Construir Control Field para formato extendido (FT flag = 0)
-            const controlField = new KNXControlField();
-            // Limpiar el bit 7 para indicar L_Data_Extended (FT = 0)
-            controlField.priority = priority;
-            controlField.repeat = true;
-            controlField.telegramType = TelegramType.L_Data_Frame;
+            const controlField = new KNXTP1ControlField();
+            controlField.frameKind = FrameKind.L_DATA_FRAME
             controlField.frameType = FrameType.EXTENDED;
+            controlField.priority = priority;
+            controlField.repeat = repeat;
             telegram[offset++] = controlField.rawValue;
-
-            // Extended Control Field (CTRLE):
-            // Para simplificar, fijamos el bit AT según destAddressType; sin hop count y con EFF = 0.
-            const ctrle = new KNXExtendedControlFieldHandler();
-            ctrle.setAddressType(true)
-            ctrle.setExtendedFrameFormat(true)
-            ctrle.setHopCount(0)
-            telegram[offset++] = ctrle.toNumber();
 
             // Source Address (2 octetos)
             telegram[offset++] = sourceAddr[0];

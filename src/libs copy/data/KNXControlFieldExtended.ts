@@ -1,9 +1,7 @@
-import { Priority } from "./enum/KNXEnumControlField";
-
 /**
  * Clase para manejar el Extended Control Field (CTRLE) en KNX
  */
-export class KNXExtendedControlFieldHandler {
+export class KNXExtendedControlField {
   private buffer: Buffer;
 
   /**
@@ -125,9 +123,9 @@ export class KNXExtendedControlFieldHandler {
   /**
    * Método estático para crear una instancia desde diferentes tipos de entrada
    * @param {Buffer | number | number[]} input Entrada para crear el CTRLE
-   * @returns {KNXExtendedControlFieldHandler} Instancia de KNXExtendedControlFieldHandler
+   * @returns {KNXExtendedControlField} Instancia de KNXExtendedControlFieldHandler
    */
-  static from(input: Buffer | number | number[]): KNXExtendedControlFieldHandler {
-    return new KNXExtendedControlFieldHandler(input);
+  static from(input: Buffer | number | number[]): KNXExtendedControlField {
+    return new KNXExtendedControlField(input);
   }
 }
