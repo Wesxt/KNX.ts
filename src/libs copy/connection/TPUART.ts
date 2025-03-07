@@ -4,7 +4,8 @@ import { KNXHelper } from '../utils/class/KNXHelper';
 import { KNXTPCIHandler, TPCIType } from '../data/KNXTPCI';
 import { FrameKind, FrameType, Priority } from '../data/enum/KNXEnumControlField';
 import { KNXTP1ControlField } from '../data/KNXTP1ControlField';
-import { KNXExtendedControlField } from '../data/KNXControlFieldExtended';
+import { KNXTP1ExtendedControlField } from '../data/KNXTP1ControlFieldExtended';
+import { AddressType, ExtendedFrameFormat } from '../data/enum/KNXEnumControlFieldExtended';
 
 // Constantes del protocolo UART
 const UART_SERVICES = {
@@ -174,14 +175,15 @@ export class TPUARTConnection extends EventEmitter {
             // Usamos el formato L_Data_Extended:
             // Estructura:
             // [0] CTRL (Control Field, con FT = 0 para frame extendido)
-            // [1] Source Address (alta)
-            // [2] Source Address (baja)
-            // [3] Destination Address (alta)
-            // [4] Destination Address (baja)
-            // [5] Longitud extendida: 8 bits completos (data.length, debe ser ≤ 254)
-            // [6] TPCI
-            // [7] APCI (por ejemplo, 0x80 para GroupValueWrite)
-            // [6..9+data.length-1] NPDU (datos, escritos con KNXHelper.WriteData)
+            // [1] CTRLE (Extended Control Field; aquí se fija el bit AT (AddressType)
+            // [2] Source Address (alta)
+            // [3] Source Address (baja)
+            // [4] Destination Address (alta)
+            // [5] Destination Address (baja)
+            // [6] Longitud extendida: 8 bits completos (data.length, debe ser ≤ 254)
+            // [7] TPCI
+            // [8] APCI (por ejemplo, 0x80 para GroupValueWrite)
+            // [9..9+data.length-1] NPDU (datos, escritos con KNXHelper.WriteData)
             // [final] Check Octet
             if (data.length > 254) {
                 throw new Error("El TPDU extendido admite máximo 254 octetos");
@@ -198,6 +200,14 @@ export class TPUARTConnection extends EventEmitter {
             controlField.priority = priority;
             controlField.repeat = repeat;
             telegram[offset++] = controlField.rawValue;
+
+            // Extended Control Field (CTRLE):
+            // Para simplificar, fijamos el bit AT según destAddressType; sin hop count y con EFF = 0.
+            const ctrle = new KNXTP1ExtendedControlField();
+            ctrle.addressType = AddressType.GROUP
+            ctrle.hopCount = 0
+            ctrle.eff = ExtendedFrameFormat.Point_To_Point_Or_Standard_Group_Addressed_L_Data_Extended_Frame
+            telegram[offset++] = ctrle.toNumber();
 
             // Source Address (2 octetos)
             telegram[offset++] = sourceAddr[0];
