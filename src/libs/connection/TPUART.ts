@@ -1,10 +1,7 @@
 import { SerialPort } from 'serialport';
 import EventEmitter from 'events';
-import { TPCIType } from '../data/KNXTPCI';
-import { FrameKind, FrameType, Priority } from '../data/enum/KNXEnumControlField';
-import { AddressType, ExtendedFrameFormat } from '../data/enum/KNXEnumControlFieldExtended';
 import { KNXTP1 } from '../data/KNXTP1';
-import { ControlFieldData, ControlFieldExtendedData } from '../@types/interfaces/KNXTP1';
+import { L_Data_Extended, L_Data_Standard } from '../@types/interfaces/KNXTP1';
 
 // Constantes del protocolo UART
 const UART_SERVICES = {
@@ -43,6 +40,7 @@ export class TPUARTConnection extends EventEmitter {
     private port: SerialPort;
     private receiver: Receiver;
     private lastUartState: number = 0;
+    private KNXTP = new KNXTP1()
 
     constructor(portPath: string) {
         super();
@@ -88,20 +86,14 @@ export class TPUARTConnection extends EventEmitter {
         });
     }
 
-    async sendGroupValue(groupAddress: string, data: Buffer, controlField: ControlFieldData = {frameKind: FrameKind.L_DATA_FRAME, frameType: FrameType.STANDARD, priority: Priority.NORMAL, repeat: false}, controlFieldExtended: ControlFieldExtendedData = {addressType: AddressType.GROUP, hopCount: 3, extendedFrameFormat: ExtendedFrameFormat.Point_To_Point_Or_Standard_Group_Addressed_L_Data_Extended_Frame}, sourceAddr: string = "1.1.1"): Promise<void> {
-        const telegram = this.createGroupValueTelegram(data, groupAddress, controlField, controlFieldExtended, sourceAddr);
+    async sendGroupValueWriteInLDataStandard(LDataStandard: L_Data_Standard): Promise<void> {
+        const telegram = this.KNXTP.createLDataStandardFrame(LDataStandard)
         await this.sendTelegram(telegram);
     }
 
-    private createGroupValueTelegram(data: Buffer, groupAddress: string, controlField: ControlFieldData, controlFieldExtended: ControlFieldExtendedData, sourceAddr: string): Buffer {
-        const knxTp = new KNXTP1()
-        if (data.length <= 15) {
-            // Si la TPDU (datos) es de hasta 15 octetos, usamos el formato estándar
-            return knxTp.createLDataStandardFrame(controlField, sourceAddr, groupAddress, TPCIType.UDP_STANDARD, data)
-        } else {
-            // Si la TPDU (datos) es más de 15 octetos, usamos el formato extendido
-           return knxTp.createLDataExtendedFrame(controlField, controlFieldExtended, sourceAddr, groupAddress, TPCIType.CONTROL_REQUEST, data)
-        }
+    async sendGroupValueWriteInLDataExtended(LDataExtended: L_Data_Extended): Promise<void> {
+        const telegram = this.KNXTP.createLDataExtendedFrame(LDataExtended)
+        await this.sendTelegram(telegram);
     }
 
     // private calculateChecksum(data: Buffer): number {

@@ -2,6 +2,7 @@
 import { WriteKNXTp } from "../libs/@types/interfaces/KNXTP1";
 import { TPUARTConnection } from "../libs/connection/TPUART";
 import { KnxDataEncoder } from "../libs/data/KNXDataEncode";
+import { KNXTP1 } from "../libs/data/KNXTP1";
 
 (async () => {
     const tpuart = new TPUARTConnection('/dev/serial0');
@@ -29,6 +30,10 @@ import { KnxDataEncoder } from "../libs/data/KNXDataEncode";
         // Enviar valor a una dirección de grupo
         const groupAddress = message.addressGroup; // Ejemplo: 1/1/34
         const data = new KnxDataEncoder(); // Valor a enviar
-        await tpuart.sendGroupValue(groupAddress, data.encodeThis(message.dpt, message.data as Buffer) as Buffer);
+        const KNXTP = new KNXTP1()
+        const lDataStandard = KNXTP.defaultConfigLDataStandard()
+        lDataStandard.groupAddress = "1/1/1";
+        lDataStandard.data = data.encodeThis(message.dpt, message.data);
+        await tpuart.sendGroupValueWriteInLDataStandard(lDataStandard);
     })
 })();

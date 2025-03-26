@@ -665,7 +665,7 @@ export class KnxDataEncoder {
    * DPT5: 1 byte unsigned (0…255)
    */
   encodeDpt5({ valueDpt5: value }: DPT5): Buffer {
-    if (value <= 0 || value >= 255) throw new Error('DPT5 value must be between 0 and 255');
+    if (value < 0 || value > 255) throw new Error('DPT5 value must be between 0 and 255');
     const buffer = Buffer.alloc(2);
     buffer.writeUInt8(value, 1);
     return buffer;

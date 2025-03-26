@@ -1,11 +1,12 @@
 // index.ts
 import { TPUARTConnection } from "../libs/connection/TPUART";
 import { KnxDataEncoder } from "../libs/data/KNXDataEncode";
+import { KNXTP1 } from "../libs/data/KNXTP1";
 import { TelegramParser } from "../libs/data/TelegramParser";
 
 (async () => {
     const tpuart = new TPUARTConnection('/dev/serial0');
-    let dpt = 1
+    const dpt = 1
     // Eventos
     tpuart.on('open', () => {
         console.log('Conexión abierta')
@@ -14,7 +15,7 @@ import { TelegramParser } from "../libs/data/TelegramParser";
     tpuart.on('error', (err) => console.error('Error:', err));
     tpuart.on('frame', (frame) => {
         try {
-            const telegramParsed = TelegramParser.parseTelegram(frame, 1)
+            const telegramParsed = TelegramParser.parseTelegram(frame, dpt)
             console.log('Frame recibido:', telegramParsed)
         } catch (error) {
             console.error(error)
@@ -26,16 +27,24 @@ import { TelegramParser } from "../libs/data/TelegramParser";
         const data = new KnxDataEncoder(); // Valor a enviar
         // let number = "1"
         let value = true
+        const KNXTP = new KNXTP1()
+        const lDataStandard = KNXTP.defaultConfigLDataStandard()
+        // lDataStandard.groupAddress = "1/3/0"
+        lDataStandard.groupAddress = "1/0/0"
         setInterval(async () => {
             // number = number.concat(number, "1")
             // value = BigInt(number)
-            value = !value
+            value = !value;
+            // if (value >= 255) {
+            //     value = 240
+            // }
+            lDataStandard.data = data.encodeThis(dpt, {value})
         try {
-            await tpuart.sendGroupValue("1/1/1", Buffer.from([0]));
+            await tpuart.sendGroupValueWriteInLDataStandard(lDataStandard);
         } catch (error) {
             console.error(error)
         }
-        }, 5000);
+        }, 3000);
     }
 
     // Abrir conexión

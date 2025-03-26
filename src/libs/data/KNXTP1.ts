@@ -1,14 +1,15 @@
 import { SerialPort } from "serialport";
-import { ControlFieldData, ControlFieldExtendedData } from "../@types/interfaces/KNXTP1";
+import { L_Data_Extended, L_Data_Standard } from "../@types/interfaces/KNXTP1";
 import { InvalidKnxDataException } from "../errors/InvalidKnxDataExeption";
 import { KNXHelper } from "../utils/class/KNXHelper";
 import { KNXTP1ControlField } from "./KNXTP1ControlField";
 import { KNXTP1ExtendedControlField } from "./KNXTP1ControlFieldExtended";
-import { KNXTPCI, TPCIType as TransportControlFieldType } from "./KNXTPCI";
+import { KNXTPCI, TPCIType } from "./KNXTPCI";
 import { BIT_1_TIME_IN_9600_BAUDIOS } from "./constants/1bitTimeIn9600Baudios";
 import { ShortAckCode } from "./enum/KNXEnumShortACKFrame";
-import { AddressType } from "./enum/KNXEnumControlFieldExtended";
+import { AddressType, ExtendedFrameFormat } from "./enum/KNXEnumControlFieldExtended";
 import { APCIEnum, KNXAPCI } from "./KNXAPCI";
+import { FrameKind, FrameType, Priority } from "./enum/KNXEnumControlField";
 
 /**
  * Clase para construir frames KNX TP1 según la especificación.
@@ -20,9 +21,49 @@ import { APCIEnum, KNXAPCI } from "./KNXAPCI";
  */
 export class KNXTP1 {
   debug = false;
-  static readonly DataLength_Data_APCI_In_L_Data_Standard = 15
-  static readonly DataLength_Data_APCI_In_L_Data_Extended = 254
-  /**
+  static readonly DataLength_Data_In_L_Data_Standard = 15
+  static readonly DataLength_Data_In_L_Data_Extended = 254
+
+  defaultConfigLDataStandard(groupAddress?: string): L_Data_Standard {
+    return {
+      controlFieldData: {
+        frameType: FrameType.STANDARD,
+        frameKind: FrameKind.L_DATA_FRAME,
+        priority: Priority.LOW,
+        repeat: true
+      },
+      sourceAddr: "0.0.1",
+      groupAddress: groupAddress ? groupAddress : "0/0/1",
+      addressType: AddressType.GROUP,
+      hopCount: 6,
+      TPCIType: TPCIType.T_DATA_BROADCAST_PDU,
+      APCIType: APCIEnum.A_GroupValue_Write_Protocol_Data_Unit,
+      data: Buffer.from([0])
+    }
+  }
+
+  defaultConfigLDataExtended(groupAddress?: string): L_Data_Extended {
+    return {
+      controlFieldData: {
+        frameType: FrameType.EXTENDED,
+        frameKind: FrameKind.L_DATA_FRAME,
+        priority: Priority.LOW,
+        repeat: true
+      },
+      controlFieldExtendedData: {
+        addressType: AddressType.GROUP,
+        extendedFrameFormat: ExtendedFrameFormat.Point_To_Point_Or_Standard_Group_Addressed_L_Data_Extended_Frame,
+        hopCount: 6
+      },
+      sourceAddr: "0.0.1",
+      groupAddress: groupAddress ? groupAddress : "0/0/1",
+      TPCIType: TPCIType.T_DATA_BROADCAST_PDU,
+      APCIType: APCIEnum.A_GroupValue_Write_Protocol_Data_Unit,
+      data: Buffer.from([0])
+    }
+  }
+
+    /**
    * Crea un frame L_Data_Standard.
    * 
    * Estructura del frame:
@@ -39,16 +80,11 @@ export class KNXTP1 {
    * |  7    | Longitud del TPDU (0…14)                  |
    * | 8..N  | TPDU (datos de usuario)                  |
    * | N+1   | Check Octet (NOT XOR de todos los anteriores) |
-   * @param controlFieldData The Control field shall indicate the type of the request Frame: L_Data_Standard Frame L_Data_Extended Frame, L_Poll_Data request Frame or Acknowledgment Frame.
-   * @param sourceAddr Individual Address, Each device, i.e. a Router or an end device, shall have a unique Individual Address (IA) in a network. The Individual Address shall be a 2 octet value that shall consist of an 8 bit Subnetwork Address (SNA) and an 8 bit Device Address (DA). The Device Address shall be unique within a Subnetwork. Routers shall always have the Device Address zero, i.e. other devices may have the Device Addresses with values 1 to 255.
-   * @param groupAddress The Group Address shall be a 2 octet value that does not need to be unique. A Device may have more than one Group Address.
-   * @param addressType The Destination Address (octets three and four) shall define the devices that shall receive the Frame. For an L_Data_Standard Frame, the Destination Address can be either an Individual Address (AT = 0) or a Group Address (AT = 1), depending on the Destination Address Type (AT) in octet five.
-   * @param hopCount Controls how many line repeaters or couplers (Line Couplers or Area Couplers) can retransmit the message.
-   * @param TransportControlFieldType 
+   * @param param0 {L_Data_Standard} An object that configures the L_Data_Standard
    * @returns Buffer con el frame L_Data_Standard completo.
    */
-  createLDataStandardFrame(controlFieldData: ControlFieldData, sourceAddr: string, groupAddress: string, addressType: AddressType, hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7, TransportControlFieldType: TransportControlFieldType, data: Buffer): Buffer {
-    if (data.length > KNXTP1.DataLength_Data_APCI_In_L_Data_Standard) {
+  createLDataStandardFrame({controlFieldData, sourceAddr, groupAddress, addressType, hopCount, TPCIType, APCIType, data}: L_Data_Standard): Buffer {
+    if (data.length > KNXTP1.DataLength_Data_In_L_Data_Standard) {
       throw new InvalidKnxDataException("La longitud del dato deben ser menos o igual a 15")
     }
     // Si la TPDU (datos) es de hasta 15 octetos, usamos el formato estándar
@@ -88,22 +124,26 @@ export class KNXTP1 {
     telegram[offset++] = groupAddressBuffer[0];
     telegram[offset++] = groupAddressBuffer[1];
 
-    // Campo de longitud: 4 bits de data.length y 0xE0 en los 4 bits altos
     const field = (addressType << 7) | ((hopCount & 0x07) << 4);
+    // Campo de longitud: 4 bits de data.length
     const lengthField = (data.length & 0x0F) | field;
     telegram[offset++] = lengthField;
 
     // // Octeto fijo (0x00), reservado en este formato
     // telegram[offset++] = 0x00;
 
-    const apci = new KNXAPCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit)
+    const apci = new KNXAPCI(APCIType)
+    const tpci = new KNXTPCI(TPCIType)
+  // Construir TPCI (0..63) y APCI (0..15)
+  const tpciVal = tpci.getValue(); // Devuelve un número 0..63
+  const apciVal = apci.value; // Devuelve un número 0..15
 
-    // TPCI: se crea una instancia del handler con un tipo de control
-    const tpciHandler = new KNXTPCI(TransportControlFieldType);
-    tpciHandler.reserved = (apci.value >> 4)
-    telegram[offset++] = tpciHandler.getValue();
+  // [6] TPCI + APCI(2 bits altos)
+  telegram[offset++] = ((tpciVal & 0xFC) << 2) // bits 7..2
+                     | ((apciVal >> 6) & 0x03); // bits 1..0
 
-    telegram[offset] = 0x00 & (apci.value << 4);
+  // [7] 2 bits bajos de APCI en bits 7..6, bits 5..0 a 0
+    telegram[offset] = ((apciVal << 2) & 0xC0);
 
     // Escribir Application User Data (APCI + datos) a partir del offset actual
     KNXHelper.WriteData(telegram, data, offset);
@@ -135,8 +175,8 @@ export class KNXTP1 {
  * | N+1   | Check Octet (NOT XOR de todos los anteriores) |
  * @returns Buffer con el frame L_Data_Standard completo.
  */
-  createLDataExtendedFrame(controlFieldData: ControlFieldData, controlFieldExtendedData: ControlFieldExtendedData, sourceAddr: string, groupAddress: string, TPCIType: TransportControlFieldType, data: Buffer): Buffer {
-    if (data.length > KNXTP1.DataLength_Data_APCI_In_L_Data_Extended) {
+  createLDataExtendedFrame({controlFieldData, controlFieldExtendedData, sourceAddr, groupAddress, TPCIType, APCIType, data}: L_Data_Extended): Buffer {
+    if (data.length > KNXTP1.DataLength_Data_In_L_Data_Extended) {
       throw new Error("El TPDU extendido admite máximo 254 octetos");
     }
     // Si la TPDU es extendida (más de 15 octetos)
