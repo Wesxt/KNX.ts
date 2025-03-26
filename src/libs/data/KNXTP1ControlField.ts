@@ -173,24 +173,26 @@ export class KNXTP1ControlField {
    * Describe los bits según el frameKind
    */
   describe() {
+    const valuesInHex = this._value.toString(16).toUpperCase().split("")
+    const valuesInBinary = this.toBinary().split("")
     switch (this._kind) {
       case FrameKind.L_DATA_FRAME:
         return `L_Data-Frame (Figura 28: FT 0 r 1 p1 p0 0 0):
         Bits: ${this.toBinary()}
-        => bit7=1, bit6=0, bit5=${this.repeat ? 1 : 0}, bit4=1, bits3..2=${this.priority}, bits1..0=00
+        => bit7 = 1, bit6 = 0, bit5 = ${this.repeat ? 1 : 0}, bit4 = 1, bits3..2 = ${this.priority}, bits1..0 = 00
         => repeated=${!this.repeat}, priority=${Priority[this.priority]}
         => raw=0x${this._value.toString(16).toUpperCase()}
         `;
       case FrameKind.L_POLL_DATA_FRAME:
         return `L_Poll_Data-Frame:
         Bits: ${this.toBinary()} (0xF0)
-        => No se configuran repeat ni priority
+        => Neither repeat nor priority are configured
         => raw=0x${this._value.toString(16).toUpperCase()}
         `;
       case FrameKind.ACKNOWLEDGEMENT_FRAME:
         return `Acknowledgement Frame:
         Bits: ${this.toBinary()}
-        => La figura 28 indica bits5..4=00 y bits1..0=00, con bits7..6 y bits3..2 variables.
+        => La figura 28 indica bits5..4 = 00 y bits1..0 = 00, con bits7..6 y bits3..2 variables.
         => raw=0x${this._value.toString(16).toUpperCase()}
         `;
       default:

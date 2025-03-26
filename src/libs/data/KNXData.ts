@@ -33,12 +33,16 @@
  */
 
 /**
- * Represent data send over knx bus and provide methods to interpret them as different dpt values.
- * (Representar datos enviados a través del bus knx y proporcionar métodos para interpretarlos como diferentes valores dpt)
+ * Represents KNX DPTs (Data Point Types), decodes them according to their specification
  */
 export class KnxData {
   apdu;
   buffer: ArrayBuffer | undefined;
+  /**
+   * 
+   * @param apdu Application Layer Protocol Data Unit
+   * @param isOnlyDataPoint Indicates whether or not to ignore the first bits of the Application Layer Protocol Control Field (APCI), i.e. if the data is purely a DPT.
+   */
   constructor(apdu: Buffer, isOnlyDataPoint?: boolean) {
     if (isOnlyDataPoint) {
       const bufferCorrect = Buffer.alloc(apdu.length + 2)

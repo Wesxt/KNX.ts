@@ -10,7 +10,7 @@ export class KnxDataEncoder {
     return Object.values(data).every((item) => typeof item === type)
   }
   // #region Method for encoding dpts
-  encodeThis(dpt: (typeof KnxDataEncoder.dptEnum)[number], data: AllDpts<typeof dpt>): Buffer | Error {
+  encodeThis<T extends (typeof KnxDataEncoder.dptEnum)[number] | null>(dpt: T, data: AllDpts<T>) {
     switch (dpt) {
       case 1:
         if ('value' in data && typeof data.value === 'boolean') return this.encodeDpt1(data as DPT1);
@@ -88,6 +88,7 @@ export class KnxDataEncoder {
         break;
       case 9:
         if ('valueDpt9' in data && typeof data.valueDpt9 === 'number') return this.encodeDpt9(data as DPT9);
+        break;
       case 10001:
         if (
           'day' in data &&

@@ -2,24 +2,48 @@
 import { TPUARTConnection } from "../libs/connection/TPUART";
 import { KnxDataEncoder } from "../libs/data/KNXDataEncode";
 import { TelegramParser } from "../libs/data/TelegramParser";
-import { KNXHelper } from "../libs/utils/class/KNXHelper";
 
 (async () => {
     const tpuart = new TPUARTConnection('/dev/serial0');
-
+    let dpt = 1
     // Eventos
-    tpuart.on('open', () => console.log('Conexión abierta'));
+    tpuart.on('open', () => {
+        console.log('Conexión abierta')
+        Action()
+    });
     tpuart.on('error', (err) => console.error('Error:', err));
-    tpuart.on('frame', (frame) => console.log('Frame recibido:', frame, TelegramParser.parseTelegram(frame)));
-    
+    tpuart.on('frame', (frame) => {
+        try {
+            const telegramParsed = TelegramParser.parseTelegram(frame, 1)
+            console.log('Frame recibido:', telegramParsed)
+        } catch (error) {
+            console.error(error)
+            console.log("Frame sin procesar", frame)
+        }
+    });
+
+    function Action() {
+        const data = new KnxDataEncoder(); // Valor a enviar
+        // let number = "1"
+        let value = true
+        setInterval(async () => {
+            // number = number.concat(number, "1")
+            // value = BigInt(number)
+            value = !value
+        try {
+            await tpuart.sendGroupValue("1/1/1", Buffer.from([0]));
+        } catch (error) {
+            console.error(error)
+        }
+        }, 5000);
+    }
+
     // Abrir conexión
-    await tpuart.open();
-    // Enviar valor a una dirección de grupo
-    const groupAddress = Array.from(KNXHelper.GetAddress_("1/1/1")); // Ejemplo: 1/1/34
-    const data = new KnxDataEncoder(); // Valor a enviar
-    let value = true
-    setInterval(async () => {
-        value = !value
-        await tpuart.sendGroupValue(groupAddress, data.encodeDpt1({value: value}));
-    }, 2000)
+    await tpuart.open()
+
+    process.on("SIGINT", () => {
+        console.log("Cerrando conexión TPUART...")
+        tpuart.close()
+        process.kill(0)
+    })
 })();

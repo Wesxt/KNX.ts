@@ -1,5 +1,5 @@
 import { KnxDataEncoder } from "../../data/KNXDataEncode";
-import { DPT1, DPT2, DPT3, DPT4, DPT5, DPT5001, DPT5002, DPT6, DPT6020, DPT7, DPT8, DPT9, DPT10001, DPT11001, DPT12001, DPT13001, DPT14, DPT15, DPT16, DPT16002, DPT20, DPT27001, DPT28001, DPT238600, DPT245600, DPT250600, DPT251600 } from "../interfaces/DPTs";
+import { DPT1, DPT2, DPT3, DPT4, DPT5, DPT5001, DPT5002, DPT6, DPT6020, DPT7, DPT8, DPT9, DPT10001, DPT11001, DPT12001, DPT13001, DPT14, DPT15, DPT16, DPT16002, DPT20, DPT27001, DPT28001, DPT238600, DPT245600, DPT250600, DPT251600, DPT29 } from "../interfaces/DPTs";
 
 // #region Type dinamic of all DPTs
 export type AllDpts<Dpt extends (typeof KnxDataEncoder.dptEnum)[number] | null> = Dpt extends 1
@@ -65,7 +65,7 @@ export type AllDpts<Dpt extends (typeof KnxDataEncoder.dptEnum)[number] | null> 
                                             ? DPT27001
                                             : Dpt extends 28001
                                               ? DPT28001
-                                              : Dpt extends 238600
+                                              : Dpt extends 29 ? DPT29 : Dpt extends 238600
                                                 ? DPT238600
                                                 : Dpt extends 245600
                                                   ? DPT245600

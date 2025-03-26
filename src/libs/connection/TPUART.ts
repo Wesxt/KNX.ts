@@ -1,6 +1,10 @@
 import { SerialPort } from 'serialport';
 import EventEmitter from 'events';
-import { KNXHelper } from '../utils/class/KNXHelper';
+import { TPCIType } from '../data/KNXTPCI';
+import { FrameKind, FrameType, Priority } from '../data/enum/KNXEnumControlField';
+import { AddressType, ExtendedFrameFormat } from '../data/enum/KNXEnumControlFieldExtended';
+import { KNXTP1 } from '../data/KNXTP1';
+import { ControlFieldData, ControlFieldExtendedData } from '../@types/interfaces/KNXTP1';
 
 // Constantes del protocolo UART
 const UART_SERVICES = {
@@ -15,7 +19,7 @@ const UART_SERVICES = {
     LDATA_END: 0x40
 } as const;
 
-// Constantes de frame TP1
+// TP1 frame constant
 const TP1_FRAME = {
     ALWAYS_SET: 0x10,
     STD_FRAME_FORMAT: 0x80 | 0x10,
@@ -26,25 +30,21 @@ const TP1_FRAME = {
     BUSY: 0xc0
 } as const;
 
-// Configuración de tiempos
+// Setting times
 const TIMING = {
     UART_BAUD_RATE: 19200,
     TP1_BAUD_RATE: 9600,
-    UART_STATE_READ_INTERVAL: 5_000_000, // microsegundos
-    ONE_BIT_TIME: Math.ceil(1 / 9600 * 1_000_000), // microsegundos
+    UART_STATE_READ_INTERVAL: 5_000_000, // microseconds
+    ONE_BIT_TIME: Math.ceil(1 / 9600 * 1_000_000), // microseconds
     MAX_SEND_ATTEMPTS: 4
 } as const;
 
 export class TPUARTConnection extends EventEmitter {
     private port: SerialPort;
-    private addresses: Set<string> = new Set();
-    private sending: Map<string, number> = new Map();
     private receiver: Receiver;
-    private idle: boolean = true;
-    private busmon: boolean = false;
     private lastUartState: number = 0;
 
-    constructor(portPath: string, acknowledge: string[] = []) {
+    constructor(portPath: string) {
         super();
         this.port = new SerialPort({
             path: portPath,
@@ -55,12 +55,13 @@ export class TPUARTConnection extends EventEmitter {
             autoOpen: false
         });
 
-        this.addresses = new Set(acknowledge);
         this.receiver = new Receiver(this);
 
         this.port.on('open', () => this.emit('open'));
         this.port.on('error', (err) => this.emit('error', err));
-        this.port.on('data', (data) => this.receiver.handleData(data));
+        this.port.on('data', (data) => {
+            this.receiver.handleData(data)
+        });
     }
 
     async open(): Promise<void> {
@@ -72,15 +73,14 @@ export class TPUARTConnection extends EventEmitter {
                 }
                 this.reset()
                     .then(() => this.waitForInitialUartState())
-                    .then((data) => resolve())
-                    .catch(reject);
+                    .then(() => resolve())
+                    .catch((error) => this.emit("error", error));
             });
         });
     }
 
     private async reset(): Promise<void> {
         return new Promise<void>((resolve, reject) => {
-            this.busmon = false;
             this.port.write([UART_SERVICES.RESET_REQ], (err) => {
                 if (err) reject(err);
                 else resolve();
@@ -88,52 +88,30 @@ export class TPUARTConnection extends EventEmitter {
         });
     }
 
-    async sendGroupValue(groupAddress: number[], data: Buffer, priority: boolean = false): Promise<void> {
-        const telegram = this.createGroupValueTelegram(groupAddress, data, priority);
+    async sendGroupValue(groupAddress: string, data: Buffer, controlField: ControlFieldData = {frameKind: FrameKind.L_DATA_FRAME, frameType: FrameType.STANDARD, priority: Priority.NORMAL, repeat: false}, controlFieldExtended: ControlFieldExtendedData = {addressType: AddressType.GROUP, hopCount: 3, extendedFrameFormat: ExtendedFrameFormat.Point_To_Point_Or_Standard_Group_Addressed_L_Data_Extended_Frame}, sourceAddr: string = "1.1.1"): Promise<void> {
+        const telegram = this.createGroupValueTelegram(data, groupAddress, controlField, controlFieldExtended, sourceAddr);
         await this.sendTelegram(telegram);
     }
 
-    private createGroupValueTelegram(groupAddress: number[], data: Buffer, priority: boolean): Buffer {
-        // Control field - Standard frame format
-        const controlField = priority ? 0xB4 : 0xBC;
-        
-        // Source address (por defecto 1.1.1)
-        const srcAddress = [0x11, 0x01];
-        // data[0] = data[0] ^ 0x80
-        // Campo de longitud y APCI
-        const length = data.length ^ 0xE0;
-        
-        // Construcción del telegrama
-        const telegram = Buffer.alloc(8 + data.length);
-        let offset = 0;
-        
-        telegram[offset++] = controlField;
-        telegram[offset++] = srcAddress[0];
-        telegram[offset++] = srcAddress[1];
-        telegram[offset++] = groupAddress[0];
-        telegram[offset++] = groupAddress[1];
-        telegram[offset++] = length;
-        telegram[offset++] = 0x00
-        telegram[offset] = 0x80
-        // APCI y datos
-        KNXHelper.WriteData(telegram, data, offset);
-        // data.copy(telegram, offset);
-        
-        // Calcular y añadir checksum
-        const checksum = this.calculateChecksum(telegram.subarray(0, offset + data.length));
-        telegram[offset + data.length] = checksum;
-        
-        return telegram;
+    private createGroupValueTelegram(data: Buffer, groupAddress: string, controlField: ControlFieldData, controlFieldExtended: ControlFieldExtendedData, sourceAddr: string): Buffer {
+        const knxTp = new KNXTP1()
+        if (data.length <= 15) {
+            // Si la TPDU (datos) es de hasta 15 octetos, usamos el formato estándar
+            return knxTp.createLDataStandardFrame(controlField, sourceAddr, groupAddress, TPCIType.UDP_STANDARD, data)
+        } else {
+            // Si la TPDU (datos) es más de 15 octetos, usamos el formato extendido
+           return knxTp.createLDataExtendedFrame(controlField, controlFieldExtended, sourceAddr, groupAddress, TPCIType.CONTROL_REQUEST, data)
+        }
     }
 
-    private calculateChecksum(data: Buffer): number {
-        return data.reduce((acc, byte) => acc ^ byte, 0) ^ 0xFF;
-    }
+    // private calculateChecksum(data: Buffer): number {
+    //     return data.reduce((acc, byte) => acc ^ byte, 0) ^ 0xFF;
+    // }
 
     private async sendTelegram(telegram: Buffer): Promise<void> {
         // Convertir a formato UART
         const uartServices = this.toUartServices(telegram);
-        
+
         return new Promise((resolve, reject) => {
             this.port.write(uartServices, (err) => {
                 if (err) reject(err);
@@ -145,17 +123,17 @@ export class TPUARTConnection extends EventEmitter {
     private toUartServices(telegram: Buffer): Buffer {
         const result = Buffer.alloc(telegram.length * 2);
         let offset = 0;
-        
+
         // Convertir cada byte del telegrama en servicios UART
         for (let i = 0; i < telegram.length - 1; i++) {
             result[offset++] = UART_SERVICES.LDATA_START | i;
             result[offset++] = telegram[i];
         }
-        
+
         // Añadir byte final con checksum
         result[offset++] = UART_SERVICES.LDATA_END | (telegram.length - 1);
         result[offset] = telegram[telegram.length - 1];
-        
+
         return result.subarray(0, offset + 1);
     }
 
@@ -164,10 +142,11 @@ export class TPUARTConnection extends EventEmitter {
     }
 
     private async waitForInitialUartState(): Promise<boolean> {
+        console.log("Esperando el estado inicial del TPUART")
         const timeout = 1000; // 1 segundo
         const interval = 10; // 10ms entre checks
         const maxAttempts = timeout / interval;
-        
+
         for (let i = 0; i < maxAttempts; i++) {
             if (this.lastUartState !== 0) {
                 return true;
@@ -197,37 +176,38 @@ class Receiver {
 
     private processByte(byte: number): void {
         const now = Date.now();
-
-        // Resetear buffer si ha pasado mucho tiempo
+    
+        // Si ha pasado mucho tiempo desde el último byte, reiniciamos el buffer.
         if (this.buffer.length > 0 && (now - this.lastRead) > 50) {
             this.buffer = Buffer.alloc(0);
         }
-
-        // Procesar según el tipo de byte
-        if (this.isFrameStart(byte)) {
-            this.buffer = Buffer.from([byte]);
-            this.lastRead = now;
-        } else if (this.buffer.length > 0) {
+    
+        // Solo iniciar un nuevo buffer si aún no estamos procesando un frame.
+        if (this.buffer.length === 0) {
+            if (this.isFrameStart(byte)) {
+                this.buffer = Buffer.from([byte]);
+                this.lastRead = now;
+            }
+        } else {
+            // Si ya tenemos un frame en proceso, simplemente concatenamos.
             this.buffer = Buffer.concat([this.buffer, Buffer.from([byte])]);
             this.lastRead = now;
-
-            // Verificar si tenemos un frame completo
             this.checkCompleteFrame();
         }
     }
 
     private isFrameStart(byte: number): boolean {
         this.extFrame = (byte & TP1_FRAME.STD_FRAME_FORMAT) !== TP1_FRAME.STD_FRAME_FORMAT;
-        return (byte & 0x03) === 0 && 
-               ((byte & 0xD0) === TP1_FRAME.STD_FRAME_FORMAT || 
+        return (byte & 0x03) === 0 &&
+            ((byte & 0xD0) === TP1_FRAME.STD_FRAME_FORMAT ||
                 (byte & 0xD0) === TP1_FRAME.EXT_FRAME_FORMAT);
     }
 
     private checkCompleteFrame(): void {
         const minLength = this.extFrame ? 7 : 6;
-        
+
         if (this.buffer.length >= minLength) {
-            const length = this.extFrame ? 
+            const length = this.extFrame ?
                 8 + (this.buffer[6] & 0x3F) + 1 :
                 7 + (this.buffer[5] & 0x0F) + 1;
 

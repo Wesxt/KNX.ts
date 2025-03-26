@@ -59,10 +59,15 @@ export class KNXHelper {
     return this.GetAddress(addr, '.', false);
   }
 
-  static GetGroupAddress(addr: Buffer, threeLevelAddressing: unknown) {
+  static GetGroupAddress(addr: Buffer, threeLevelAddressing: boolean | unknown) {
     return this.GetAddress(addr, '/', threeLevelAddressing);
   }
-  static GetAddress(addr: Buffer | string, separator?: string, threeLevelAddressing?: unknown) {
+  /**
+   * - If the address is a buffer, the {@link separator} is **"."** and if it is true or false {@link threeLevelAddressing} indicating whether it is a level 3 address then encode the buffer to be a source address returning a string
+   * - If and only if the address is a string and the {@link separator} is not specified and it is not specified {@link threeLevelAddressing} whether it is a level 3 address then encode the group address returning a buffer
+   * @returns {string | Buffer | undefined}
+   */
+  static GetAddress(addr: Buffer | string, separator?: string, threeLevelAddressing?: boolean | unknown): string | Buffer | undefined {
     if (addr && !separator && (threeLevelAddressing === null || threeLevelAddressing == undefined)) {
       return this.GetAddress_(addr as string)
     }
@@ -90,36 +95,48 @@ export class KNXHelper {
       return address;
     }
   }
-  /**
-   * Reverse conversion from string to buffer, the normal function is GetAddress
-   * @param address Group address or source address
-   * @param separator Specifies what separates each number from the address
-   * @param group 
-   * @param threeLevelAddressing 
-   * @returns 
-   */
-  static addressToBuffer(address: string, separator = ".", group = false, threeLevelAddressing = true) {
-    const parts = address.split(separator).map(Number);
-    let addr = Buffer.alloc(2); // Creamos un buffer de 2 bytes
+/**
+* Converts a KNX address (string) into a 2-byte buffer, this method is an alternative to the {@link GetAddress_} method, both methods do the same thing
+* @param address Group or individual address (e.g., "1.1.100" or "1/2/3")
+* @param separator Address separator ("." for individual, "/" for group)
+* @param group `true` for group address, `false` for individual address
+* @param threeLevelAddressing `true` for 3-level, `false` for 2-level
+* @returns 2-byte buffer with the encoded address
+ */
+static addressToBuffer(address: string, separator = ".", group = false, threeLevelAddressing = true): Buffer {
+  const parts = address.split(separator).map(Number);
+  let addr = Buffer.alloc(2);
+  if (parts.length < (threeLevelAddressing ? 3 : 2)) {
+      throw new InvalidKnxAddressException("Invalid address. Incorrect format.");
+  }
 
-    if (group && !threeLevelAddressing) {
-        // 2 niveles de direccionamiento de grupo
-        addr[0] = (parts[0] << 3) | ((parts[1] >> 8) & 0x07);
-        addr[1] = parts[1] & 0xFF;
-    } else {
-        // 3 niveles de direccionamiento individual o de grupo
-        if (group) {
-            addr[0] = ((parts[0] & 0x1F) << 3) | (parts[1] & 0x07);
-        } else {
-            addr[0] = ((parts[0] & 0x0F) << 4) | (parts[1] & 0x0F);
-        }
-        addr[1] = parts[2] & 0xFF;
-    }
+  if (group) {
+      if (threeLevelAddressing) {
+          if (parts[0] > 31 || parts[1] > 7 || parts[2] > 255) {
+              throw new InvalidKnxAddressException("Invalid group address (3 levels)");
+          }
+          addr[0] = ((parts[0] & 0x1F) << 3) | (parts[1] & 0x07);
+          addr[1] = parts[2] & 0xFF;
+      } else {
+          if (parts[0] > 31 || parts[1] > 2047) {
+              throw new InvalidKnxAddressException("Invalid group address (2 levels)");
+          }
+          addr[0] = (parts[0] << 3) | ((parts[1] >> 8) & 0x07);
+          addr[1] = parts[1] & 0xFF;
+      }
+  } else {
+      if (parts[0] > 15 || parts[1] > 15 || parts[2] > 255) {
+          throw new InvalidKnxAddressException("Invalid individual address.");
+      }
+      addr[0] = ((parts[0] & 0x0F) << 4) | (parts[1] & 0x0F);
+      addr[1] = parts[2] & 0xFF;
+  }
 
-    return addr;
+  return addr;
 }
+
   /**
-   * Converts a string group address to buffer
+   * Converts a group address from a string into a buffer, first validating if it is a source address if its separator is **"."** otherwise validating if it is a group address if the separator is **"/"**, the alternative to this method is {@link addressToBuffer}
    * @param address Group address
    * @returns 
    */
