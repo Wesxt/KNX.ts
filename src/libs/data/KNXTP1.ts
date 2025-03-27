@@ -170,8 +170,9 @@ export class KNXTP1 {
  * |  4    | Destination Address (alta)               |
  * |  5    | Destination Address (bajo)  |
  * |  6    | Longitud extendida: 8 bits completos (data.length, debe ser ≤ 254)                  |
- * |  7  | Valor fijo (0x00, reservado para TPDU en esta posición)  |
- * | 8..N  | TPDU (datos de usuario)                  |
+ * |  7  | (6 bits del TPCI) + (2 bits del APCI)  |
+ * |  8  | bits restantes del APCI o pueden ser de datos |
+ * | 9..N  | NPDU (datos de usuario)                  |
  * | N+1   | Check Octet (NOT XOR de todos los anteriores) |
  * @returns Buffer con el frame L_Data_Standard completo.
  */
@@ -189,8 +190,8 @@ export class KNXTP1 {
     // [4] Destination Address (alta)
     // [5] Destination Address (baja)
     // [6] Longitud extendida: 8 bits completos (data.length, debe ser ≤ 254)
-    // [7] Valor fijo (0x00, reservado para TPDU en esta posición)
-    // [8] TPCI
+    // [7] (6 bits del TPCI) + (2 bits del APCI)
+    // [8] bits restantes del APCI o pueden ser de datos
     // [9..9+data.length-1] NPDU (datos, escritos con KNXHelper.WriteData)
     // [final] Check Octet
 
@@ -226,9 +227,18 @@ export class KNXTP1 {
     // Campo de longitud extendida: se usa un octeto completo con data.length
     telegram[offset++] = KNXHelper.GetDataLength(data);
 
-    // TPCI: mismo procedimiento que antes
-    const tpciHandler = new KNXTPCI(TPCIType);
-    telegram[offset] = tpciHandler.getValue();
+    const apci = new KNXAPCI(APCIType)
+    const tpci = new KNXTPCI(TPCIType)
+  // Construir TPCI (0..63) y APCI (0..15)
+  const tpciVal = tpci.getValue(); // Devuelve un número 0..63
+  const apciVal = apci.value; // Devuelve un número 0..15
+
+  // [7] TPCI + APCI(2 bits altos)
+  telegram[offset++] = ((tpciVal & 0xFC) << 2) // bits 7..2
+                     | ((apciVal >> 6) & 0x03); // bits 1..0
+
+  // [8] 2 bits bajos de APCI en bits 7..6, bits 5..0 a 0
+    telegram[offset] = ((apciVal << 2) & 0xC0);
 
     // Escribir TPDU (datos) a partir del offset actual
     KNXHelper.WriteData(telegram, data, offset);

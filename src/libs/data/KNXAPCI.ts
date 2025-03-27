@@ -144,6 +144,8 @@ export enum APCIEnum {
  *      • 0x2 → A_GroupValue_Write-PDU
  *  - Nibble bajo (bits 3..0): No utilizado (se fija a 0).
  * 
+ * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Application Layer of the KNX System, Version 02.01.01"
+ * 
  * TODO: Esta clase solo comprende el **T_Data_Group** del Application Control Field (APCI), es decir, solo una parte de la especificación
  */
 export class KNXAPCI {
