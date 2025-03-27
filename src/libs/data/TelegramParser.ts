@@ -40,10 +40,10 @@ export class TelegramParser {
       const controlField = new KNXTP1ControlField(data[0])
       const controlFieldExtended = new KNXTP1ExtendedControlField(data[1])
       // Parseo de TPCI (bits 7..2 de data[7])
-      const tpciValue = (data[7] & 0xFC) >> 2;
+      const tpciValue = (data[7] & 0xFC);
       const tpci = new KNXTPCI(tpciValue)
       // Parseo de APCI (bits 1..0 de data[7], bits 7..6 de data[8])
-      const apciValue = ((data[7] & 0x03) << 2) | ((data[8] >> 6) & 0x03);
+      const apciValue = (((data[7] << 6) & 0xC0) | ((data[8] >> 2) & 0x30));
       const apci = new KNXAPCI(apciValue)
       return {
         controlField: controlField.describe(),

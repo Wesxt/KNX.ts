@@ -15,8 +15,10 @@ import { TelegramParser } from "../libs/data/TelegramParser";
     tpuart.on('error', (err) => console.error('Error:', err));
     tpuart.on('frame', (frame) => {
         try {
-            const telegramParsed = TelegramParser.parseTelegram(frame, dpt)
-            console.log('Frame recibido:', telegramParsed)
+            const telegramParsed = TelegramParser.parseTelegram(frame, undefined)
+            console.log('Frame recibido sin decodificar el DPT: ', telegramParsed)
+            const telegramParsedWithDecodeValue = TelegramParser.parseTelegram(frame, dpt)
+            console.log("Frame recibido con el DPT decodificado: ", telegramParsedWithDecodeValue)
         } catch (error) {
             console.error(error)
             console.log("Frame sin procesar", frame)
@@ -28,23 +30,30 @@ import { TelegramParser } from "../libs/data/TelegramParser";
         // let number = "1"
         let value = true
         const KNXTP = new KNXTP1()
+        const lDataExtended = KNXTP.defaultConfigLDataExtended()
         const lDataStandard = KNXTP.defaultConfigLDataStandard()
-        // lDataStandard.groupAddress = "1/3/0"
         lDataStandard.groupAddress = "1/0/0"
+        lDataExtended.groupAddress = "0/0/1"
         setInterval(async () => {
-            // number = number.concat(number, "1")
-            // value = BigInt(number)
-            value = !value;
-            // if (value >= 255) {
-            //     value = 240
-            // }
+            console.log("Se envio")
+            value = !value
             lDataStandard.data = data.encodeThis(dpt, {value})
         try {
             await tpuart.sendGroupValueWriteInLDataStandard(lDataStandard);
         } catch (error) {
             console.error(error)
         }
-        }, 3000);
+        }, 5000);
+        setInterval(async () => {
+            console.log("Se envio")
+            const buff = Buffer.from("Hola mundo Hola mundo hola mundo", "utf-8")
+            lDataExtended.data = buff
+        try {
+            await tpuart.sendGroupValueWriteInLDataExtended(lDataExtended);
+        } catch (error) {
+            console.error(error)
+        }
+        }, 10000);
     }
 
     // Abrir conexión
