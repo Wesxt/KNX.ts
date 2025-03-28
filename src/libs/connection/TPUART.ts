@@ -100,7 +100,7 @@ export class TPUARTConnection extends EventEmitter {
     //     return data.reduce((acc, byte) => acc ^ byte, 0) ^ 0xFF;
     // }
 
-    private async sendTelegram(telegram: Buffer): Promise<void> {
+    async sendTelegram(telegram: Buffer): Promise<void> {
         // Convertir a formato UART
         const uartServices = this.toUartServices(telegram);
 
