@@ -10,126 +10,20 @@
  * TODO: Este enum solo comprende el **T_Data_Group** del Application Control Field (APCI), es decir, solo una parte de la especificación
  */
 export enum APCIEnum {
+  /**
+   * A_GroupValue_Read_Protocol_Data_Unit es el comando utilizado para solicitar
+   * la lectura de un valor de un grupo de direcciones KNX.
+   */
   A_GroupValue_Read_Protocol_Data_Unit = 0x00,
   /**
- * ## A_GroupValue_Response-PDU
- *
- * La especificación KNX define **dos formatos** diferentes para el PDU de respuesta de un objeto de grupo 
- * (A_GroupValue_Response-PDU) dependiendo de la longitud de los datos que se van a transmitir.
- *
- * ### Formato 1: Valor de hasta 6 bits
- *
- * Cuando el valor a enviar tiene un tamaño máximo de 6 bits (por ejemplo, un 1-bit o 6-bit DPT),
- * se utiliza un **formato optimizado**. De acuerdo con la Figura 4, el PDU consta de:
- * 
- * **El APCI comienza desde el bit 1 del (octeto 6) al bit6 del (octeto 7)**
- * 
- * ```
- *       +------------------+-------------------+
- * Octet |               6                  |                  7                 |
- *       +------------------+-------------------+
- * Bits 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0
- *       +------------------+-------------------+
- * Campo                       |      APCI      | Valor(≤6 bits)
- *       +------------------+-------------------+
- * ```
- *
- * - **Octeto 6 (APCI desde bit1 al bit6 del octeto 6)**: Contiene los bits de control de aplicación (Application Control Field),
- *   indicando que se trata de una respuesta de grupo (A_GroupValue_Response-PDU).
- * - **Octeto 7 (Valor desde bit5 al bit0)**: Alberga el dato de hasta 6 bits. Si el valor es menor a 6 bits,
- *   los bits no utilizados se ponen a 0.
- *
- * ### Formato 2: Valor mayor a 6 bits (hasta 14 octetos)
- *
- * Cuando el valor excede los 6 bits (hasta un máximo de 14 octetos),
- * se usa el **formato extendido** mostrado en la Figura 5. El PDU abarca más octetos:
- *
- * **El APCI comienza desde el bit 1 del (octeto 6) al bit6 del (octeto 7)**
- * 
- * **El valor comieza desde el octeto 8**
- * 
- * ```
- *       +------------------+-------------------+-------------------+
- * Octet |               6                  |                  7                 |                  8                 |
- *       +------------------+-------------------+-------------------+
- * Bits 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0
- *       +------------------+-------------------+-------------------+
- * Campo                       |      APCI     |  0  0  0  0  0  0  |        Valor(>6 bits)
- *       +------------------+-------------------+-------------------+
- * ```
- *
- * - **Octeto 6 (APCI desde bit1)**: Igual que en el formato anterior, identifica que es un
- *   A_GroupValue_Response-PDU.
- * - **Octeto 8 (6 bits+ N de bits de los datos)**: Contienen el valor en una o varias octetos,
- *   según la longitud real de los datos (hasta 14 octetos como máximo).
- *
- * ### Notas Generales
- * - El valor puede llegar hasta 14 octetos en total.
- * - Los bits del octeto 7 no son usados cuando los datos son mayores a 6 bits **se rellenan con 0**.
- * - Estos dos formatos permiten optimizar la transmisión cuando se envían pocos bits
- *   (por ejemplo, estados ON/OFF de 1 bit) y, a su vez, soportan valores más grandes
- *   (por ejemplo, para DPT de varios octetos).
- */
+   * A_GroupValue_Response_Protocol_Data_Unit es el comando utilizado para responder
+   * a una solicitud de lectura de un grupo de direcciones KNX.
+   */
   A_GroupValue_Response_Protocol_Data_Unit = 0x10,
-    /**
- * ## A_GroupValue_Write-PDU
- *
- * La especificación KNX define **dos formatos** diferentes para el PDU de respuesta de un objeto de grupo 
- * (A_GroupValue_Write-PDU) dependiendo de la longitud de los datos que se van a transmitir.
- *
- * ### Formato 1: Valor de hasta 6 bits
- *
- * Cuando el valor a enviar tiene un tamaño máximo de 6 bits (por ejemplo, un 1-bit o 6-bit DPT),
- * se utiliza un **formato optimizado**. De acuerdo con la Figura 4, el PDU consta de:
- * 
- * **El APCI comienza desde el bit 1 del (octeto 6) al bit6 del (octeto 7)**
- * 
- * ```
- *       +------------------+-------------------+
- * Octet |               6                  |                  7                 |
- *       +------------------+-------------------+
- * Bits 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0
- *       +------------------+-------------------+
- * Campo                       |      APCI      | Valor(≤6 bits)
- *       +------------------+-------------------+
- * ```
- *
- * - **Octeto 6 (APCI desde bit1 al bit6 del octeto 6)**: Contiene los bits de control de aplicación (Application Control Field),
- *   indicando que se trata de una respuesta de grupo (A_GroupValue_Write-PDU).
- * - **Octeto 7 (Valor desde bit5 al bit0)**: Alberga el dato de hasta 6 bits. Si el valor es menor a 6 bits,
- *   los bits no utilizados se ponen a 0.
- *
- * ### Formato 2: Valor mayor a 6 bits (hasta 14 octetos)
- *
- * Cuando el valor excede los 6 bits (hasta un máximo de 14 octetos),
- * se usa el **formato extendido** mostrado en la Figura 5. El PDU abarca más octetos:
- *
- * **El APCI comienza desde el bit 1 del (octeto 6) al bit6 del (octeto 7)**
- * 
- * **El valor comieza desde el octeto 8**
- * 
- * ```
- *       +------------------+-------------------+-------------------+
- * Octet |               6                  |                  7                 |                  8                 |
- *       +------------------+-------------------+-------------------+
- * Bits 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0
- *       +------------------+-------------------+-------------------+
- * Campo                       |      APCI     |  0  0  0  0  0  0  |        Valor(>6 bits)
- *       +------------------+-------------------+-------------------+
- * ```
- *
- * - **Octeto 6 (APCI desde bit1)**: Igual que en el formato anterior, identifica que es un
- *   A_GroupValue_Write-PDU.
- * - **Octeto 8 (6 bits+ N de bits de los datos)**: Contienen el valor en una o varias octetos,
- *   según la longitud real de los datos (hasta 14 octetos como máximo).
- *
- * ### Notas Generales
- * - El valor puede llegar hasta 14 octetos en total.
- * - Los bits del octeto 7 no son usados cuando los datos son mayores a 6 bits **se rellenan con 0**.
- * - Estos dos formatos permiten optimizar la transmisión cuando se envían pocos bits
- *   (por ejemplo, estados ON/OFF de 1 bit) y, a su vez, soportan valores más grandes
- *   (por ejemplo, para DPT de varios octetos).
- */
+  /**
+   * A_GroupValue_Write_Protocol_Data_Unit es el comando utilizado para escribir
+   * un valor en un grupo de direcciones KNX.
+   */
   A_GroupValue_Write_Protocol_Data_Unit = 0x20
 }
 

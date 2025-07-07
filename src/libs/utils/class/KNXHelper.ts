@@ -329,6 +329,32 @@ static addressToBuffer(address: string, separator = ".", group = false, threeLev
       return data.length;
     return data.length + 1;
   }
+
+/**
+   * Escribe los datos de usuario (APDU) en un datagrama KNX a partir de una posición específica.
+   *
+   * Este método adapta la escritura según la longitud y el tipo de dato:
+   * - Para datos de 1 byte y valor < 0x3F, se escribe directamente en la posición indicada.
+   * - Para datos de 4 bytes (por ejemplo, DPT9 - float), realiza la conversión a formato KNX (mantisa/exponente) y los escribe en las posiciones correspondientes.
+   * - Para datos de longitud > 1, los copia a partir de la posición indicada, ajustando si el primer byte < 0x3F.
+   *
+   * Este método es utilizado por los métodos de construcción de frames en {@link KNXTP1}, como
+   * {@link KNXTP1.createLDataStandardFrame} y {@link KNXTP1.createLDataExtendedFrame}, para insertar el payload de datos
+   * en la posición correcta del telegrama.
+   *
+   * @param datagram Buffer destino donde se escriben los datos (por ejemplo, el frame KNX).
+   * @param data Buffer con los datos a escribir (payload APDU).
+   * @param dataStart Índice en el buffer destino donde se comienza a escribir.
+   *
+   * @throws {Error} Si los datos no son válidos para el tipo esperado.
+   *
+   * @example
+   * // Escribir un valor de 1 bit (DPT1) en un telegrama a partir de la posición 7
+   * KNXHelper.WriteData(telegram, Buffer.from([0x01]), 7);
+   *
+   * // Escribir un valor float (DPT9) en un telegrama a partir de la posición 7
+   * KNXHelper.WriteData(telegram, Buffer.from([0x00, 0x00, 0x48, 0x42]), 7);
+   */
   static WriteData(datagram: Buffer, data: Buffer, dataStart: number) {
     if (data.length == 1) {
       if (data[0] < 0x3F) {
