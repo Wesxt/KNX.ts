@@ -71,7 +71,7 @@ export class KNXHelper {
     if (addr && !separator && (threeLevelAddressing === null || threeLevelAddressing == undefined)) {
       return this.GetAddress_(addr as string)
     }
-    if(addr instanceof Buffer) {
+    if (addr instanceof Buffer) {
       let group = separator === '/';
       let address = null;
       if (group && !threeLevelAddressing) {
@@ -79,7 +79,7 @@ export class KNXHelper {
         address = (addr[0] >> 3).toString();
         address += separator;
         address += (((addr[0] & 0x07) << 8) + addr[1]).toString(); // this may not work, must be checked
-      }else {
+      } else {
         // 3 level individual or group
         address = group
           ? ((addr[0] & 0xFF) >> 3).toString()
@@ -95,45 +95,45 @@ export class KNXHelper {
       return address;
     }
   }
-/**
-* Converts a KNX address (string) into a 2-byte buffer, this method is an alternative to the {@link GetAddress_} method, both methods do the same thing
-* @param address Group or individual address (e.g., "1.1.100" or "1/2/3")
-* @param separator Address separator ("." for individual, "/" for group)
-* @param group `true` for group address, `false` for individual address
-* @param threeLevelAddressing `true` for 3-level, `false` for 2-level
-* @returns 2-byte buffer with the encoded address
- */
-static addressToBuffer(address: string, separator = ".", group = false, threeLevelAddressing = true): Buffer {
-  const parts = address.split(separator).map(Number);
-  let addr = Buffer.alloc(2);
-  if (parts.length < (threeLevelAddressing ? 3 : 2)) {
+  /**
+  * Converts a KNX address (string) into a 2-byte buffer, this method is an alternative to the {@link GetAddress_} method, both methods do the same thing
+  * @param address Group or individual address (e.g., "1.1.100" or "1/2/3")
+  * @param separator Address separator ("." for individual, "/" for group)
+  * @param group `true` for group address, `false` for individual address
+  * @param threeLevelAddressing `true` for 3-level, `false` for 2-level
+  * @returns 2-byte buffer with the encoded address
+   */
+  static addressToBuffer(address: string, separator = ".", group = false, threeLevelAddressing = true): Buffer {
+    const parts = address.split(separator).map(Number);
+    let addr = Buffer.alloc(2);
+    if (parts.length < (threeLevelAddressing ? 3 : 2)) {
       throw new InvalidKnxAddressException("Invalid address. Incorrect format.");
-  }
+    }
 
-  if (group) {
+    if (group) {
       if (threeLevelAddressing) {
-          if (parts[0] > 31 || parts[1] > 7 || parts[2] > 255) {
-              throw new InvalidKnxAddressException("Invalid group address (3 levels)");
-          }
-          addr[0] = ((parts[0] & 0x1F) << 3) | (parts[1] & 0x07);
-          addr[1] = parts[2] & 0xFF;
+        if (parts[0] > 31 || parts[1] > 7 || parts[2] > 255) {
+          throw new InvalidKnxAddressException("Invalid group address (3 levels)");
+        }
+        addr[0] = ((parts[0] & 0x1F) << 3) | (parts[1] & 0x07);
+        addr[1] = parts[2] & 0xFF;
       } else {
-          if (parts[0] > 31 || parts[1] > 2047) {
-              throw new InvalidKnxAddressException("Invalid group address (2 levels)");
-          }
-          addr[0] = (parts[0] << 3) | ((parts[1] >> 8) & 0x07);
-          addr[1] = parts[1] & 0xFF;
+        if (parts[0] > 31 || parts[1] > 2047) {
+          throw new InvalidKnxAddressException("Invalid group address (2 levels)");
+        }
+        addr[0] = (parts[0] << 3) | ((parts[1] >> 8) & 0x07);
+        addr[1] = parts[1] & 0xFF;
       }
-  } else {
+    } else {
       if (parts[0] > 15 || parts[1] > 15 || parts[2] > 255) {
-          throw new InvalidKnxAddressException("Invalid individual address.");
+        throw new InvalidKnxAddressException("Invalid individual address.");
       }
       addr[0] = ((parts[0] & 0x0F) << 4) | (parts[1] & 0x0F);
       addr[1] = parts[2] & 0xFF;
-  }
+    }
 
-  return addr;
-}
+    return addr;
+  }
 
   /**
    * Converts a group address from a string into a buffer, first validating if it is a source address if its separator is **"."** otherwise validating if it is a group address if the separator is **"/"**, the alternative to this method is {@link addressToBuffer}
@@ -296,8 +296,8 @@ static addressToBuffer(address: string, separator = ".", group = false, threeLev
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         // return parseInt(0x3F & apdu[1], 10).toString();
         // Interpreta el segundo byte con la máscara 0x3F.
-      // Devuelve el valor del byte con la máscara 0x3F como una cadena.
-      return (0x3F & apdu[1]).toString();
+        // Devuelve el valor del byte con la máscara 0x3F como una cadena.
+        return (0x3F & apdu[1]).toString();
       case 2:
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         // Interpreta el tercer byte como un carácter Unicode.
@@ -330,31 +330,31 @@ static addressToBuffer(address: string, separator = ".", group = false, threeLev
     return data.length + 1;
   }
 
-/**
-   * Escribe los datos de usuario (APDU) en un datagrama KNX a partir de una posición específica.
-   *
-   * Este método adapta la escritura según la longitud y el tipo de dato:
-   * - Para datos de 1 byte y valor < 0x3F, se escribe directamente en la posición indicada.
-   * - Para datos de 4 bytes (por ejemplo, DPT9 - float), realiza la conversión a formato KNX (mantisa/exponente) y los escribe en las posiciones correspondientes.
-   * - Para datos de longitud > 1, los copia a partir de la posición indicada, ajustando si el primer byte < 0x3F.
-   *
-   * Este método es utilizado por los métodos de construcción de frames en {@link KNXTP1}, como
-   * {@link KNXTP1.createLDataStandardFrame} y {@link KNXTP1.createLDataExtendedFrame}, para insertar el payload de datos
-   * en la posición correcta del telegrama.
-   *
-   * @param datagram Buffer destino donde se escriben los datos (por ejemplo, el frame KNX).
-   * @param data Buffer con los datos a escribir (payload APDU).
-   * @param dataStart Índice en el buffer destino donde se comienza a escribir.
-   *
-   * @throws {Error} Si los datos no son válidos para el tipo esperado.
-   *
-   * @example
-   * // Escribir un valor de 1 bit (DPT1) en un telegrama a partir de la posición 7
-   * KNXHelper.WriteData(telegram, Buffer.from([0x01]), 7);
-   *
-   * // Escribir un valor float (DPT9) en un telegrama a partir de la posición 7
-   * KNXHelper.WriteData(telegram, Buffer.from([0x00, 0x00, 0x48, 0x42]), 7);
-   */
+  /**
+     * Escribe los datos de usuario (APDU) en un datagrama KNX a partir de una posición específica.
+     *
+     * Este método adapta la escritura según la longitud y el tipo de dato:
+     * - Para datos de 1 byte y valor < 0x3F, se escribe directamente en la posición indicada.
+     * - Para datos de 4 bytes (por ejemplo, DPT9 - float), realiza la conversión a formato KNX (mantisa/exponente) y los escribe en las posiciones correspondientes.
+     * - Para datos de longitud > 1, los copia a partir de la posición indicada, ajustando si el primer byte < 0x3F.
+     *
+     * Este método es utilizado por los métodos de construcción de frames en {@link KNXTP1}, como
+     * {@link KNXTP1.createLDataStandardFrame} y {@link KNXTP1.createLDataExtendedFrame}, para insertar el payload de datos
+     * en la posición correcta del telegrama.
+     *
+     * @param datagram Buffer destino donde se escriben los datos (por ejemplo, el frame KNX).
+     * @param data Buffer con los datos a escribir (payload APDU).
+     * @param dataStart Índice en el buffer destino donde se comienza a escribir.
+     *
+     * @throws {Error} Si los datos no son válidos para el tipo esperado.
+     *
+     * @example
+     * // Escribir un valor de 1 bit (DPT1) en un telegrama a partir de la posición 7
+     * KNXHelper.WriteData(telegram, Buffer.from([0x01]), 7);
+     *
+     * // Escribir un valor float (DPT9) en un telegrama a partir de la posición 7
+     * KNXHelper.WriteData(telegram, Buffer.from([0x00, 0x00, 0x48, 0x42]), 7);
+     */
   static WriteData(datagram: Buffer, data: Buffer, dataStart: number) {
     if (data.length == 1) {
       if (data[0] < 0x3F) {
@@ -522,39 +522,63 @@ static addressToBuffer(address: string, separator = ".", group = false, threeLev
  * @param address Dirección de grupo en formato string.
  * @returns true si la dirección es válida; false en caso contrario.
  */
-static isValidGroupAddress(address: string): boolean {
-  const threeLevelRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{1,3})$/;
-  const twoLevelRegex = /^(\d{1,2})\/(\d{1,4})$/;
-  const oneLevelRegex = /^\d+$/;
+  static isValidGroupAddress(address: string): boolean {
+    const threeLevelRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{1,3})$/;
+    const twoLevelRegex = /^(\d{1,2})\/(\d{1,4})$/;
+    const oneLevelRegex = /^\d+$/;
 
-  let match;
-  if ((match = address.match(threeLevelRegex))) {
-    const main = parseInt(match[1], 10);
-    const middle = parseInt(match[2], 10);
-    const sub = parseInt(match[3], 10);
-    return main >= 0 && main <= 31 && middle >= 0 && middle <= 7 && sub >= 0 && sub <= 255;
-  } else if ((match = address.match(twoLevelRegex))) {
-    const main = parseInt(match[1], 10);
-    const sub = parseInt(match[2], 10);
-    return main >= 0 && main <= 31 && sub >= 0 && sub <= 2047;
-  } else if (oneLevelRegex.test(address)) {
-    const value = parseInt(address, 10);
+    let match;
+    if ((match = address.match(threeLevelRegex))) {
+      const main = parseInt(match[1], 10);
+      const middle = parseInt(match[2], 10);
+      const sub = parseInt(match[3], 10);
+      return main >= 0 && main <= 31 && middle >= 0 && middle <= 7 && sub >= 0 && sub <= 255;
+    } else if ((match = address.match(twoLevelRegex))) {
+      const main = parseInt(match[1], 10);
+      const sub = parseInt(match[2], 10);
+      return main >= 0 && main <= 31 && sub >= 0 && sub <= 2047;
+    } else if (oneLevelRegex.test(address)) {
+      const value = parseInt(address, 10);
+      return value >= 0 && value <= 65535;
+    }
+    return false;
+  }
+
+  /**
+   * Verifica si una dirección individual KNX es válida.
+   * Formato válido: "area.line.device" donde:
+   *   - area: 0–15
+   *   - line: 0–15
+   *   - device: 0–255
+   *
+   * @param address Dirección individual en formato string.
+   * @returns true si la dirección es válida; false en caso contrario.
+   */
+  static isValidIndividualAddress(address: string): boolean {
+    const regex = /^(\d{1,2})\.(\d{1,2})\.(\d{1,3})$/;
+    const match = address.match(regex);
+    if (!match) return false;
+
+    const area = parseInt(match[1], 10);
+    const line = parseInt(match[2], 10);
+    const device = parseInt(match[3], 10);
+
+    return area >= 0 && area <= 15 &&
+      line >= 0 && line <= 15 &&
+      device >= 0 && device <= 255;
+  }
+
+  /**
+   * Verifica si un Buffer de 2 octetos representa una dirección de grupo KNX válida.
+   *
+   * Se asume que la dirección se codifica en 2 bytes (0–65535).
+   *
+   * @param buffer Buffer con la dirección de grupo.
+   * @returns true si el buffer es válido; false en caso contrario.
+   */
+  static isValidGroupAddressBuffer(buffer: Buffer): boolean {
+    if (buffer.length !== 2) return false;
+    const value = buffer.readUInt16BE(0);
     return value >= 0 && value <= 65535;
   }
-  return false;
-}
-
-/**
- * Verifica si un Buffer de 2 octetos representa una dirección de grupo KNX válida.
- *
- * Se asume que la dirección se codifica en 2 bytes (0–65535).
- *
- * @param buffer Buffer con la dirección de grupo.
- * @returns true si el buffer es válido; false en caso contrario.
- */
-static isValidGroupAddressBuffer(buffer: Buffer): boolean {
-  if (buffer.length !== 2) return false;
-  const value = buffer.readUInt16BE(0);
-  return value >= 0 && value <= 65535;
-}
 }

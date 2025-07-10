@@ -150,6 +150,17 @@ export class KNXTP1ControlField {
     this._value |= (p & 0b11) << 2;
   }
 
+  get lastTwoBits(): number {
+    // bits1..0
+    return this._value & 0b11;
+  }
+
+  set lastTwoBits(val: 0 | 1 | 2 | 3) {
+    // Limpia bits1..0
+    this._value &= 0b11111100;
+    // Asigna los últimos dos bits
+    this._value |= (val & 0b11);
+  }
 
   /**
    * Valor bruto de 8 bits

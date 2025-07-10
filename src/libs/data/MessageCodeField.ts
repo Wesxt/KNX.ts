@@ -25,6 +25,8 @@ enum DefaultDestination {
    * Application running in the BAU. If the User is not running, the messages are directed to the PEI.
    */
   USR = "USR",
+  CEMI_Server = "CEMI Server",
+  CEMI_Client = "CEMI Client"
 }
 
 /**
@@ -52,19 +54,19 @@ export const MESSAGE_CODE_FIELD = {
     IMI1: { value: 0x11, destination: DefaultDestination.Data_Link_Layer },
     EMI1: { value: 0x11, destination: DefaultDestination.Data_Link_Layer },
     "EMI2/IMI2": { value: 0x11, destination: DefaultDestination.Data_Link_Layer },
-    CEMI: { value: 0x11, destination: DefaultDestination.Data_Link_Layer },
+    CEMI: { value: 0x11, destination: [DefaultDestination.Data_Link_Layer, DefaultDestination.CEMI_Server] },
   },
   "L_Data.con": {
     IMI1: { value: 0x2E, destination: DefaultDestination.Transport_Layer },
     EMI1: { value: 0x4E, destination: DefaultDestination.Transport_Layer },
     "EMI2/IMI2": { value: 0x2E, destination: DefaultDestination.Network_Layer },
-    CEMI: { value: 0x2E, destination: DefaultDestination.Network_Layer },
+    CEMI: { value: 0x2E, destination: [DefaultDestination.Network_Layer, DefaultDestination.CEMI_Client] },
   },
   "L_Data.ind": {
     IMI1: { value: 0x29, destination: DefaultDestination.Transport_Layer },
     EMI1: { value: 0x49, destination: DefaultDestination.Transport_Layer },
     "EMI2/IMI2": { value: 0x29, destination: DefaultDestination.Network_Layer },
-    CEMI: { value: 0x29, destination: DefaultDestination.Network_Layer },
+    CEMI: { value: 0x29, destination: [DefaultDestination.Network_Layer, DefaultDestination.CEMI_Client] },
   },
   "L_SystemBroadcast.req": {
     IMI1: { value: 0x15 },
@@ -96,11 +98,11 @@ export const MESSAGE_CODE_FIELD = {
   },
   "L_Poll_Data.req": {
     "EMI2/IMI2": { value: 0x13, destination: DefaultDestination.Data_Link_Layer },
-    CEMI: { value: 0x13, destination: DefaultDestination.Data_Link_Layer },
+    CEMI: { value: 0x13, destination: [DefaultDestination.Data_Link_Layer, DefaultDestination.CEMI_Server] },
   },
   "L_Poll_Data.con": {
     "EMI2/IMI2": { value: 0x25, destination: DefaultDestination.Network_Layer },
-    CEMI: { value: 0x25, destination: DefaultDestination.Network_Layer },
+    CEMI: { value: 0x25, destination: [DefaultDestination.Network_Layer, DefaultDestination.CEMI_Client] },
   },
   "L_Meter.ind": {
     "EMI2/IMI2": { value: 0x24, destination: DefaultDestination.Network_Layer },
@@ -168,7 +170,7 @@ export const MESSAGE_CODE_FIELD = {
     IMI1: { value: 0x21, destination: DefaultDestination.Transport_Layer },
     EMI1: { value: 0x21, destination: DefaultDestination.Transport_Layer },
     "EMI2/IMI2": { value: 0x41, destination: DefaultDestination.Transport_Layer_Connection_Oriented },
-    CEMI: { value: 0x41, destination: DefaultDestination.Transport_Layer_Connection_Oriented },
+    CEMI: { value: 0x41, destination: DefaultDestination.CEMI_Server },
   },
   "T_Data_Connected.con": {
     "EMI2/IMI2": { value: 0x8E, destination: DefaultDestination.Management_Part_Of_The_AL }
@@ -177,7 +179,7 @@ export const MESSAGE_CODE_FIELD = {
     IMI1: { value: 0x39, destination: DefaultDestination.Management_Part_Of_The_AL },
     EMI1: { value: 0x49, destination: DefaultDestination.Management_Part_Of_The_AL },
     "EMI2/IMI2": { value: 0x89, destination: DefaultDestination.Management_Part_Of_The_AL },
-    CEMI: { value: 0x89, destination: DefaultDestination.Management_Part_Of_The_AL },
+    CEMI: { value: 0x89, destination: DefaultDestination.CEMI_Client },
   },
   "T_Data_Group.req": {
     IMI1: { value: 0x22, destination: DefaultDestination.Transport_Layer },
@@ -223,7 +225,7 @@ export const MESSAGE_CODE_FIELD = {
     IMI1: { value: 0x2A, destination: DefaultDestination.Transport_Layer },
     EMI1: { value: 0x2A, destination: DefaultDestination.Transport_Layer },
     "EMI2/IMI2": { value: 0x4A, destination: DefaultDestination.Transport_Layer_Connection_Oriented },
-    CEMI: { value: 0x4A, destination: DefaultDestination.Transport_Layer_Connection_Oriented },
+    CEMI: { value: 0x4A, destination: DefaultDestination.CEMI_Server },
   },
   "T_Data_Individual.con": {
     IMI1: { value: 0x3F, destination: DefaultDestination.Management_Part_Of_The_AL },
@@ -234,7 +236,7 @@ export const MESSAGE_CODE_FIELD = {
     IMI1: { value: 0x32, destination: DefaultDestination.Management_Part_Of_The_AL },
     EMI1: { value: 0x42, destination: DefaultDestination.Management_Part_Of_The_AL },
     "EMI2/IMI2": { value: 0x94, destination: DefaultDestination.Management_Part_Of_The_AL },
-    CEMI: { value: 0x94, destination: DefaultDestination.Management_Part_Of_The_AL },
+    CEMI: { value: 0x94, destination: DefaultDestination.CEMI_Client },
   },
   "T_Poll_Data.req": {
     "EMI2/IMI2": { value: 0x33, destination: DefaultDestination.Transport_Layer_Group_Oriented },
@@ -359,36 +361,36 @@ export const MESSAGE_CODE_FIELD = {
     "EMI2/IMI2": { value: 0xC1, destination: DefaultDestination.USR },
   },
   "M_PropRead.req": {
-    CEMI: { value: 0xFC },
+    CEMI: { value: 0xFC, destination: DefaultDestination.CEMI_Server },
   },
   "M_PropRead.con": {
-    CEMI: { value: 0xFB },
+    CEMI: { value: 0xFB, destination: DefaultDestination.CEMI_Client },
   },
   "M_PropWrite.req": {
-    CEMI: { value: 0xF6 },
+    CEMI: { value: 0xF6, destination: DefaultDestination.CEMI_Server },
   },
   "M_PropWrite.con": {
-    CEMI: { value: 0xF5 },
+    CEMI: { value: 0xF5, destination: DefaultDestination.CEMI_Client },
   },
   "M_PropInfo.ind": {
-    CEMI: { value: 0xF7 },
+    CEMI: { value: 0xF7, destination: DefaultDestination.CEMI_Client },
   },
   "M_FuncPropCommand.req": {
-    CEMI: { value: 0xF8 },
+    CEMI: { value: 0xF8, destination: DefaultDestination.CEMI_Server },
   },
   "M_FuncPropStateRead.req": {
-    CEMI: { value: 0xF9 },
+    CEMI: { value: 0xF9, destination: DefaultDestination.CEMI_Server },
   },
   "M_FuncPropCommand.con": {
-    CEMI: { value: 0xFA },
+    CEMI: { value: 0xFA, destination: DefaultDestination.CEMI_Client },
   },
   "M_FuncPropStateRead.con": {
-    CEMI: { value: 0xFA },
+    CEMI: { value: 0xFA, destination: DefaultDestination.CEMI_Client },
   },
   "M_Reset.req": {
-    CEMI: { value: 0xF1 },
+    CEMI: { value: 0xF1, destination: DefaultDestination.CEMI_Server },
   },
   "M_Reset.ind": {
-    CEMI: { value: 0xF0 },
+    CEMI: { value: 0xF0, destination: DefaultDestination.CEMI_Client },
   },
 } as const;
