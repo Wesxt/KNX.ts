@@ -1,18 +1,9 @@
-import { AddressType, ExtendedFrameFormat } from "./enum/KNXEnumControlFieldExtended";
+import { AddressType, ExtendedFrameFormat } from "./enum/EnumControlFieldExtended";
 
 /**
  * Clase para manejar el Extended Control Field (CTRLE) en un L_Data_Extended Frame TP1
- * según la asignación que indicas:
- *
- *  bit7: AT (Address Type)
- *  bits6..4: Hop Count (3 bits)
- *  bits3..0: EFF (Extended Frame Format) (4 bits)
- *
- * Esto significa:
- *   7  6 5 4  3 2 1 0
- *  AT  H H H  E E E E
  */
-export class KNXTP1ExtendedControlField {
+export class ExtendedControlField {
   private buffer: Buffer;
 
   /**
@@ -121,7 +112,7 @@ export class KNXTP1ExtendedControlField {
   /**
    * Método estático para crear una instancia desde diferentes tipos de entrada
    */
-  static from(input: Buffer | number | number[]): KNXTP1ExtendedControlField {
-    return new KNXTP1ExtendedControlField(input);
+  static from(input: Buffer | number | number[]): ExtendedControlField {
+    return new ExtendedControlField(input);
   }
 }

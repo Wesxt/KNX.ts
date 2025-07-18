@@ -1,7 +1,7 @@
 import { KNXHelper } from "../utils/class/KNXHelper";
-import { FrameKind, FrameType, Priority } from "./enum/KNXEnumControlField";
-import { AddressType } from "./enum/KNXEnumControlFieldExtended";
-import { KNXTP1ControlField } from "./KNXTP1ControlField";
+import { Priority } from "./enum/EnumControlField";
+import { AddressType } from "./enum/EnumControlFieldExtended";
+import { ControlField } from "./ControlField";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
 
 interface DescribeEstructure {
@@ -368,10 +368,26 @@ class Status implements DescribeEstructure {
   }
 }
 
+type bits4 = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+interface PEI_Switch_req {
+  systemStatus: SystemStatus,
+  LL: bits4;
+  NL: bits4;
+  TLG: bits4;
+  TLC: bits4;
+  TLL: bits4;
+  AL: bits4;
+  MAN: bits4;
+  PEI: bits4;
+  USR: bits4;
+  res: bits4;
+}
+
 interface L_Busmon_ind {
   status: Status;
   timeStamp: number;
-  controlField1: KNXTP1ControlField; // Control field 1
+  controlField1: ControlField; // Control field 1
   /**
    * Data Link Protocol Data Unit (LPDU) - This is the actual data payload of the message.
    * It contains the information that is being monitored on the bus.
@@ -412,11 +428,148 @@ interface L_Data_req {
   NPDU: Buffer;
 }
 
+interface L_Data_con extends Omit<L_Data_req, "control"> {
+  control: {
+    priority: Priority;
+    /**
+     * This Confirm flag shall indicate whether this L_Data.con is a positive
+     * confirmation or a negative confirmation
+     * 
+     * - false - This shall be a positive confirmation.
+     * 
+     * - true - This shall be a negative confirmation.
+     */
+    confirm: boolean;
+  }
+}
+
 interface L_Data_ind extends Omit<L_Data_req, "control"> {
   sourceAddress: string;
   control: {
     priority: Priority;
   }
+}
+
+interface L_Poll_Data_Req {
+  pollingGroup: number;
+  nrOfSlots: bits4;
+}
+
+type L_SystemBroadcast_req = L_Data_con
+
+interface L_SystemBroadcast_con extends Omit<L_Data_con, "control"> {
+  control: {
+    notRepeat: boolean;
+    priority: Priority;
+    /**
+     * This Confirm flag shall indicate whether this L_Data.con is a positive
+     * confirmation or a negative confirmation
+     * 
+     * - false - This shall be a positive confirmation.
+     * 
+     * - true - This shall be a negative confirmation.
+     */
+    confirm: boolean;
+  }
+  destinationAddress: string;
+}
+
+interface L_SystemBroadcast_ind extends L_SystemBroadcast_con {
+  sourceAddress: string;
+}
+
+// Interfaces for constructor values for the Network Layer messages
+interface N_Data_Individual_req_Ctor {
+  control: {
+    frameType: boolean;
+    repeat: boolean;
+    systemBroadcast: boolean;
+    priority: Priority;
+    ackRequest: boolean;
+    confirm: boolean;
+  };
+  destinationAddress: string; // Individual address
+  TPDU: Buffer; // Application Protocol Data Unit
+}
+
+interface N_Data_Individual_con_Ctor {
+  control: {
+    confirm: boolean;
+  };
+  destinationAddress: string; // Individual address
+  TPDU: Buffer;
+}
+
+interface N_Data_Individual_ind_Ctor {
+  control: {
+    priority: number; // 0-3
+  };
+  sourceAddress: string; // Individual address
+  destinationAddress: string; // Individual address
+  hopCount: number; // 4 bits (formerly NPCI)
+  TPDU: Buffer;
+}
+
+interface N_Data_Group_req_Ctor {
+  control: {
+    priority: number; // 0-3
+  };
+  destinationAddress: string; // Group address
+  APDU: Buffer;
+}
+
+interface N_Data_Group_con_Ctor {
+  control: {
+    confirm: boolean;
+  };
+  destinationAddress: string; // Group address
+  APDU: Buffer;
+}
+
+interface N_Data_Group_ind_Ctor {
+  control: {
+    priority: number; // 0-3
+  };
+  sourceAddress: string; // Individual address
+  destinationAddress: string; // Group address
+  hopCount: number; // 4 bits (formerly NPCI)
+  APDU: Buffer;
+}
+
+interface N_Data_Broadcast_req_Ctor {
+  control: {
+    priority: number; // 0-3
+  };
+  APDU: Buffer;
+}
+
+interface N_Data_Broadcast_con_Ctor {
+  control: {
+    confirm: boolean;
+  };
+  APDU: Buffer;
+}
+
+interface N_Data_Broadcast_ind_Ctor {
+  control: {
+    priority: number; // 0-3
+  };
+  sourceAddress: string; // Individual address
+  hopCount: number; // 4 bits (formerly NPCI)
+  APDU: Buffer;
+}
+
+interface N_Poll_Data_Req_Ctor {
+  sourceAddress: string; // Individual address
+  pollingGroup: number; // 16 bits
+  nrOfSlots: bits4; // 4 bits
+}
+
+interface N_Poll_Data_Con_Ctor {
+  sourceAddress: string; // Individual address
+  pollingGroup: number; // 16 bits
+  nrOfSlots: bits4; // 4 bits
+  APDU: Buffer; // Polled data
 }
 
 /**
@@ -436,9 +589,179 @@ function checksum(buffer: Buffer): number {
  * @alias External_Message_Interface
  * @description The External Message Interface (EMI) is a standardized interface for communication between external devices and KNX systems. It allows for the integration of various external systems, such as building management systems, into the KNX network.
  * @version Version 01.04.02 is a KNX Approved Standard.
+ * 
+ * TODO: Hay que hacer que los servicios tengan un metodo "describe" que devuelva un objecto con valores legibles
+ * TODO: Hay que corregir que los Destination Address or Source Address peudadn ser Individual Address o Group Address
+ * TODO: Hay que hacer un metodo estatico que reciba un buffer para instanciar el servicio
+ * TODO: Hay que verificar el byte checksum y construirlo en todos los servicios
  */
 export class EMI {
   constructor() { }
+
+  LayerAccess = {
+    "PEI_Switch.req": class PEISwitchReq implements ServiceMessage {
+      constructor(value: PEI_Switch_req) {
+        this.systemStatus = value.systemStatus;
+        this.LL = value.LL;
+        this.NL = value.NL;
+        this.TLG = value.TLG;
+        this.TLC = value.TLC;
+        this.TLL = value.TLL;
+        this.AL = value.AL;
+        this.MAN = value.MAN;
+        this.PEI = value.PEI;
+        this.USR = value.USR;
+        this.res = value.res;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["PEI_Switch.req"]["EMI2/IMI2"].value;
+      systemStatus: SystemStatus
+      #LL: bits4 = 0;
+      #NL: bits4 = 0;
+      #TLG: bits4 = 0;
+      #TLC: bits4 = 0;
+      #TLL: bits4 = 0;
+      #AL: bits4 = 0;
+      #MAN: bits4 = 0;
+      #PEI: bits4 = 0;
+      #USR: bits4 = 0;
+      #res: bits4 = 0;
+
+      set LL(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'LL' must be 4 bits");
+        this.#LL = value
+      }
+
+      get LL() {
+        return this.#LL
+      }
+
+      set NL(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'NL' must be 4 bits");
+        this.#NL = value
+      }
+
+      get NL() {
+        return this.#NL;
+      }
+
+      set TLG(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'TLG' must be 4 bits");
+        this.#TLG = value
+      }
+
+      get TLG() {
+        return this.#TLG
+      }
+
+      set TLC(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'TLC' must be 4 bits");
+        this.#TLC = value
+      }
+
+      get TLC() {
+        return this.#TLC
+      }
+
+      set TLL(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'TLL' must be 4 bits");
+        this.#TLL = value
+      }
+
+      get TLL() {
+        return this.#TLL
+      }
+
+      set AL(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'AL' must be 4 bits");
+        this.#AL = value
+      }
+
+      get AL() {
+        return this.#AL
+      }
+
+      set MAN(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'MAN' must be 4 bits");
+        this.#MAN = value
+      }
+
+      get MAN() {
+        return this.#MAN
+      }
+
+      set PEI(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'PEI' must be 4 bits");
+        this.#PEI = value
+      }
+
+      get PEI() {
+        return this.#PEI
+      }
+
+      set USR(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'USR' must be 4 bits");
+        this.#USR = value
+      }
+
+      get USR() {
+        return this.#USR
+      }
+
+      set res(value: bits4) {
+        if (value < 0 || value > 7) throw new TypeError("The property 'res' must be 4 bits");
+        this.#res = value
+      }
+
+      get res() {
+        return this.#res
+      }
+
+      toBuffer(): Buffer {
+        let octet3 = 0;
+        octet3 = octet3 | (this.#LL << 4);
+        octet3 = octet3 | this.#NL;
+        let octet4 = 0;
+        octet4 = octet4 | (this.#TLG << 4);
+        octet4 = octet4 | this.#TLC;
+        let octet5 = 0;
+        octet5 = octet5 | (this.#TLL << 4);
+        octet5 = octet5 | this.#AL
+        let octet6 = 0;
+        octet6 = octet6 | (this.#MAN << 4);
+        octet6 = octet6 | this.#PEI;
+        let octet7 = 0;
+        octet7 = octet7 | (this.#USR << 4);
+        octet7 = octet7 | this.#res;
+
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.systemStatus.value, 1);
+        buffer.writeUint8(octet3, 2);
+        buffer.writeUint8(octet4, 3);
+        buffer.writeUint8(octet5, 4);
+        buffer.writeUint8(octet6, 5);
+        buffer.writeUint8(octet7, 6);
+
+        return buffer
+      }
+      describe(): Record<keyof PEI_Switch_req, string> {
+        return {
+          systemStatus: `${this.systemStatus.describe()}`,
+          LL: this.#LL.toString(),
+          NL: this.#NL.toString(),
+          TLG: this.#TLG.toString(),
+          TLC: this.#TLC.toString(),
+          TLL: this.#TLL.toString(),
+          AL: this.#AL.toString(),
+          MAN: this.#MAN.toString(),
+          PEI: this.#PEI.toString(),
+          USR: this.#USR.toString(),
+          res: this.#res.toString()
+        }
+      }
+    }
+  } as const;
 
   /**
    * In Busmonitor mode exactly the L_Busmon.ind message, the L_Plain_Data.req message, and the
@@ -462,7 +785,7 @@ export class EMI {
       messageCode: number;
       status: Status;
       #timeStamp: number = 0;
-      controlField1: KNXTP1ControlField;
+      controlField1: ControlField;
       /**
        * Data Link Protocol Data Unit (LPDU) - This is the actual data payload of the message.
        * It contains the information that is being monitored on the bus.
@@ -483,13 +806,13 @@ export class EMI {
       }
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8); // Adjust size as needed
+        const buffer = Buffer.alloc(5 + this.LPDU.length + 1); // bit 5 + lpdu + Checksum
         buffer.writeUInt8(this.messageCode, 0);
         buffer.writeUInt8(this.status.value, 1);
         buffer.writeInt16BE(this.timeStamp, 2);
         this.controlField1.buffer.copy(buffer, 4); // Assuming controlField1 is a Buffer
         this.LPDU.copy(buffer, 5);
-        buffer.writeUInt8(checksum(buffer.subarray(0, 6)), buffer.length - 1); // Calculate FCS
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -523,11 +846,11 @@ export class EMI {
       data: Buffer; // Data to be sent
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(2 + this.data.length);
+        const buffer = Buffer.alloc(6 + this.data.length);
         buffer.writeUInt8(MESSAGE_CODE_FIELD["L_Plain_Data.req"]["EMI2/IMI2"].value, 0);
-        buffer.writeUInt32BE(this.time, 2);
+        buffer.writeUInt32BE(this.time, 2); // byte 3-6
         this.data.copy(buffer, 6);
-        buffer.writeUInt8(checksum(buffer.subarray(0, 1 + this.data.length)), buffer.length - 1); // Calculate FCS
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -551,21 +874,68 @@ export class EMI {
         if (typeof value !== 'object' || value === null) {
           throw new Error("L_Data.req must be an object with specific properties.");
         }
-        this.controlField1 = new KNXTP1ControlField(0);
+        this.controlField1 = new ControlField(0);
         this.controlField1.priority = value.control.priority
-        this.controlField1.lastTwoBits = value.control.ackRequest ? 0b10 : 0b00;
-        this.messageCode = MESSAGE_CODE_FIELD["L_Data.req"]["EMI2/IMI2"].value;
+        this.controlField1.ackRequest = value.control.ackRequest;
         if (KNXHelper.isValidGroupAddress(value.destinationAddress) || KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error("The Destination Address is valid Group Address or Individual Address");
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.addressType = value.addressType
         this.NPCI = value.NPCI;
         this.npdu = value.NPDU;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.req"]["EMI2/IMI2"].value;
-      controlField1: KNXTP1ControlField; // Control field 1
+      controlField1: ControlField; // Control field 1
+      destinationAddress: string; // Destination address
+      addressType: AddressType;
+      NPCI: number;
+      octNumber: number = 0;
+      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.npdu.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4)
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0F))
+        this.npdu.copy(buffer, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          addressType: `AT: ${AddressType[this.addressType]}`,
+          npci: `NPCI: ${this.NPCI}`,
+          npdu: `NPDU: ${this.npdu.toString('hex')}`,
+          octNumber: this.npdu.length.toString(),
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "L_Data.con": class LDataCon implements ServiceMessage {
+      constructor(value: L_Data_con) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("L_Data.req must be an object with specific properties.");
+        }
+        this.controlField1 = new ControlField(0);
+        this.controlField1.priority = value.control.priority
+        this.controlField1.confirm = value.control.confirm;
+        if (KNXHelper.isValidGroupAddress(value.destinationAddress) || KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          this.destinationAddress = value.destinationAddress;
+        } else {
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
+        }
+        this.addressType = value.addressType
+        this.NPCI = value.NPCI;
+        this.npdu = value.NPDU;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Data.con"]["EMI2/IMI2"].value;
+      controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
       addressType: AddressType;
       NPCI: number;
@@ -600,13 +970,12 @@ export class EMI {
         if (typeof value !== 'object' || value === null) {
           throw new Error("L_Data.ind must be an object with specific properties.");
         }
-        this.controlField1 = new KNXTP1ControlField(0);
+        this.controlField1 = new ControlField(0);
         this.controlField1.priority = value.control.priority
-        this.messageCode = MESSAGE_CODE_FIELD["L_Data.ind"]["EMI2/IMI2"].value;
         if (KNXHelper.isValidGroupAddress(value.destinationAddress) || KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error("The Destination Address is valid Group Address or Individual Address");
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.sourceAddress = value.sourceAddress
         this.addressType = value.addressType
@@ -614,7 +983,7 @@ export class EMI {
         this.npdu = value.NPDU;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.ind"]["EMI2/IMI2"].value;
-      controlField1: KNXTP1ControlField; // Control field 1
+      controlField1: ControlField; // Control field 1
       sourceAddress: string;
       destinationAddress: string; // Destination address
       addressType: AddressType;
@@ -647,5 +1016,925 @@ export class EMI {
         };
       }
     },
+    "L_Poll_Data.req": class LPollDataReq implements ServiceMessage {
+      constructor(value: L_Poll_Data_Req) {
+        this.#pollingGroup = value.pollingGroup;
+        this.#nrOfSlots = value.nrOfSlots;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Poll_Data.req"]["EMI2/IMI2"].value;
+      control = 0xF0;
+      #pollingGroup = 0;
+      #nrOfSlots: bits4 = 0;
+
+
+      set pollingGroup(value: number) {
+        if (value < 0 || value > 65.535) throw new Error("The value must be 16 bits");
+        this.#pollingGroup = value;
+      }
+
+      get pollingGroup() {
+        return this.#pollingGroup;
+      }
+
+      set nrOfSlots(value: bits4) {
+        if (value < 0 || value > 7) throw new Error("The value must be 4 bits");
+        this.#nrOfSlots = value;
+      }
+
+      get nrOfSlots() {
+        return this.#nrOfSlots;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        let octet7 = 0;
+        octet7 = octet7 | (this.#nrOfSlots & 0x0F);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.control, 1);
+        buffer.writeUInt8(0, 2);
+        buffer.writeUInt8(0, 3);
+        buffer.writeUInt8(this.#pollingGroup & 0xFF00, 4);
+        buffer.writeUInt8(this.#pollingGroup & 0x00FF, 5);
+        buffer.writeUInt8(octet7, 6);
+        return buffer;
+      }
+
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Codigo de mensaje: ${this.messageCode}`,
+          control: `Control: ${this.control}`,
+          pollingGroup: `${this.#pollingGroup}`,
+          nrOfGroup: `${this.#nrOfSlots}`
+        }
+      }
+    },
+    "L_Poll_Data.con": class LPollDataCon implements ServiceMessage {
+      constructor(value: L_Poll_Data_Req) {
+        this.#pollingGroup = value.pollingGroup;
+        this.#nrOfSlots = value.nrOfSlots;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Poll_Data.req"]["EMI2/IMI2"].value;
+      control = 0xF0;
+      #pollingGroup = 0;
+      #nrOfSlots: bits4 = 0;
+
+
+      set pollingGroup(value: number) {
+        if (value < 0 || value > 65.535) throw new Error("The value must be 16 bits");
+        this.#pollingGroup = value;
+      }
+
+      get pollingGroup() {
+        return this.#pollingGroup;
+      }
+
+      set nrOfSlots(value: bits4) {
+        if (value < 0 || value > 7) throw new Error("The value must be 4 bits");
+        this.#nrOfSlots = value;
+      }
+
+      get nrOfSlots() {
+        return this.#nrOfSlots;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        let octet7 = 0;
+        octet7 = octet7 | (this.#nrOfSlots & 0x0F);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.control, 1);
+        buffer.writeUInt8(0, 2);
+        buffer.writeUInt8(0, 3);
+        buffer.writeUInt8(this.#pollingGroup & 0xFF00, 4);
+        buffer.writeUInt8(this.#pollingGroup & 0x00FF, 5);
+        buffer.writeUInt8(octet7, 6);
+        return buffer;
+      }
+
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Codigo de mensaje: ${this.messageCode}`,
+          control: `Control: ${this.control}`,
+          pollingGroup: `${this.#pollingGroup}`,
+          nrOfGroup: `${this.#nrOfSlots}`
+        }
+      }
+    },
+    "L_SystemBroadcast.req": class LSystemBroadcastReq implements ServiceMessage {
+      constructor(value: L_SystemBroadcast_req) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("L_Data.ind must be an object with specific properties.");
+        }
+        this.controlField1 = new ControlField(0b10000000);
+        this.controlField1.priority = value.control.priority
+        this.controlField1.confirm = value.control.confirm
+        this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
+        if (KNXHelper.isValidGroupAddress(value.destinationAddress) || KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          this.destinationAddress = value.destinationAddress;
+        } else {
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
+        }
+        this.addressType = value.addressType
+        this.NPCI = value.NPCI;
+        this.npdu = value.NPDU;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
+      controlField1: ControlField; // Control field 1
+      destinationAddress: string; // Destination address
+      addressType: AddressType;
+      NPCI: number;
+      octNumber: number = 0;
+      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.npdu.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4)
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0F))
+        this.npdu.copy(buffer, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          addressType: `AT: ${AddressType[this.addressType]}`,
+          npci: `NPCI: ${this.NPCI}`,
+          npdu: `NPDU: ${this.npdu.toString('hex')}`,
+          octNumber: this.npdu.length.toString(),
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "L_SystemBroadcast.con": class LSystemBroadcastCon implements ServiceMessage {
+      constructor(value: L_SystemBroadcast_con) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("L_Data.ind must be an object with specific properties.");
+        }
+        this.controlField1 = new ControlField(0);
+        this.controlField1.repeat = value.control.notRepeat
+        this.controlField1.priority = value.control.priority
+        this.controlField1.confirm = value.control.confirm
+        this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+        if (KNXHelper.isValidGroupAddress(value.destinationAddress) || KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          this.destinationAddress = value.destinationAddress;
+        } else {
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
+        }
+        this.addressType = value.addressType
+        this.NPCI = value.NPCI;
+        this.npdu = value.NPDU;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+      controlField1: ControlField; // Control field 1
+      destinationAddress: string; // Destination address
+      addressType: AddressType;
+      NPCI: number;
+      octNumber: number = 0;
+      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.npdu.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4)
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0F))
+        this.npdu.copy(buffer, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          addressType: `AT: ${AddressType[this.addressType]}`,
+          npci: `NPCI: ${this.NPCI}`,
+          npdu: `NPDU: ${this.npdu.toString('hex')}`,
+          octNumber: this.npdu.length.toString(),
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "L_SystemBroadcast.ind": class LSystemBroadcastInd implements ServiceMessage {
+      constructor(value: L_SystemBroadcast_ind) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("L_Data.ind must be an object with specific properties.");
+        }
+        this.controlField1 = new ControlField(0);
+        this.controlField1.priority = value.control.priority
+        if (KNXHelper.isValidGroupAddress(value.destinationAddress) || KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          this.destinationAddress = value.destinationAddress;
+        } else {
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
+        }
+        if (KNXHelper.isValidGroupAddress(value.sourceAddress) || KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
+          this.sourceAddress = value.sourceAddress;
+        } else {
+          throw new Error("The Source Address is invalid Group Address or Individual Address");
+        }
+        this.addressType = value.addressType;
+        this.NPCI = value.NPCI;
+        this.npdu = value.NPDU;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+      controlField1: ControlField; // Control field 1
+      destinationAddress: string; // Destination address
+      sourceAddress: string; // Source address
+      addressType: AddressType;
+      NPCI: number;
+      octNumber: number = 0;
+      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.npdu.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 2)
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4)
+        buffer[6] = 0x00 | (this.NPCI << 4) | (this.npdu.length & 0x0F)
+        this.npdu.copy(buffer, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          addressType: `AT: ${AddressType[this.addressType]}`,
+          npci: `NPCI: ${this.NPCI}`,
+          npdu: `NPDU: ${this.npdu.toString('hex')}`,
+          octNumber: this.npdu.length.toString(),
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    }
   } as const;
+  /**
+   * In Network Layer mode exactly the N_Data_Individual.req, N_Data_Individual.con,
+   * N_Data_Individual.ind, N_Data_Group.req, N_Data_Group.con, N_Data_Group.ind,
+   * N_Data_Broadcast.req, N_Data_Broadcast.con, N_Data_Broadcast.ind, N_Poll_Data.req and
+   * N_Poll_Data.con messages are available. All NL services belong to EMI/IMI2 only.
+   */
+  NetworkLayerEMI = {
+    "N_Data_Individual.req": class NDataIndividualReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      destinationAddress: string; // Individual address
+      TPDU: Buffer; // Transport Layer Protocol Data Unit
+
+      constructor(value: N_Data_Individual_req_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Individual.req must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.frameType = value.control.frameType;
+        this.controlField.repeat = value.control.repeat;
+        this.controlField.systemBroadcast = value.control.systemBroadcast;
+        this.controlField.priority = value.control.priority;
+        this.controlField.ackRequest = value.control.ackRequest;
+        this.controlField.confirm = value.control.confirm;
+
+        if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          throw new Error("The Destination Address must be a valid Individual Address");
+        }
+        this.destinationAddress = value.destinationAddress;
+        this.TPDU = value.TPDU;
+      }
+
+      /**
+       * Converts the N_Data_Individual.req message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Dest Addr (2) + LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.TPDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt8(0x00, 2); // Octet 3: unused
+        buffer.writeUInt8(0x00, 3); // Octet 6: unused (LG high in diagram, but treated as unused)
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
+        buffer.writeUInt8(this.TPDU.length, 6); // Octet 7: LG (octet count)
+        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Individual.req message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          APDU: `APDU: ${this.TPDU.toString('hex')}`,
+          APDU_Length: `${this.TPDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Individual.con": class NDataIndividualCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.con"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      destinationAddress: string; // Destination address
+      TPDU: Buffer;
+
+      constructor(value: N_Data_Individual_con_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Individual.con must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.confirm = value.control.confirm; // Set confirm bit
+        // The spec (3.3.5.3) for N_Data_Individual.con control field is "unused c".
+        // Therefore, priority should not be set here.
+
+        if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          throw new Error("The Destination Address must be a valid Individual Address");
+        }
+        this.destinationAddress = value.destinationAddress;
+        this.TPDU = value.TPDU;
+      }
+
+      /**
+       * Converts the N_Data_Individual.con message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (1) + Dest Addr (2) + Unused (1) + LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.TPDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt8(0x00, 2); // Octet 3: unused
+        buffer.writeUInt8(0x00, 3); // Octet 4: unused (LG high in diagram, but treated as unused)
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
+        buffer.writeUInt8(this.TPDU.length & 0x0F, 6); // Octet 7: LG (octet count)
+        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Individual.con message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          TPDU: `TPDU: ${this.TPDU.toString('hex')}`,
+          TPDU_Length: `${this.TPDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Individual.ind": class NDataIndividualInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.ind"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      sourceAddress: string; // Individual address
+      destinationAddress: string; // Individual address
+      hopCount: number; // 4 bits (formerly NPCI)
+      TPDU: Buffer;
+
+      constructor(value: N_Data_Individual_ind_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Individual.ind must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.priority = value.control.priority;
+
+        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
+          throw new Error("The Source Address must be a valid Individual Address");
+        }
+        this.sourceAddress = value.sourceAddress;
+
+        if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
+          throw new Error("The Destination Address must be a valid Individual Address");
+        }
+        this.destinationAddress = value.destinationAddress;
+        this.hopCount = value.hopCount;
+        this.TPDU = value.TPDU;
+      }
+
+      /**
+       * Converts the N_Data_Individual.ind message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Source Addr (2) + Dest Addr (2) + hopCount/LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.TPDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
+        // Octet 7: hop_count_type (bits 6-4) | octet count (LG) (bits 3-0)
+        buffer.writeUInt8(((this.hopCount & 0x0F) << 4) | (this.TPDU.length & 0x0F), 6);
+        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Individual.ind message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          hopCount: `Conteo de saltos: ${this.hopCount}`,
+          APDU: `APDU: ${this.TPDU.toString('hex')}`,
+          APDU_Length: `${this.TPDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Group.req": class NDataGroupReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Group.req"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      destinationAddress: string; // Group address
+      APDU: Buffer;
+
+      constructor(value: N_Data_Group_req_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Group.req must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.priority = value.control.priority;
+        // The spec (3.3.5.5) for N_Data_Group.req control field is "unused priority unused".
+        // Therefore, ackRequest should not be set here.
+
+        if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
+          throw new Error("The Destination Address must be a valid Group Address");
+        }
+        this.destinationAddress = value.destinationAddress;
+        this.APDU = value.APDU;
+      }
+
+      /**
+       * Converts the N_Data_Group.req message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Dest Addr (2) + hopCount/LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
+        // Octet 7: hop_count_type (bits 7-4, default 0) | octet count (LG) (bits 3-0)
+        buffer.writeUInt8(this.APDU.length & 0x0F, 6); // Default hop_count_type is 0
+        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Group.req message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Group.con": class NDataGroupCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Group.con"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      destinationAddress: string; // Group address
+      APDU: Buffer;
+
+      constructor(value: N_Data_Group_con_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Group.con must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.confirm = value.control.confirm;
+        // The spec (3.3.5.6) for N_Data_Group.con control field is "unused c".
+        // Therefore, priority should not be set here.
+
+        if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
+          throw new Error("The Destination Address must be a valid Group Address");
+        }
+        this.destinationAddress = value.destinationAddress;
+        this.APDU = value.APDU;
+      }
+
+      /**
+       * Converts the N_Data_Group.con message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Dest Addr (2) + LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
+        buffer.writeUInt8(this.APDU.length & 0x0F, 6); // Octet 7: LG (octet count), upper 4 bits unused
+        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Group.con message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Group.ind": class NDataGroupInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Group.ind"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      sourceAddress: string; // Individual address
+      destinationAddress: string; // Group address
+      hopCount: number; // 4 bits (formerly NPCI)
+      APDU: Buffer;
+
+      constructor(value: N_Data_Group_ind_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Group.ind must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.priority = value.control.priority;
+
+        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
+          throw new Error("The Source Address must be a valid Individual Address");
+        }
+        this.sourceAddress = value.sourceAddress;
+
+        if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
+          throw new Error("The Destination Address must be a valid Group Address");
+        }
+        this.destinationAddress = value.destinationAddress;
+        this.hopCount = value.hopCount;
+        this.APDU = value.APDU;
+      }
+
+      /**
+       * Converts the N_Data_Group.ind message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Dest Addr (2) + hopCount/LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address in diagram, but text implies unused for Group.ind)
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
+        // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
+        buffer.writeUInt8(((this.hopCount & 0x0F) << 4) | (this.APDU.length & 0x0F), 6);
+        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Group.ind message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
+          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          hopCount: `Conteo de saltos: ${this.hopCount}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Broadcast.req": class NDataBroadcastReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      APDU: Buffer;
+
+      constructor(value: N_Data_Broadcast_req_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Broadcast.req must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.priority = value.control.priority;
+        // The spec (3.3.5.8) for N_Data_Broadcast.req control field is "unused priority unused".
+        // Therefore, ackRequest should not be set here.
+
+        this.APDU = value.APDU;
+      }
+
+      /**
+       * Converts the N_Data_Broadcast.req message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Unused (2) + hopCount/LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
+        buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
+        // Octet 7: hop_count_type (bits 7-4, default 0) | octet count (LG) (bits 3-0)
+        buffer.writeUInt8(this.APDU.length & 0x0F, 6); // Default hop_count_type is 0
+        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Broadcast.req message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Broadcast.con": class NDataBroadcastCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      APDU: Buffer;
+
+      constructor(value: N_Data_Broadcast_con_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Broadcast.con must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.confirm = value.control.confirm;
+        // The spec (3.3.5.9) for N_Data_Broadcast.con control field is "unused unused unused c".
+        // Therefore, priority should not be set here.
+
+        this.APDU = value.APDU;
+      }
+
+      /**
+       * Converts the N_Data_Broadcast.con message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Unused (2) + LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
+        buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
+        buffer.writeUInt8(this.APDU.length & 0x0F, 6); // Octet 7: LG (octet count), upper 4 bits unused
+        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Broadcast.con message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Data_Broadcast.ind": class NDataBroadcastInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.ind"]["EMI2/IMI2"].value;
+      controlField: ControlField;
+      sourceAddress: string; // Individual address
+      hopCount: number; // 4 bits (formerly NPCI)
+      APDU: Buffer;
+
+      constructor(value: N_Data_Broadcast_ind_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Data_Broadcast.ind must be an object with specific properties.");
+        }
+        this.controlField = new ControlField(0);
+        this.controlField.priority = value.control.priority;
+
+        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
+          throw new Error("The Source Address must be a valid Individual Address");
+        }
+        this.sourceAddress = value.sourceAddress;
+        this.hopCount = value.hopCount;
+        this.APDU = value.APDU;
+      }
+
+      /**
+       * Converts the N_Data_Broadcast.ind message to a Buffer.
+       * Format: Message Code (1) + Control Field (1) + Source Addr (2) + Unused (2) + hopCount/LG (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
+        buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
+        // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
+        buffer.writeUInt8(((this.hopCount & 0x0F) << 4) | (this.APDU.length & 0x0F), 6);
+        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Data_Broadcast.ind message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Código de mensaje: ${this.messageCode}`,
+          controlField: `Campo de control: ${this.controlField.describe()}`,
+          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
+          hopCount: `Conteo de saltos: ${this.hopCount}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        };
+      }
+    },
+    "N_Poll_Data.req": class NPollDataReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Poll_Data.req"]["EMI2/IMI2"].value;
+      control = 0xF0; // Fixed control byte for N_Poll_Data.req (similar to L_Poll_Data)
+      sourceAddress: string; // Individual address
+      #pollingGroup = 0;
+      #nrOfSlots: bits4 = 0;
+
+      constructor(value: N_Poll_Data_Req_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Poll_Data.req must be an object with specific properties.");
+        }
+        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
+          throw new Error("The Source Address must be a valid Individual Address");
+        }
+        this.sourceAddress = value.sourceAddress;
+        this.pollingGroup = value.pollingGroup;
+        this.nrOfSlots = value.nrOfSlots;
+      }
+
+      set pollingGroup(value: number) {
+        if (value < 0 || value > 65535) throw new Error("The pollingGroup value must be 16 bits (0-65535)");
+        this.#pollingGroup = value;
+      }
+
+      get pollingGroup() {
+        return this.#pollingGroup;
+      }
+
+      set nrOfSlots(value: bits4) {
+        if (value < 0 || value > 7) throw new Error("The nrOfSlots value must be 4 bits (0-7)");
+        this.#nrOfSlots = value;
+      }
+
+      get nrOfSlots() {
+        return this.#nrOfSlots;
+      }
+
+      /**
+       * Converts the N_Poll_Data.req message to a Buffer.
+       * Format: Message Code (1) + Control (1) + Source Addr (2) + Polling Group (2) + NrOfSlots/Reserved (1) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + 1 = 8
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8);
+        let octet7 = 0;
+        octet7 = octet7 | (this.#nrOfSlots & 0x0F); // NrOfSlots in lower 4 bits
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        buffer.writeUInt8(this.control, 1); // Octet 2: Control
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
+        buffer.writeUInt16BE(this.#pollingGroup, 4); // Octets 5-6: Polling Group
+        buffer.writeUInt8(octet7, 6); // Octet 7: NrOfSlots (bits 3-0)
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Poll_Data.req message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Codigo de mensaje: ${this.messageCode}`,
+          control: `Control: ${this.control.toString(16).padStart(2, '0')}`,
+          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
+          pollingGroup: `Grupo de sondeo: ${this.#pollingGroup}`,
+          nrOfSlots: `Número de ranuras: ${this.#nrOfSlots}`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        }
+      }
+    },
+    "N_Poll_Data.con": class NPollDataCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["N_Poll_Data.con"]["EMI2/IMI2"].value;
+      control = 0xF0; // Fixed control byte for N_Poll_Data.con
+      sourceAddress: string; // Individual address
+      #pollingGroup = 0;
+      #nrOfSlots: bits4 = 0;
+      APDU: Buffer; // Polled data
+
+      constructor(value: N_Poll_Data_Con_Ctor) {
+        if (typeof value !== 'object' || value === null) {
+          throw new Error("N_Poll_Data.con must be an object with specific properties.");
+        }
+        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
+          throw new Error("The Source Address must be a valid Individual Address");
+        }
+        this.sourceAddress = value.sourceAddress;
+        this.pollingGroup = value.pollingGroup;
+        this.nrOfSlots = value.nrOfSlots;
+        this.APDU = value.APDU;
+      }
+
+      set pollingGroup(value: number) {
+        if (value < 0 || value > 65535) throw new Error("The pollingGroup value must be 16 bits (0-65535)");
+        this.#pollingGroup = value;
+      }
+
+      get pollingGroup() {
+        return this.#pollingGroup;
+      }
+
+      set nrOfSlots(value: bits4) {
+        if (value < 0 || value > 7) throw new Error("The nrOfSlots value must be 4 bits (0-7)");
+        this.#nrOfSlots = value;
+      }
+
+      get nrOfSlots() {
+        return this.#nrOfSlots;
+      }
+
+      /**
+       * Converts the N_Poll_Data.con message to a Buffer.
+       * Format: Message Code (1) + Control (1) + Source Addr (2) + Polling Group (2) + NrOfSlots/Reserved (1) + APDU (variable) + FCS (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * @returns The Buffer representation of the message.
+       */
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        let octet7 = 0;
+        octet7 = octet7 | (this.#nrOfSlots & 0x0F); // NrOfSlots in lower 4 bits
+        buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
+        buffer.writeUInt8(this.control, 1); // Octet 2: Control
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
+        buffer.writeUInt16BE(this.#pollingGroup, 4); // Octets 5-6: Polling Group
+        buffer.writeUInt8(octet7, 6); // Octet 7: NrOfSlots (bits 3-0)
+        this.APDU.copy(buffer, 7); // Octet 8...n: Poll Data
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer;
+      }
+
+      /**
+       * Provides a human-readable description of the N_Poll_Data.con message.
+       * @returns A record of message properties and their string values.
+       */
+      describe(): Record<string, string> {
+        return {
+          messageCode: `Codigo de mensaje: ${this.messageCode}`,
+          control: `Control: ${this.control.toString(16).padStart(2, '0')}`,
+          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
+          pollingGroup: `Grupo de sondeo: ${this.#pollingGroup}`,
+          nrOfSlots: `Número de ranuras: ${this.#nrOfSlots}`,
+          APDU: `APDU: ${this.APDU.toString('hex')}`,
+          APDU_Length: `${this.APDU.length} octets`,
+          rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
+        }
+      }
+    }
+  }
 }

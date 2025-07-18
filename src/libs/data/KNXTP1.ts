@@ -2,14 +2,15 @@ import { SerialPort } from "serialport";
 import { L_Data_Extended, L_Data_Standard } from "../@types/interfaces/KNXTP1";
 import { InvalidKnxDataException } from "../errors/InvalidKnxDataExeption";
 import { KNXHelper } from "../utils/class/KNXHelper";
-import { KNXTP1ControlField } from "./KNXTP1ControlField";
-import { KNXTP1ExtendedControlField } from "./KNXTP1ControlFieldExtended";
-import { KNXTPCI, TPCIType } from "./KNXTPCI";
+import { ControlField } from "./ControlField";
+import { ExtendedControlField } from "./ControlFieldExtended";
+import { TPCI, TPCIType } from "./TPCI";
 import { BIT_1_TIME_IN_9600_BAUDIOS } from "./constants/1bitTimeIn9600Baudios";
-import { ShortAckCode } from "./enum/KNXEnumShortACKFrame";
-import { AddressType, ExtendedFrameFormat } from "./enum/KNXEnumControlFieldExtended";
-import { APCIEnum, KNXAPCI } from "./KNXAPCI";
-import { FrameKind, FrameType, Priority } from "./enum/KNXEnumControlField";
+import { ShortAckCode } from "./enum/EnumShortACKFrame";
+import { AddressType, ExtendedFrameFormat } from "./enum/EnumControlFieldExtended";
+import { APCI } from "./APCI";
+import { FrameKind, FrameType, Priority } from "./enum/EnumControlField";
+import { APCIEnum } from "./enum/APCIEnum";
 
 /**
  * Clase para construir frames KNX TP1 según la especificación.
@@ -18,6 +19,8 @@ import { FrameKind, FrameType, Priority } from "./enum/KNXEnumControlField";
  * 2. L_Poll_Data Frame (para solicitudes de Poll Data)
  * 3. Short Acknowledgement Frame
  * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "KNX Standard Communication Media Twisted Pair 1"
+ * 
+ * @deprecated Ya no se usa debido a que la Clase EMI tiene una mejor implementación para construir estos mensajes
  */
 export class KNXTP1 {
   debug = false;
@@ -107,7 +110,7 @@ export class KNXTP1 {
     let offset = 0;
 
     // Construir Control Field para formato estándar (FT flag = 1)
-    const controlField = new KNXTP1ControlField();
+    const controlField = new ControlField();
     controlField.frameKind = controlFieldData.frameKind
     controlField.frameType = controlFieldData.frameType
     controlField.priority = controlFieldData.priority;
@@ -132,8 +135,8 @@ export class KNXTP1 {
     // // Octeto fijo (0x00), reservado en este formato
     // telegram[offset++] = 0x00;
 
-    const apci = new KNXAPCI(APCIType)
-    const tpci = new KNXTPCI(TPCIType)
+    const apci = new APCI(APCIType)
+    const tpci = new TPCI(TPCIType)
   // Construir TPCI (0..63) y APCI (0..15)
   const tpciVal = tpci.getValue(); // Devuelve un número 0..63
   const apciVal = apci.value; // Devuelve un número 0..15
@@ -201,7 +204,7 @@ export class KNXTP1 {
     let offset = 0;
 
     // Construir Control Field para formato extendido (FT flag = 0)
-    const controlField = new KNXTP1ControlField();
+    const controlField = new ControlField();
     controlField.frameKind = controlFieldData.frameKind
     controlField.frameType = controlFieldData.frameType
     controlField.priority = controlFieldData.priority
@@ -210,7 +213,7 @@ export class KNXTP1 {
 
     // Extended Control Field (CTRLE):
     // Para simplificar, fijamos el bit AT según destAddressType; sin hop count y con EFF = 0.
-    const ctrle = new KNXTP1ExtendedControlField();
+    const ctrle = new ExtendedControlField();
     ctrle.addressType = controlFieldExtendedData.addressType
     ctrle.hopCount = controlFieldExtendedData.hopCount
     ctrle.eff = controlFieldExtendedData.extendedFrameFormat
@@ -227,8 +230,8 @@ export class KNXTP1 {
     // Campo de longitud extendida: se usa un octeto completo con data.length
     telegram[offset++] = KNXHelper.GetDataLength(data);
 
-    const apci = new KNXAPCI(APCIType)
-    const tpci = new KNXTPCI(TPCIType)
+    const apci = new APCI(APCIType)
+    const tpci = new TPCI(TPCIType)
   // Construir TPCI (0..63) y APCI (0..15)
   const tpciVal = tpci.getValue(); // Devuelve un número 0..63
   const apciVal = apci.value; // Devuelve un número 0..15

@@ -1,7 +1,3 @@
-/// <summary>
-///    Represent data send over knx bus and provide methods to interpret them as different dpt values
-/// </summary>
-/// <param name="data">Byte array value or integer</param>
 /*
  Datatypes
 
@@ -34,8 +30,9 @@
 
 /**
  * Represents KNX DPTs (Data Point Types), decodes them according to their specification
+ * TODO: Hay que hacerla no dependiente del valor APDU tomado en el constructor, tiene más sentido hacer que sus metodos reciban el valor para no instanciar la clase cada vez que hay un valor diferente
  */
-export class KnxData {
+export class KnxDataDecode {
   apdu;
   buffer: ArrayBuffer | undefined;
   /**
@@ -54,7 +51,7 @@ export class KnxData {
       this.apdu = apdu;
     }
   }
-  decodeThis(dpt: typeof KnxData.dptEnum[number]) {
+  decodeThis(dpt: typeof KnxDataDecode.dptEnum[number]) {
     switch (dpt) {
       case 1:
         return this.asDpt1()

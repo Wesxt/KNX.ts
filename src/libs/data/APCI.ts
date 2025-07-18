@@ -9,7 +9,7 @@ import { APCIEnum } from "./enum/APCIEnum";
  * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Application Layer of the KNX System, Version 02.01.01"
  * 
  */
-export class KNXAPCI {
+export class APCI {
   private _value: number;
 
   constructor(apci: APCIEnum = APCIEnum.A_GroupValue_Write_Protocol_Data_Unit) {

@@ -5,6 +5,9 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "lib": ["ES2024"],
     "incremental": true

@@ -1,10 +1,10 @@
 import { KNXHelper } from '../utils/class/KNXHelper';
 import { KNXConnection } from './KNXConnection';
 import KnxDatagram from '../data/KNXDatagram';
-import { KnxData } from '../data/KNXData';
+import { KnxDataDecode } from '../data/KNXDataDecode';
 
 interface ExtendDatagram extends KnxDatagram {
-  dtpData?: KnxData;
+  dtpData?: KnxDataDecode;
 }
 
 export class KNXReceiver {
@@ -106,7 +106,7 @@ export class KNXReceiver {
       }
 
       datagram.data = KNXHelper.GetData(datagram.data_length, datagram.apdu);
-      datagram.dtpData = new KnxData(datagram.apdu);
+      datagram.dtpData = new KnxDataDecode(datagram.apdu);
 
       if (this.connection.debug) {
         try {

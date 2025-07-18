@@ -2,10 +2,10 @@
 
 import { ControlFieldData, ControlFieldExtendedData } from "../@types/interfaces/KNXTP1";
 import { KNXHelper } from "../utils/class/KNXHelper";
-import { KNXAPCI } from "./KNXAPCI";
-import { KNXTP1ControlField } from "./KNXTP1ControlField";
-import { KNXTP1ExtendedControlField } from "./KNXTP1ControlFieldExtended";
-import { KNXTPCI, TPCIType } from "./KNXTPCI";
+import { APCI } from "./APCI";
+import { ControlField } from "./ControlField";
+import { ExtendedControlField } from "./ControlFieldExtended";
+import { TPCI, TPCIType } from "./TPCI";
 
 /**
  * Enumeración para los códigos de mensaje cEMI (cEMI Message Codes).
@@ -38,8 +38,8 @@ export interface ICEMIMessage {
   sourceAddress: number;
   destinationAddress: number;
   dataLength: number;
-  TCPI: KNXTPCI;
-  APCI?: KNXAPCI; // Opcional, para incluir el Application Protocol Control Information (APCI)
+  TCPI: TPCI;
+  APCI?: APCI; // Opcional, para incluir el Application Protocol Control Information (APCI)
   destinationAddressType?: CEMIDestinationAddressType; // Opcional, para indicar si es Individual o Grupo
   npdu: Buffer;
 }
@@ -57,8 +57,8 @@ export class CEMIMessage implements ICEMIMessage {
   public destinationAddress: number;
   public dataLength: number;
   public npdu: Buffer;
-  TCPI: KNXTPCI;
-  APCI?: KNXAPCI | undefined;
+  TCPI: TPCI;
+  APCI?: APCI | undefined;
   destinationAddressType?: CEMIDestinationAddressType | undefined;
 
   /**
@@ -72,10 +72,10 @@ export class CEMIMessage implements ICEMIMessage {
     messageCode: CEMIMessageCode,
     sourceAddress: number,
     destinationAddress: number,
-    controlField1: KNXTP1ControlField = new KNXTP1ControlField(), // Frame Type: 1, Repeat: 0, System Broadcast: 1, Priority: 3 (Low), ACK: 1, Confirm: 1, DestAddrType: 1 (Group)
-    controlField2: KNXTP1ExtendedControlField = new KNXTP1ExtendedControlField(), // Extended Frame Format: 0, Hop Count: 6, Routing Counter: 1
-    TPCI: KNXTPCI = new KNXTPCI(), // TPCI (Transport Protocol Control Information) - Opcional, se puede ajustar según el tipo de mensaje
-    APCI: KNXAPCI = new KNXAPCI(), // APCI (Application Protocol Control Information) - Opcional, se puede ajustar según el tipo de mensaje
+    controlField1: ControlField = new ControlField(), // Frame Type: 1, Repeat: 0, System Broadcast: 1, Priority: 3 (Low), ACK: 1, Confirm: 1, DestAddrType: 1 (Group)
+    controlField2: ExtendedControlField = new ExtendedControlField(), // Extended Frame Format: 0, Hop Count: 6, Routing Counter: 1
+    TPCI: TPCI = new TPCI(), // TPCI (Transport Protocol Control Information) - Opcional, se puede ajustar según el tipo de mensaje
+    APCI: APCI = new APCI(), // APCI (Application Protocol Control Information) - Opcional, se puede ajustar según el tipo de mensaje
   ) {
     this.messageCode = messageCode;
     this.sourceAddress = sourceAddress;

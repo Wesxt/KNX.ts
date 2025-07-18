@@ -2,7 +2,7 @@ import EventEmitter from 'events';
 import { KNXSenderTunneling } from './KNXSenderTunneling';
 import { KnxDataEncoder } from '../data/KNXDataEncode';
 import { KNXHelper } from '../utils/class/KNXHelper';
-import { KnxData } from '../data/KNXData';
+import { KnxDataDecode } from '../data/KNXDataDecode';
 import { AllDpts } from '../@types/types/AllDpts';
 import { MessageCode } from '../@types/types/CEMI';
 
@@ -199,8 +199,8 @@ export class KNXConnection extends EventEmitter {
    * @param type Datapoint type, e.g.: 9.001
    * @param data Data to convert
    */
-  FromDataPoint(type: typeof KnxData.dptEnum[number], data: Buffer) {
-    const knxDataDecode = new KnxData(data, true)
+  FromDataPoint(type: typeof KnxDataDecode.dptEnum[number], data: Buffer) {
+    const knxDataDecode = new KnxDataDecode(data, true)
     return knxDataDecode.decodeThis(type);
   }
   /**

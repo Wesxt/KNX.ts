@@ -47,7 +47,7 @@ export enum TPCIType {
  * 
  * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Transport Layer of the KNX System, Version 01.02.03"
  */
-export class KNXTPCI {
+export class TPCI {
   private _buffer: Buffer;
 
   constructor(initialValue: TPCIType = 0) {
