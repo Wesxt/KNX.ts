@@ -547,7 +547,7 @@ interface N_Data_Broadcast_con_Ctor {
   control: {
     confirm: boolean;
   };
-  APDU: Buffer;
+  TPDU: Buffer;
 }
 
 interface N_Data_Broadcast_ind_Ctor {
@@ -559,17 +559,15 @@ interface N_Data_Broadcast_ind_Ctor {
   APDU: Buffer;
 }
 
-interface N_Poll_Data_Req_Ctor {
-  sourceAddress: string; // Individual address
-  pollingGroup: number; // 16 bits
+interface N_Poll_Data_Req {
+  pollingGroup: string; // 16 bits
   nrOfSlots: bits4; // 4 bits
 }
 
-interface N_Poll_Data_Con_Ctor {
-  sourceAddress: string; // Individual address
-  pollingGroup: number; // 16 bits
+interface N_Poll_Data_Con {
+  pollingGroup: string; // 16 bits
   nrOfSlots: bits4; // 4 bits
-  APDU: Buffer; // Polled data
+  pollData: Buffer; // Polled data
 }
 
 /**
@@ -1636,7 +1634,7 @@ export class EMI {
     "N_Data_Broadcast.req": class NDataBroadcastReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
       controlField: ControlField;
-      APDU: Buffer;
+      TPDU: Buffer;
 
       constructor(value: N_Data_Broadcast_req_Ctor) {
         if (typeof value !== 'object' || value === null) {
@@ -1647,7 +1645,7 @@ export class EMI {
         // The spec (3.3.5.8) for N_Data_Broadcast.req control field is "unused priority unused".
         // Therefore, ackRequest should not be set here.
 
-        this.APDU = value.APDU;
+        this.TPDU = value.APDU;
       }
 
       /**
@@ -1657,14 +1655,14 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(8 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
         // Octet 7: hop_count_type (bits 7-4, default 0) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(this.APDU.length & 0x0F, 6); // Default hop_count_type is 0
-        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(this.TPDU.length & 0x0F, 6); // Default hop_count_type is 0
+        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
@@ -1677,8 +1675,8 @@ export class EMI {
         return {
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
-          APDU: `APDU: ${this.APDU.toString('hex')}`,
-          APDU_Length: `${this.APDU.length} octets`,
+          TPDU: `TPDU: ${this.TPDU.toString('hex')}`,
+          TPDU_Length: `${this.TPDU.length} octets`,
           rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
         };
       }
@@ -1686,7 +1684,7 @@ export class EMI {
     "N_Data_Broadcast.con": class NDataBroadcastCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
       controlField: ControlField;
-      APDU: Buffer;
+      TPDU: Buffer;
 
       constructor(value: N_Data_Broadcast_con_Ctor) {
         if (typeof value !== 'object' || value === null) {
@@ -1697,24 +1695,23 @@ export class EMI {
         // The spec (3.3.5.9) for N_Data_Broadcast.con control field is "unused unused unused c".
         // Therefore, priority should not be set here.
 
-        this.APDU = value.APDU;
+        this.TPDU = value.TPDU;
       }
 
       /**
        * Converts the N_Data_Broadcast.con message to a Buffer.
-       * Format: Message Code (1) + Control Field (1) + Unused (2) + Unused (2) + LG (1) + APDU (variable) + FCS (1)
-       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * Format: Message Code (1) + Control Field (1) + Unused (2) + Unused (2) + LG (1) + TPDU (variable)
+       * Total Length: 1 + 1 + 2 + 2 + 1 + TPDU.length + 1 = 7 + TPDU.length
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(7 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
-        buffer.writeUInt8(this.APDU.length & 0x0F, 6); // Octet 7: LG (octet count), upper 4 bits unused
-        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
-        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        buffer.writeUInt8(this.TPDU.length & 0x0F, 6); // Octet 7: LG (octet count), upper 4 bits unused
+        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1726,8 +1723,8 @@ export class EMI {
         return {
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
-          APDU: `APDU: ${this.APDU.toString('hex')}`,
-          APDU_Length: `${this.APDU.length} octets`,
+          APDU: `APDU: ${this.TPDU.toString('hex')}`,
+          APDU_Length: `${this.TPDU.length} octets`,
           rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
         };
       }
@@ -1737,7 +1734,7 @@ export class EMI {
       controlField: ControlField;
       sourceAddress: string; // Individual address
       hopCount: number; // 4 bits (formerly NPCI)
-      APDU: Buffer;
+      TPDU: Buffer;
 
       constructor(value: N_Data_Broadcast_ind_Ctor) {
         if (typeof value !== 'object' || value === null) {
@@ -1751,25 +1748,24 @@ export class EMI {
         }
         this.sourceAddress = value.sourceAddress;
         this.hopCount = value.hopCount;
-        this.APDU = value.APDU;
+        this.TPDU = value.APDU;
       }
 
       /**
        * Converts the N_Data_Broadcast.ind message to a Buffer.
        * Format: Message Code (1) + Control Field (1) + Source Addr (2) + Unused (2) + hopCount/LG (1) + APDU (variable) + FCS (1)
-       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * Total Length: 1 + 1 + 2 + 2 + 1 + TPDU.length + 1 = 8 + TPDU.length
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(7 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(((this.hopCount & 0x0F) << 4) | (this.APDU.length & 0x0F), 6);
-        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
-        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        buffer.writeUInt8(((this.hopCount & 0x0F) << 4) | (this.TPDU.length & 0x0F), 6);
+        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1783,8 +1779,8 @@ export class EMI {
           controlField: `Campo de control: ${this.controlField.describe()}`,
           sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
           hopCount: `Conteo de saltos: ${this.hopCount}`,
-          APDU: `APDU: ${this.APDU.toString('hex')}`,
-          APDU_Length: `${this.APDU.length} octets`,
+          TPDU: `TPDU: ${this.TPDU.toString('hex')}`,
+          TPDU_Length: `${this.TPDU.length} octets`,
           rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
         };
       }
@@ -1792,29 +1788,24 @@ export class EMI {
     "N_Poll_Data.req": class NPollDataReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Poll_Data.req"]["EMI2/IMI2"].value;
       control = 0xF0; // Fixed control byte for N_Poll_Data.req (similar to L_Poll_Data)
-      sourceAddress: string; // Individual address
-      #pollingGroup = 0;
+      #pollingGroup: Buffer = Buffer.alloc(1, 0);
       #nrOfSlots: bits4 = 0;
 
-      constructor(value: N_Poll_Data_Req_Ctor) {
+      constructor(value: N_Poll_Data_Req) {
         if (typeof value !== 'object' || value === null) {
           throw new Error("N_Poll_Data.req must be an object with specific properties.");
         }
-        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error("The Source Address must be a valid Individual Address");
-        }
-        this.sourceAddress = value.sourceAddress;
-        this.pollingGroup = value.pollingGroup;
         this.nrOfSlots = value.nrOfSlots;
+        this.pollingGroup = value.pollingGroup;
       }
 
-      set pollingGroup(value: number) {
-        if (value < 0 || value > 65535) throw new Error("The pollingGroup value must be 16 bits (0-65535)");
-        this.#pollingGroup = value;
+      set pollingGroup(value: string) {
+        const convertToAddress = KNXHelper.GetAddress_(value);
+        this.#pollingGroup = convertToAddress;
       }
 
       get pollingGroup() {
-        return this.#pollingGroup;
+        return KNXHelper.GetAddress(this.#pollingGroup, "/", true) as string // Se supone que es un dirección de grupo;
       }
 
       set nrOfSlots(value: bits4) {
@@ -1828,20 +1819,18 @@ export class EMI {
 
       /**
        * Converts the N_Poll_Data.req message to a Buffer.
-       * Format: Message Code (1) + Control (1) + Source Addr (2) + Polling Group (2) + NrOfSlots/Reserved (1) + FCS (1)
-       * Total Length: 1 + 1 + 2 + 2 + 1 + 1 = 8
+       * Format: Message Code (1) + Control (1) + Polling Group (2) + NrOfSlots/Reserved (1)
+       * Total Length: 1 + 1 + 2 + 2 + 1 = 7
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8);
+        const buffer = Buffer.alloc(7);
         let octet7 = 0;
         octet7 = octet7 | (this.#nrOfSlots & 0x0F); // NrOfSlots in lower 4 bits
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         buffer.writeUInt8(this.control, 1); // Octet 2: Control
-        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
-        buffer.writeUInt16BE(this.#pollingGroup, 4); // Octets 5-6: Polling Group
+        this.#pollingGroup.copy(buffer, 0); // Octets 5-6: Polling Group
         buffer.writeUInt8(octet7, 6); // Octet 7: NrOfSlots (bits 3-0)
-        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -1853,7 +1842,6 @@ export class EMI {
         return {
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control.toString(16).padStart(2, '0')}`,
-          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
           pollingGroup: `Grupo de sondeo: ${this.#pollingGroup}`,
           nrOfSlots: `Número de ranuras: ${this.#nrOfSlots}`,
           rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
@@ -1863,31 +1851,26 @@ export class EMI {
     "N_Poll_Data.con": class NPollDataCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Poll_Data.con"]["EMI2/IMI2"].value;
       control = 0xF0; // Fixed control byte for N_Poll_Data.con
-      sourceAddress: string; // Individual address
-      #pollingGroup = 0;
+      #pollingGroup: Buffer = Buffer.alloc(1, 0);
       #nrOfSlots: bits4 = 0;
-      APDU: Buffer; // Polled data
+      pollData: Buffer; // Polled data
 
-      constructor(value: N_Poll_Data_Con_Ctor) {
+      constructor(value: N_Poll_Data_Con) {
         if (typeof value !== 'object' || value === null) {
           throw new Error("N_Poll_Data.con must be an object with specific properties.");
         }
-        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error("The Source Address must be a valid Individual Address");
-        }
-        this.sourceAddress = value.sourceAddress;
         this.pollingGroup = value.pollingGroup;
         this.nrOfSlots = value.nrOfSlots;
-        this.APDU = value.APDU;
+        this.pollData = value.pollData;
       }
 
-      set pollingGroup(value: number) {
-        if (value < 0 || value > 65535) throw new Error("The pollingGroup value must be 16 bits (0-65535)");
-        this.#pollingGroup = value;
+      set pollingGroup(value: string) {
+        const convertToAddress = KNXHelper.GetAddress_(value);
+        this.#pollingGroup = convertToAddress;
       }
 
       get pollingGroup() {
-        return this.#pollingGroup;
+        return KNXHelper.GetAddress(this.#pollingGroup, "/", true) as string // Se supone que es un dirección de grupo;
       }
 
       set nrOfSlots(value: bits4) {
@@ -1901,21 +1884,19 @@ export class EMI {
 
       /**
        * Converts the N_Poll_Data.con message to a Buffer.
-       * Format: Message Code (1) + Control (1) + Source Addr (2) + Polling Group (2) + NrOfSlots/Reserved (1) + APDU (variable) + FCS (1)
-       * Total Length: 1 + 1 + 2 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
+       * Format: Message Code (1) + Control (1) + Polling Group (2) + NrOfSlots/Reserved (1) + PollData (variable)
+       * Total Length: 1 + 1 + 2 + 1 + APDU.length + 1 = 8 + APDU.length
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(7 + this.pollData.length);
         let octet7 = 0;
         octet7 = octet7 | (this.#nrOfSlots & 0x0F); // NrOfSlots in lower 4 bits
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         buffer.writeUInt8(this.control, 1); // Octet 2: Control
-        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
-        buffer.writeUInt16BE(this.#pollingGroup, 4); // Octets 5-6: Polling Group
+        this.#pollingGroup.copy(buffer, 0); // Octets 5-6: Polling Group
         buffer.writeUInt8(octet7, 6); // Octet 7: NrOfSlots (bits 3-0)
-        this.APDU.copy(buffer, 7); // Octet 8...n: Poll Data
-        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        this.pollData.copy(buffer, 7); // Octet 8...n: Poll Data
         return buffer;
       }
 
@@ -1927,11 +1908,10 @@ export class EMI {
         return {
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control.toString(16).padStart(2, '0')}`,
-          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
           pollingGroup: `Grupo de sondeo: ${this.#pollingGroup}`,
           nrOfSlots: `Número de ranuras: ${this.#nrOfSlots}`,
-          APDU: `APDU: ${this.APDU.toString('hex')}`,
-          APDU_Length: `${this.APDU.length} octets`,
+          pollData: `pollData: ${this.pollData.toString('hex')}`,
+          pollData_Length: `${this.pollData.length} octets`,
           rawValue: `Valor numérico: ${this.toBuffer().toString('hex')}`
         }
       }
