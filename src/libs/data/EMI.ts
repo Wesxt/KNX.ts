@@ -9,7 +9,7 @@ interface DescribeEstructure {
    * Proporciona una descripción legible del estado actual de las propiedades del sistema.
    * @returns Un objeto que describe el estado de cada propiedad.
    */
-  describe(): Record<string, string>;
+  describe(): Record<string, string | number>;
 }
 
 interface ServiceMessage extends DescribeEstructure {
@@ -568,6 +568,16 @@ interface N_Poll_Data_Con {
   pollingGroup: string; // 16 bits
   nrOfSlots: bits4; // 4 bits
   pollData: Buffer; // Polled data
+}
+
+interface T_Connect_req {
+  destinationAddress: string;
+}
+
+class InvalidInputObject extends Error {
+  constructor(className: string) {
+    super(`The input object in the ${className} is must be an object with specific properties`)
+  }
 }
 
 /**
@@ -1758,7 +1768,7 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.TPDU.length);
+        const buffer = Buffer.alloc(8 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
@@ -1766,6 +1776,7 @@ export class EMI {
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
         buffer.writeUInt8(((this.hopCount & 0x0F) << 4) | (this.TPDU.length & 0x0F), 6);
         this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -1916,5 +1927,35 @@ export class EMI {
         }
       }
     }
-  }
+  } as const
+  TransportLayerEMI = {
+    "T_Connect.req": class TConnectReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Connect.req"]["EMI2/IMI2"].value;
+      control = 0x00;
+      destinationAddress: string;
+
+      constructor(value: T_Connect_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TConnectReq.name)
+        }
+        this.destinationAddress = value.destinationAddress
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.control, 1);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 5);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+      }
+      describe(): Record<string, string | number> {
+        return {
+          messageCode: this.messageCode,
+          control: this.control,
+          destinationAddress: this.destinationAddress
+        }
+      }
+
+    }
+  } as const
 }
