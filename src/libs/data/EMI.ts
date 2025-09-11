@@ -9,7 +9,7 @@ interface DescribeEstructure {
    * Proporciona una descripción legible del estado actual de las propiedades del sistema.
    * @returns Un objeto que describe el estado de cada propiedad.
    */
-  describe(): Record<string, string | number>;
+  describe(): Record<string, string | number | Buffer | Record<string, any>>;
 }
 
 interface ServiceMessage extends DescribeEstructure {
@@ -573,6 +573,37 @@ interface N_Poll_Data_Con {
 interface T_Connect_req {
   destinationAddress: string;
 }
+
+interface T_Connect_ind {
+  sourceAddress: string;
+  control: Omit<InstanceType<typeof ControlField>, "describe" | "buffer">
+}
+
+interface T_Disconnect_con {
+  control: Omit<InstanceType<typeof ControlField>, "describe" | "buffer">
+}
+
+interface T_Data_Connected_req {
+  control: {
+    priority: InstanceType<typeof ControlField>["priority"]
+  };
+  hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  APDU: Buffer
+}
+
+interface T_Data_Connected_con { control: { confirm: boolean; }; APDU: Buffer; }
+interface T_Data_Connected_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}
+interface T_Data_Group_req { control: { priority: number; }; APDU: Buffer; hopCount: number; }
+interface T_Data_Group_con { control: { confirm: boolean; }; data: Buffer; }
+interface T_Data_Group_ind { control: { priority: number; }; APDU: Buffer; }
+interface T_Data_Individual_req { control: { priority: number; }; destinationAddress: string; APDU: Buffer; hopCount: number; }
+interface T_Data_Individual_con { control: { confirm: boolean; }; destinationAddress: string; APDU: Buffer; }
+interface T_Data_Individual_ind { control: { priority: number; }; sourceAddress: string; destinationAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}
+interface T_Data_Broadcast_req { control: { priority: number; }; APDU: Buffer; hopCount: number; }
+interface T_Data_Broadcast_con { control: { confirm: boolean; }; APDU: Buffer; }
+interface T_Data_Broadcast_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 }
+interface T_Poll_Data_req { control: any, pollingGroup: string, numberOfSlots: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15}
+interface T_Poll_Data_con { control: any, sourceAddress: string, pollingGroup: string, pollData: Buffer, nrOfSlots: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 }
 
 class InvalidInputObject extends Error {
   constructor(className: string) {
@@ -1945,8 +1976,9 @@ export class EMI {
         const buffer = Buffer.alloc(7);
         buffer.writeUInt8(this.messageCode, 0);
         buffer.writeUInt8(this.control, 1);
-        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 5);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
       }
       describe(): Record<string, string | number> {
         return {
@@ -1955,7 +1987,639 @@ export class EMI {
           destinationAddress: this.destinationAddress
         }
       }
+    },
+    "T_Connect.con": class TConnectCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Connect.con"]["EMI2/IMI2"].value;
+      control = 0x00;
+      destinationAddress: string;
 
+      constructor(value: T_Connect_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TConnectCon.name)
+        }
+        this.destinationAddress = value.destinationAddress
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.control, 1);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 2);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
+      }
+      describe(): Record<string, string | number> {
+        return {
+          messageCode: this.messageCode,
+          control: this.control,
+          destinationAddress: this.destinationAddress
+        }
+      }
+    },
+    "T_Connect.ind": class TConnectCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Connect.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+
+      constructor(value: T_Connect_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TConnectCon.name)
+        }
+        this.sourceAddress = value.sourceAddress
+        this.control.ackRequest = value.control.ackRequest
+        this.control.frameType = value.control.frameType
+        this.control.repeat = value.control.repeat
+        this.control.systemBroadcast = value.control.systemBroadcast
+        this.control.priority = value.control.priority
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
+      }
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control,
+          sourceAddress: this.sourceAddress
+        }
+      }
+    },
+    "T_Disconnect.req": class TDisconnectReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Disconnect.req"]["EMI2/IMI2"].value;
+      control = 0x00;
+
+      constructor(value: object) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDisconnectReq.name)
+        }
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
+      }
+      describe() {
+        return {
+          messageCode: this.messageCode
+        }
+      }
+    },
+    "T_Disconnect.con": class TDisconnectCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Disconnect.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+
+      constructor(value: T_Disconnect_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDisconnectCon.name)
+        }
+        this.control.ackRequest = value.control.ackRequest
+        this.control.frameType = value.control.frameType
+        this.control.repeat = value.control.repeat
+        this.control.systemBroadcast = value.control.systemBroadcast
+        this.control.priority = value.control.priority
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1)
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
+      }
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control
+        }
+      }
+    },
+    "T_Disconnect.ind": class TDisconnectCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Disconnect.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+
+      constructor(value: T_Disconnect_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDisconnectCon.name)
+        }
+        this.control.ackRequest = value.control.ackRequest
+        this.control.frameType = value.control.frameType
+        this.control.repeat = value.control.repeat
+        this.control.systemBroadcast = value.control.systemBroadcast
+        this.control.priority = value.control.priority
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1)
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
+      }
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control
+        }
+      }
+    },
+    "T_Data_Connected_req": class TDataConnectedReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Connected_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataConnectedReq.name)
+        }
+        this.control.priority = value.control.priority;
+        this.APDU = value.APDU
+        this.hopCount = value.hopCount
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1)
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (buffer.length & 0x0F)
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
+        return buffer
+      }
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control,
+          hopCount: this.hopCount
+        }
+      }
+    },
+    // SERVICIOS COMPLETADOS
+    // #region Por revisar
+    "T_Data_Connected.con": class TDataConnectedCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+
+      constructor(value: T_Data_Connected_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataConnectedCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.APDU = value.APDU;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        // Octetos 3-5 no utilizados
+        buffer[6] |= (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Connected.ind": class TDataConnectedInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Connected_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataConnectedInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sourceAddress = value.sourceAddress;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        // Octeto 5-6 no utilizados
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sourceAddress: this.sourceAddress,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Group.req": class TDataGroupReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Group.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Group_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataGroupReq.name);
+        }
+        this.control.priority = value.control.priority;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        // Octetos 3-6 no utilizados
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          hopCount: this.hopCount,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Group.con": class TDataGroupCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Group.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      data: Buffer;
+
+      constructor(value: T_Data_Group_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataGroupCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.data = value.data
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.data.length); // Tamaño mínimo según documento
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        buffer[6] = (this.data.length & 0x0F)
+        KNXHelper.WriteData(buffer, this.data, 7)
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe()
+        };
+      }
+    },
+    "T_Data_Group.ind": class TDataGroupInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Group.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+
+      constructor(value: T_Data_Group_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataGroupInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.APDU = value.APDU;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        // Octetos 3-6 no utilizados
+        buffer[6] |= (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Individual.req": class TDataIndividualReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      destinationAddress: string;
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Individual_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataIndividualReq.name);
+        }
+        this.control.priority = value.control.priority;
+        this.destinationAddress = value.destinationAddress;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          destinationAddress: this.destinationAddress,
+          hopCount: this.hopCount,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Individual.con": class TDataIndividualCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      destinationAddress: string;
+      APDU: Buffer;
+
+      constructor(value: T_Data_Individual_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataIndividualCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.destinationAddress = value.destinationAddress;
+        this.APDU = value.APDU;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
+        KNXHelper.WriteData(buffer, this.APDU, 7)
+        buffer[6] = (this.APDU.length & 0x0F)
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          destinationAddress: this.destinationAddress
+        };
+      }
+    },
+    "T_Data_Individual.ind": class TDataIndividualInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+      destinationAddress: string;
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Individual_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataIndividualInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sourceAddress = value.sourceAddress;
+        this.destinationAddress = value.destinationAddress;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Broadcast.req": class TDataBroadcastReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Broadcast_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataBroadcastReq.name);
+        }
+        this.control.priority = value.control.priority;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F); // podría no ser usado
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          hopCount: this.hopCount,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Data_Broadcast.con": class TDataBroadcastCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+
+      constructor(value: T_Data_Broadcast_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataBroadcastCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.APDU = value.APDU
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.WriteData(buffer, this.APDU, 7)
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe()
+        };
+      }
+    },
+    "T_Data_Broadcast.ind": class TDataBroadcastInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: T_Data_Broadcast_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TDataBroadcastInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sourceAddress = value.sourceAddress;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F);
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sourceAddress: this.sourceAddress,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "T_Poll_Data.req": class TPollDataReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Poll_Data.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      pollingGroup: string;
+      numberOfSlots: number;
+
+      constructor(value: T_Poll_Data_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TPollDataReq.name)
+        }
+        this.pollingGroup = value.pollingGroup;
+        this.numberOfSlots = value.numberOfSlots;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.pollingGroup).copy(buffer, 4);
+        buffer[6] = this.numberOfSlots & 0x0F;
+        // No hay checksum en este mensaje según el documento
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          pollingGroup: this.pollingGroup,
+          numberOfSlots: this.numberOfSlots
+        };
+      }
+    },
+
+    "T_Poll_Data.con": class TPollDataCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["T_Poll_Data.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+      pollingGroup: string;
+      pollData: Buffer;
+      nrOfSlots: number;
+
+      constructor(value: T_Poll_Data_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(TPollDataCon.name)
+        }
+        this.sourceAddress = value.sourceAddress;
+        this.pollingGroup = value.pollingGroup;
+        this.pollData = value.pollData;
+        this.nrOfSlots = value.nrOfSlots;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.pollData.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        KNXHelper.GetAddress_(this.pollingGroup).copy(buffer, 4);
+        buffer[6] = this.nrOfSlots & 0x0F;
+        this.pollData.copy(buffer, 7);
+        // No hay checksum en este mensaje según el documento
+
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sourceAddress: this.sourceAddress,
+          pollingGroup: this.pollingGroup,
+          pollData: this.pollData.toString('hex')
+        };
+      }
     }
+    // #endregion
   } as const
 }
