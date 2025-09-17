@@ -338,9 +338,6 @@ export class KNXHelper {
      * - Para datos de 4 bytes (por ejemplo, DPT9 - float), realiza la conversión a formato KNX (mantisa/exponente) y los escribe en las posiciones correspondientes.
      * - Para datos de longitud > 1, los copia a partir de la posición indicada, ajustando si el primer byte < 0x3F.
      *
-     * Este método es utilizado por los métodos de construcción de frames en {@link KNXTP1}, como
-     * {@link KNXTP1.createLDataStandardFrame} y {@link KNXTP1.createLDataExtendedFrame}, para insertar el payload de datos
-     * en la posición correcta del telegrama.
      *
      * @param datagram Buffer destino donde se escriben los datos (por ejemplo, el frame KNX).
      * @param data Buffer con los datos a escribir (payload APDU).

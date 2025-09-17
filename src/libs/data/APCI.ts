@@ -62,6 +62,34 @@ export class APCI {
   }
 
   /**
+   * Enpaqueta el valor del APCI en una mascara 0000 0011 1111 1111 o 0000 0011 1100 0000 (dependiendo si el valor es de 4 bits o 10 bits)
+   * @returns {[number, number]}
+   */
+  packNumber(): [number, number] {
+    // bits altos -> posiciones 0 y 1 del primer octeto
+    const high = (this.value >> 8) & 0x03;  // b9 b8
+    const low = this.value & 0xFF;         // b7..b0
+
+    const octet1 = high;   // ya queda en los 2 LSB
+    const octet2 = low;
+
+    return [octet1, octet2];
+  }
+
+  /**
+   * Desenpaqueta el valor real del APCI apartir de dos octetos
+   * @param octet1 
+   * @param octet2 
+   * @returns {number}
+   */
+  unpackNumber(octet1: number, octet2: number): number {
+    const high = octet1 & 0x03;    // bits en posiciones 0 y 1
+    const low = octet2;
+
+    return (high << 8) | low;
+  }
+
+  /**
    * Proporciona una descripción legible del APCI.
    */
   describe(): string {

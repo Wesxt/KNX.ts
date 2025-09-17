@@ -3,6 +3,7 @@ import { Priority } from "./enum/EnumControlField";
 import { AddressType } from "./enum/EnumControlFieldExtended";
 import { ControlField } from "./ControlField";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
+import { APCI } from "./APCI";
 
 interface DescribeEstructure {
   /**
@@ -592,18 +593,30 @@ interface T_Data_Connected_req {
 }
 
 interface T_Data_Connected_con { control: { confirm: boolean; }; APDU: Buffer; }
-interface T_Data_Connected_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}
+interface T_Data_Connected_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 }
 interface T_Data_Group_req { control: { priority: number; }; APDU: Buffer; hopCount: number; }
 interface T_Data_Group_con { control: { confirm: boolean; }; data: Buffer; }
 interface T_Data_Group_ind { control: { priority: number; }; APDU: Buffer; }
 interface T_Data_Individual_req { control: { priority: number; }; destinationAddress: string; APDU: Buffer; hopCount: number; }
 interface T_Data_Individual_con { control: { confirm: boolean; }; destinationAddress: string; APDU: Buffer; }
-interface T_Data_Individual_ind { control: { priority: number; }; sourceAddress: string; destinationAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}
+interface T_Data_Individual_ind { control: { priority: number; }; sourceAddress: string; destinationAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 }
 interface T_Data_Broadcast_req { control: { priority: number; }; APDU: Buffer; hopCount: number; }
 interface T_Data_Broadcast_con { control: { confirm: boolean; }; APDU: Buffer; }
 interface T_Data_Broadcast_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; hopCount: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 }
-interface T_Poll_Data_req { control: any, pollingGroup: string, numberOfSlots: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15}
+interface T_Poll_Data_req { control: any, pollingGroup: string, numberOfSlots: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 }
 interface T_Poll_Data_con { control: any, sourceAddress: string, pollingGroup: string, pollData: Buffer, nrOfSlots: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 }
+interface M_Connect_ind { sourceAddress: string; }
+interface M_User_Data_Connected_req { control: { priority: number; }; APDU: Buffer; hopCount: number; }
+interface M_User_Data_Connected_con { control: { confirm: boolean; }; APDU: Buffer; }
+interface M_User_Data_Connected_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; }
+interface A_Data_Group_req { control: { priority: number; }; sap: number; apci: APCI; data: Buffer; hopCount: number; }
+interface A_Data_Group_con { control: { confirm: boolean; }; sap: number; apci: APCI; data: Buffer; }
+interface A_Data_Group_ind { control: { priority: number; }; sap: number; apci: APCI; data: Buffer; }
+interface M_User_Data_Individual_req { control: { priority: number; }; destinationAddress: string; apci: APCI; data: Buffer; hopCount: number; }
+interface M_User_Data_Individual_con { control: { confirm: boolean; }; destinationAddress: string; apci: APCI; data: Buffer; }
+interface M_User_Data_Individual_ind { control: { priority: number; }; sourceAddress: string; destinationAddress: string; apci: APCI; data: Buffer; }
+interface A_Poll_Data_req { pollingGroup: string; numberOfSlots: number; }
+interface A_Poll_Data_con { sourceAddress: string; pollingGroup: string; numberOfSlots: number; pollData: Buffer; }
 
 class InvalidInputObject extends Error {
   constructor(className: string) {
@@ -629,10 +642,7 @@ function checksum(buffer: Buffer): number {
  * @description The External Message Interface (EMI) is a standardized interface for communication between external devices and KNX systems. It allows for the integration of various external systems, such as building management systems, into the KNX network.
  * @version Version 01.04.02 is a KNX Approved Standard.
  * 
- * TODO: Hay que hacer que los servicios tengan un metodo "describe" que devuelva un objecto con valores legibles
- * TODO: Hay que corregir que los Destination Address or Source Address peudadn ser Individual Address o Group Address
  * TODO: Hay que hacer un metodo estatico que reciba un buffer para instanciar el servicio
- * TODO: Hay que verificar el byte checksum y construirlo en todos los servicios
  */
 export class EMI {
   constructor() { }
@@ -2161,8 +2171,6 @@ export class EMI {
         }
       }
     },
-    // SERVICIOS COMPLETADOS
-    // #region Por revisar
     "T_Data_Connected.con": class TDataConnectedCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
       control = new ControlField();
@@ -2577,7 +2585,6 @@ export class EMI {
         };
       }
     },
-
     "T_Poll_Data.con": class TPollDataCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Poll_Data.con"]["EMI2/IMI2"].value;
       control = new ControlField();
@@ -2620,6 +2627,492 @@ export class EMI {
         };
       }
     }
-    // #endregion
-  } as const
+  } as const;
+
+  /**
+   * The full Application Layer EMI consists of the group-oriented Application Layer and the management parts. 
+   * The group-oriented Application Layer part consists of exactly the A_Data_Group.req,
+   * A_Data_Group.ind, A_Data_Group.con, A_Poll_Data.req and A_Poll_Data.con services.
+   * The management part consists of exactly the M_Connect.ind, M_Disconnect.ind,
+   * M_User_Data_Connected.req, M_User_Data_Connected.ind, M_User_Data_Connected.con,
+   * M_User_Data_Individual.req, M_User_Data_Individual.ind and M_User_Data_Individual.con services.
+   */
+  ApplicationLayerEMI = {
+    "M_Connect.ind": class MConnectInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_Connect.ind"]["EMI2/IMI2"].value;
+      sourceAddress: string;
+
+      constructor(value: M_Connect_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MConnectInd.name);
+        }
+        this.sourceAddress = value.sourceAddress;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        // Octeto 2 no utilizado
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        // Octetos 5-6 no utilizados o 0x00
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          sourceAddress: this.sourceAddress
+        };
+      }
+    },
+    "M_Disconnect.ind": class MDisconnectInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_Disconnect.ind"]["EMI2/IMI2"].value;
+
+      constructor() {
+        // No tiene parámetros
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        // Octetos 2-6 no utilizados o 0x00
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode
+        };
+      }
+    },
+    "M_User_Data_Connected.req": class MUserDataConnectedReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+      hopCount: number;
+
+      constructor(value: M_User_Data_Connected_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MUserDataConnectedReq.name);
+        }
+        this.control.priority = value.control.priority;
+        this.APDU = value.APDU;
+        this.hopCount = value.hopCount;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        // Octetos 2-5 no utilizados
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0F);
+        buffer[7] = 0x02;
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          hopCount: this.hopCount,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "M_User_Data_Connected.con": class MUserDataConnectedCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      APDU: Buffer;
+
+      constructor(value: M_User_Data_Connected_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MUserDataConnectedCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.APDU = value.APDU;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        // Octetos 3-6 no utilizados
+        buffer[6] |= (this.APDU.length & 0x0F);
+        buffer[7] = 0x02;
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "M_User_Data_Connected.ind": class MUserDataConnectedInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+      APDU: Buffer;
+
+      constructor(value: M_User_Data_Connected_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MUserDataConnectedInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sourceAddress = value.sourceAddress;
+        this.APDU = value.APDU;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.APDU.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        // Octetos 5-6 no utilizados
+        buffer[6] |= (this.APDU.length & 0x0F);
+        buffer[7] = 0x02;
+        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sourceAddress: this.sourceAddress,
+          APDU: this.APDU.toString('hex')
+        };
+      }
+    },
+    "A_Data_Group.req": class ADataGroupReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["A_Data_Group.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sap: number;
+      apci: APCI;
+      data: Buffer;
+      hopCount: number;
+
+      constructor(value: A_Data_Group_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(ADataGroupReq.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sap = value.sap;
+        this.apci = value.apci;
+        this.data = value.data;
+        this.hopCount = value.hopCount;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        // Octetos 2-4 no utilizados
+        buffer.writeUInt8(this.sap, 5);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.data.length & 0x0F);
+        const apci = this.apci.packNumber();
+        buffer[7] = apci[0];
+        buffer[8] = apci[1];
+        KNXHelper.WriteData(buffer, this.data, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sap: this.sap,
+          hopCount: this.hopCount,
+          apci: this.apci.toHex(),
+          data: this.data.toString('hex')
+        };
+      }
+    },
+    "A_Data_Group.con": class ADataGroupCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["A_Data_Group.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sap: number;
+      apci: Buffer;
+      data: Buffer;
+
+      constructor(value: A_Data_Group_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(ADataGroupCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.sap = value.sap;
+        this.apci = value.apci;
+        this.data = value.data;
+      }
+
+      toBuffer(): Buffer {
+        const totalLength = this.apci.length + this.data.length;
+        const buffer = Buffer.alloc(8 + totalLength);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        buffer.writeUInt8(this.sap, 5);
+        buffer[6] |= (totalLength & 0x0F);
+        this.apci.copy(buffer, 7);
+        this.data.copy(buffer, 7 + this.apci.length);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sap: this.sap,
+          apci: this.apci.toString('hex'),
+          data: this.data.toString('hex')
+        };
+      }
+    },
+    "A_Data_Group.ind": class ADataGroupInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["A_Data_Group.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sap: number;
+      apci: Buffer;
+      data: Buffer;
+
+      constructor(value: A_Data_Group_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(ADataGroupInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sap = value.sap;
+        this.apci = value.apci;
+        this.data = value.data;
+      }
+
+      toBuffer(): Buffer {
+        const totalLength = this.apci.length + this.data.length;
+        const buffer = Buffer.alloc(8 + totalLength);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        buffer.writeUInt8(this.sap, 5);
+        buffer[6] |= (totalLength & 0x0F);
+        this.apci.copy(buffer, 7);
+        this.data.copy(buffer, 7 + this.apci.length);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sap: this.sap,
+          apci: this.apci.toString('hex'),
+          data: this.data.toString('hex')
+        };
+      }
+    },
+    "M_User_Data_Individual.req": class MUserDataIndividualReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      destinationAddress: string;
+      apci: Buffer;
+      data: Buffer;
+      hopCount: number;
+
+      constructor(value: M_User_Data_Individual_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MUserDataIndividualReq.name);
+        }
+        this.control.priority = value.control.priority;
+        this.destinationAddress = value.destinationAddress;
+        this.apci = value.apci;
+        this.data = value.data;
+        this.hopCount = value.hopCount;
+      }
+
+      toBuffer(): Buffer {
+        const totalLength = this.apci.length + this.data.length;
+        const buffer = Buffer.alloc(8 + totalLength);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (totalLength & 0x0F);
+        this.apci.copy(buffer, 7);
+        this.data.copy(buffer, 7 + this.apci.length);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          destinationAddress: this.destinationAddress,
+          hopCount: this.hopCount,
+          apci: this.apci.toString('hex'),
+          data: this.data.toString('hex')
+        };
+      }
+    },
+    "M_User_Data_Individual.con": class MUserDataIndividualCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      destinationAddress: string;
+      apci: Buffer;
+      data: Buffer;
+
+      constructor(value: M_User_Data_Individual_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MUserDataIndividualCon.name);
+        }
+        this.control.confirm = value.control.confirm;
+        this.destinationAddress = value.destinationAddress;
+        this.apci = value.apci;
+        this.data = value.data;
+      }
+
+      toBuffer(): Buffer {
+        const totalLength = this.apci.length + this.data.length;
+        const buffer = Buffer.alloc(8 + totalLength);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
+        buffer[6] |= (totalLength & 0x0F);
+        this.apci.copy(buffer, 7);
+        this.data.copy(buffer, 7 + this.apci.length);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          destinationAddress: this.destinationAddress,
+          apci: this.apci.toString('hex'),
+          data: this.data.toString('hex')
+        };
+      }
+    },
+    "M_User_Data_Individual.ind": class MUserDataIndividualInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.ind"]["EMI2/IMI2"].value;
+      control = new ControlField();
+      sourceAddress: string;
+      destinationAddress: string;
+      apci: Buffer;
+      data: Buffer;
+
+      constructor(value: M_User_Data_Individual_ind) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(MUserDataIndividualInd.name);
+        }
+        this.control.priority = value.control.priority;
+        this.sourceAddress = value.sourceAddress;
+        this.destinationAddress = value.destinationAddress;
+        this.apci = value.apci;
+        this.data = value.data;
+      }
+
+      toBuffer(): Buffer {
+        const totalLength = this.apci.length + this.data.length;
+        const buffer = Buffer.alloc(8 + totalLength);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.control.buffer.copy(buffer, 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
+        buffer[6] |= (totalLength & 0x0F);
+        this.apci.copy(buffer, 7);
+        this.data.copy(buffer, 7 + this.apci.length);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          control: this.control.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+          apci: this.apci.toString('hex'),
+          data: this.data.toString('hex')
+        };
+      }
+    },
+    "A_Poll_Data.req": class APollDataReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["A_Poll_Data.req"]["EMI2/IMI2"].value;
+      pollingGroup: string;
+      numberOfSlots: number;
+
+      constructor(value: A_Poll_Data_req) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(APollDataReq.name);
+        }
+        this.pollingGroup = value.pollingGroup;
+        this.numberOfSlots = value.numberOfSlots;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        // Octeto 1-3 no utilizados
+        KNXHelper.GetAddress_(this.pollingGroup).copy(buffer, 4);
+        buffer[6] = this.numberOfSlots & 0x0F;
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          pollingGroup: this.pollingGroup,
+          numberOfSlots: this.numberOfSlots
+        };
+      }
+    },
+    "A_Poll_Data.con": class APollDataCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["A_Poll_Data.con"]["EMI2/IMI2"].value;
+      sourceAddress: string;
+      pollingGroup: string;
+      numberOfSlots: number;
+      pollData: Buffer;
+
+      constructor(value: A_Poll_Data_con) {
+        if (typeof value !== "object" || value === null) {
+          throw new InvalidInputObject(APollDataCon.name);
+        }
+        this.sourceAddress = value.sourceAddress;
+        this.pollingGroup = value.pollingGroup;
+        this.numberOfSlots = value.numberOfSlots;
+        this.pollData = value.pollData;
+      }
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.pollData.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
+        KNXHelper.GetAddress_(this.pollingGroup).copy(buffer, 4);
+        buffer[6] = this.numberOfSlots & 0x0F;
+        this.pollData.copy(buffer, 7);
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          sourceAddress: this.sourceAddress,
+          pollingGroup: this.pollingGroup,
+          numberOfSlots: this.numberOfSlots,
+          pollData: this.pollData.toString('hex')
+        };
+      }
+    }
+  } as const;
 }
