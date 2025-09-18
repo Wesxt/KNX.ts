@@ -666,7 +666,9 @@ enum SAP {
  */
 export class EMI {
   constructor() { }
-
+  /**
+   * @deprecated **No uses esto, está en desuso**
+   */
   LayerAccess = {
     "PEI_Switch.req": class PEISwitchReq implements ServiceMessage {
       constructor(value: PEI_Switch_req) {
