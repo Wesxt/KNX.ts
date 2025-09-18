@@ -4,6 +4,7 @@ import { AddressType } from "./enum/EnumControlFieldExtended";
 import { ControlField } from "./ControlField";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
 import { APCI } from "./APCI";
+import { APCIEnum } from "./enum/APCIEnum";
 
 interface DescribeEstructure {
   /**
@@ -609,9 +610,9 @@ interface M_Connect_ind { sourceAddress: string; }
 interface M_User_Data_Connected_req { control: { priority: number; }; APDU: Buffer; hopCount: number; }
 interface M_User_Data_Connected_con { control: { confirm: boolean; }; APDU: Buffer; }
 interface M_User_Data_Connected_ind { control: { priority: number; }; sourceAddress: string; APDU: Buffer; }
-interface A_Data_Group_req { control: { priority: number; }; sap: number; apci: APCI; data: Buffer; hopCount: number; }
-interface A_Data_Group_con { control: { confirm: boolean; }; sap: number; apci: APCI; data: Buffer; }
-interface A_Data_Group_ind { control: { priority: number; }; sap: number; apci: APCI; data: Buffer; }
+interface A_Data_Group_req { control: { priority: number; }; sap: SAP; apci: APCI; data: Buffer; hopCount: number; }
+interface A_Data_Group_con { control: { confirm: boolean; }; sap: SAP; apci: APCI; data: Buffer; }
+interface A_Data_Group_ind { control: { priority: number; }; sap: SAP; apci: APCI; data: Buffer; }
 interface M_User_Data_Individual_req { control: { priority: number; }; destinationAddress: string; apci: APCI; data: Buffer; hopCount: number; }
 interface M_User_Data_Individual_con { control: { confirm: boolean; }; destinationAddress: string; apci: APCI; data: Buffer; }
 interface M_User_Data_Individual_ind { control: { priority: number; }; sourceAddress: string; destinationAddress: string; apci: APCI; data: Buffer; }
@@ -635,6 +636,25 @@ function checksum(buffer: Buffer): number {
     fcs ^= buffer[i];
   }
   return fcs;
+}
+/**
+ * Es el identificador del punto de acceso de servicio en la Capa de Aplicación.
+ * 
+ * En KNX, se usa para seleccionar la funcionalidad de aplicación a la que se entrega el APDU.
+ * 
+ * **Advertencia:** No hay info clara con respecto a esto; incluso puede ser inexistente en la especificación
+ */
+enum SAP {
+  /**Se usa en Group Communication normal (la gran mayoría de los telegramas). */
+  Application_Layer_SAP_default = 0,
+  /**Usado para gestión de dispositivos, commissioning, etc. */
+  Device_Management_SAP = 1,
+  /**Para servicios PropertyValue_Read/Write (extensiones de gestión). */
+  Property_Access_SAP = 2,
+  /**Para servicios de transferencia de ficheros (raro en la práctica). */
+  File_Transfer_SAP = 3,
+  /**Acceso a objetos de aplicación. */
+  Object_Access_SAP = 4,
 }
 
 /**
@@ -2796,7 +2816,7 @@ export class EMI {
     "A_Data_Group.req": class ADataGroupReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["A_Data_Group.req"]["EMI2/IMI2"].value;
       control = new ControlField();
-      sap: number;
+      sap: SAP;
       apci: APCI;
       data: Buffer;
       hopCount: number;
@@ -2841,8 +2861,8 @@ export class EMI {
     "A_Data_Group.con": class ADataGroupCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["A_Data_Group.con"]["EMI2/IMI2"].value;
       control = new ControlField();
-      sap: number;
-      apci: Buffer;
+      sap: SAP;
+      apci: APCI;
       data: Buffer;
 
       constructor(value: A_Data_Group_con) {
@@ -2856,14 +2876,16 @@ export class EMI {
       }
 
       toBuffer(): Buffer {
-        const totalLength = this.apci.length + this.data.length;
+        const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
         this.control.buffer.copy(buffer, 1);
         buffer.writeUInt8(this.sap, 5);
         buffer[6] |= (totalLength & 0x0F);
-        this.apci.copy(buffer, 7);
-        this.data.copy(buffer, 7 + this.apci.length);
+        const apci = this.apci.packNumber();
+        buffer[7] = apci[0]
+        buffer[8] = apci[1]
+        KNXHelper.WriteData(buffer, this.data, 7);
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2873,7 +2895,7 @@ export class EMI {
           messageCode: this.messageCode,
           control: this.control.describe(),
           sap: this.sap,
-          apci: this.apci.toString('hex'),
+          apci: this.apci.toHex(),
           data: this.data.toString('hex')
         };
       }
@@ -2881,8 +2903,8 @@ export class EMI {
     "A_Data_Group.ind": class ADataGroupInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["A_Data_Group.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
-      sap: number;
-      apci: Buffer;
+      sap: SAP;
+      apci: APCI;
       data: Buffer;
 
       constructor(value: A_Data_Group_ind) {
@@ -2896,14 +2918,16 @@ export class EMI {
       }
 
       toBuffer(): Buffer {
-        const totalLength = this.apci.length + this.data.length;
+        const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
         this.control.buffer.copy(buffer, 1);
         buffer.writeUInt8(this.sap, 5);
         buffer[6] |= (totalLength & 0x0F);
-        this.apci.copy(buffer, 7);
-        this.data.copy(buffer, 7 + this.apci.length);
+        const apci = this.apci.packNumber()
+        buffer[7] = apci[0]
+        buffer[8] = apci[1]
+        KNXHelper.WriteData(buffer, this.data, 7);
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2913,7 +2937,7 @@ export class EMI {
           messageCode: this.messageCode,
           control: this.control.describe(),
           sap: this.sap,
-          apci: this.apci.toString('hex'),
+          apci: this.apci.toHex(),
           data: this.data.toString('hex')
         };
       }
@@ -2922,7 +2946,7 @@ export class EMI {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
       control = new ControlField();
       destinationAddress: string;
-      apci: Buffer;
+      apci: APCI;
       data: Buffer;
       hopCount: number;
 
@@ -2933,19 +2957,22 @@ export class EMI {
         this.control.priority = value.control.priority;
         this.destinationAddress = value.destinationAddress;
         this.apci = value.apci;
+        this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit // 2C0
         this.data = value.data;
         this.hopCount = value.hopCount;
       }
 
       toBuffer(): Buffer {
-        const totalLength = this.apci.length + this.data.length;
+        const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
         this.control.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (totalLength & 0x0F);
-        this.apci.copy(buffer, 7);
-        this.data.copy(buffer, 7 + this.apci.length);
+        const apci = this.apci.packNumber()
+        buffer[7] = apci[0];
+        buffer[8] = apci[1];
+        KNXHelper.WriteData(buffer, this.data, 7);
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2956,7 +2983,7 @@ export class EMI {
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
           hopCount: this.hopCount,
-          apci: this.apci.toString('hex'),
+          apci: this.apci.toHex(),
           data: this.data.toString('hex')
         };
       }
@@ -2965,7 +2992,7 @@ export class EMI {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
       control = new ControlField();
       destinationAddress: string;
-      apci: Buffer;
+      apci: APCI;
       data: Buffer;
 
       constructor(value: M_User_Data_Individual_con) {
@@ -2975,18 +3002,21 @@ export class EMI {
         this.control.confirm = value.control.confirm;
         this.destinationAddress = value.destinationAddress;
         this.apci = value.apci;
+        this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit // 2C0
         this.data = value.data;
       }
 
       toBuffer(): Buffer {
-        const totalLength = this.apci.length + this.data.length;
+        const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
         this.control.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= (totalLength & 0x0F);
-        this.apci.copy(buffer, 7);
-        this.data.copy(buffer, 7 + this.apci.length);
+        const apci = this.apci.packNumber()
+        buffer[7] = apci[0]
+        buffer[8] = apci[1]
+        KNXHelper.WriteData(buffer, this.data, 7)
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2996,7 +3026,7 @@ export class EMI {
           messageCode: this.messageCode,
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
-          apci: this.apci.toString('hex'),
+          apci: this.apci.toHex(),
           data: this.data.toString('hex')
         };
       }
@@ -3006,7 +3036,7 @@ export class EMI {
       control = new ControlField();
       sourceAddress: string;
       destinationAddress: string;
-      apci: Buffer;
+      apci: APCI;
       data: Buffer;
 
       constructor(value: M_User_Data_Individual_ind) {
@@ -3017,19 +3047,22 @@ export class EMI {
         this.sourceAddress = value.sourceAddress;
         this.destinationAddress = value.destinationAddress;
         this.apci = value.apci;
+        this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit // 2C0
         this.data = value.data;
       }
 
       toBuffer(): Buffer {
-        const totalLength = this.apci.length + this.data.length;
+        const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
         this.control.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= (totalLength & 0x0F);
-        this.apci.copy(buffer, 7);
-        this.data.copy(buffer, 7 + this.apci.length);
+        const apci = this.apci.packNumber()
+        buffer[7] = apci[0]
+        buffer[8] = apci[1]
+        KNXHelper.WriteData(buffer, this.data, 7)
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -3040,7 +3073,7 @@ export class EMI {
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
-          apci: this.apci.toString('hex'),
+          apci: this.apci.toHex(),
           data: this.data.toString('hex')
         };
       }
@@ -3049,6 +3082,7 @@ export class EMI {
       messageCode = MESSAGE_CODE_FIELD["A_Poll_Data.req"]["EMI2/IMI2"].value;
       pollingGroup: string;
       numberOfSlots: number;
+      control: ControlField;
 
       constructor(value: A_Poll_Data_req) {
         if (typeof value !== "object" || value === null) {
@@ -3056,12 +3090,14 @@ export class EMI {
         }
         this.pollingGroup = value.pollingGroup;
         this.numberOfSlots = value.numberOfSlots;
+        this.control = new ControlField(0xF0);
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7);
         buffer.writeUInt8(this.messageCode, 0);
-        // Octeto 1-3 no utilizados
+        // Octeto 3-4 no utilizados
+        buffer[1] = this.control.buffer.readUInt8();
         KNXHelper.GetAddress_(this.pollingGroup).copy(buffer, 4);
         buffer[6] = this.numberOfSlots & 0x0F;
         buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
@@ -3071,6 +3107,7 @@ export class EMI {
       describe() {
         return {
           messageCode: this.messageCode,
+          control: this.control.describe(),
           pollingGroup: this.pollingGroup,
           numberOfSlots: this.numberOfSlots
         };
@@ -3082,6 +3119,7 @@ export class EMI {
       pollingGroup: string;
       numberOfSlots: number;
       pollData: Buffer;
+      control: ControlField;
 
       constructor(value: A_Poll_Data_con) {
         if (typeof value !== "object" || value === null) {
@@ -3091,11 +3129,13 @@ export class EMI {
         this.pollingGroup = value.pollingGroup;
         this.numberOfSlots = value.numberOfSlots;
         this.pollData = value.pollData;
+        this.control = new ControlField(0xF0)
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.pollData.length);
         buffer.writeUInt8(this.messageCode, 0);
+        buffer[1] = this.control.buffer.readUInt8()
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         KNXHelper.GetAddress_(this.pollingGroup).copy(buffer, 4);
         buffer[6] = this.numberOfSlots & 0x0F;
@@ -3107,6 +3147,7 @@ export class EMI {
       describe() {
         return {
           messageCode: this.messageCode,
+          control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           pollingGroup: this.pollingGroup,
           numberOfSlots: this.numberOfSlots,
