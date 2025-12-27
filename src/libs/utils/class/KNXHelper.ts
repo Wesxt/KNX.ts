@@ -41,16 +41,16 @@ export class KNXHelper {
   }
   static frexp(value: number) {
     if (value === 0) return [value, 0];
-    let data = new DataView(new ArrayBuffer(8))
-    data.setFloat64(0, value)
+    let data = new DataView(new ArrayBuffer(8));
+    data.setFloat64(0, value);
     let bits = (data.getUint32(0) >>> 20) & 0x7FF;
     if (bits === 0) {
       data.setFloat64(0, value * Math.pow(2, 64));
       bits = ((data.getUint32(0) >>> 20) & 0x7FF) - 64;
     }
     let exponent = bits - 1022,
-      mantissa = this.Idexp(value, -exponent)
-    return [mantissa, exponent]
+      mantissa = this.Idexp(value, -exponent);
+    return [mantissa, exponent];
   }
   static IsAddressIndividual(address: string) {
     return address.indexOf('.') !== -1;
@@ -69,7 +69,7 @@ export class KNXHelper {
    */
   static GetAddress(addr: Buffer | string, separator?: string, threeLevelAddressing?: boolean | unknown): string | Buffer | undefined {
     if (addr && !separator && (threeLevelAddressing === null || threeLevelAddressing == undefined)) {
-      return this.GetAddress_(addr as string)
+      return this.GetAddress_(addr as string);
     }
     if (addr instanceof Buffer) {
       let group = separator === '/';
@@ -247,7 +247,7 @@ export class KNXHelper {
   static KnxDestinationAddressType = {
     INDIVIDUAL: 0,
     GROUP: 1
-  }
+  };
   static GetKnxDestinationAddressType(control_field_2: number) {
     return (0x80 & control_field_2) != 0
       ? this.KnxDestinationAddressType.GROUP
@@ -301,7 +301,7 @@ export class KNXHelper {
       case 2:
         //TODO: originally, here is utf code to char convert (String.fromCharCode).
         // Interpreta el tercer byte como un carácter Unicode.
-        return (apdu[2]).toString()
+        return (apdu[2]).toString();
       // return String.fromCharCode(apdu[2]);
       case 3:
         let sign = apdu[2] >> 7;
@@ -338,6 +338,12 @@ export class KNXHelper {
      * - Para datos de 4 bytes (por ejemplo, DPT9 - float), realiza la conversión a formato KNX (mantisa/exponente) y los escribe en las posiciones correspondientes.
      * - Para datos de longitud > 1, los copia a partir de la posición indicada, ajustando si el primer byte < 0x3F.
      *
+     * @example
+     * // Escribir un valor de 1 bit (DPT1) en un telegrama a partir de la posición 7
+     * KNXHelper.WriteData(telegram, Buffer.from([0x01]), 7);
+     *
+     * // Escribir un valor float (DPT9) en un telegrama a partir de la posición 7
+     * KNXHelper.WriteData(telegram, Buffer.from([0x00, 0x00, 0x48, 0x42]), 7);
      *
      * @param datagram Buffer destino donde se escriben los datos (por ejemplo, el frame KNX).
      * @param data Buffer con los datos a escribir (payload APDU).
@@ -345,12 +351,6 @@ export class KNXHelper {
      *
      * @throws {Error} Si los datos no son válidos para el tipo esperado.
      *
-     * @example
-     * // Escribir un valor de 1 bit (DPT1) en un telegrama a partir de la posición 7
-     * KNXHelper.WriteData(telegram, Buffer.from([0x01]), 7);
-     *
-     * // Escribir un valor float (DPT9) en un telegrama a partir de la posición 7
-     * KNXHelper.WriteData(telegram, Buffer.from([0x00, 0x00, 0x48, 0x42]), 7);
      */
   static WriteData(datagram: Buffer, data: Buffer, dataStart: number) {
     if (data.length == 1) {
@@ -371,13 +371,13 @@ export class KNXHelper {
         // find the minimum exponent that will upsize the normalized mantissa (0,5 to 1 range)
         // in order to fit in 11 bits ([-2048, 2047])
         let max_mantissa = 0;
-        let e
+        let e;
         for (e = exponent; e >= -15; e--) {
           max_mantissa = this.Idexp(100 * mantissa, e);
           if (max_mantissa > -2048 && max_mantissa < 2047) break;
         }
-        let sign = (mantissa < 0) ? 1 : 0
-        let mant = (mantissa < 0) ? ~(max_mantissa ^ 2047) : max_mantissa
+        let sign = (mantissa < 0) ? 1 : 0;
+        let mant = (mantissa < 0) ? ~(max_mantissa ^ 2047) : max_mantissa;
         let exp = exponent - e;
         apdu_data = Buffer.alloc(2);
         // yucks
@@ -388,7 +388,7 @@ export class KNXHelper {
         datagram[dataStart + 1] = apdu_data[0];
         datagram[dataStart + 2] = apdu_data[1];
       } else {
-        throw new Error("apdu_data is not defined")
+        throw new Error("apdu_data is not defined");
       }
     } else if (data.length > 1) {
       if (data[0] < 0x3F) {
@@ -473,7 +473,7 @@ export class KNXHelper {
      * UNKNOWN = -1
      */
     UNKNOWN: -1
-  }
+  };
   static GetServiceType(datagram: Buffer) {
     switch (datagram[2]) {
       case (0x02):

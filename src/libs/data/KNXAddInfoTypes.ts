@@ -37,6 +37,10 @@ abstract class AddInfoBase implements IAddInfoType {
         return this._dataLength;
     }
 
+    public get totalLength() {
+        return this.getBuffer().length;
+    }
+
     public abstract getBuffer(): Buffer;
 
     /**
@@ -80,7 +84,7 @@ abstract class AddInfoBase implements IAddInfoType {
  * Implementación de AddInfoType 02h: RF medium information.
  * Longitud de datos: 8 octetos.
  */
-class AddInfoType02h extends AddInfoBase {
+export class RFMediumInformation extends AddInfoBase {
     private _rfInfo: number = 0;
     private _serialNumberOrDoA: Buffer = Buffer.alloc(6);
     private _lfn: number = 0;
@@ -89,7 +93,7 @@ class AddInfoType02h extends AddInfoBase {
     public static readonly DATA_LENGTH = 0x08;
 
     constructor(buffer?: Buffer) {
-        super(AddInfoType02h.TYPE_ID, AddInfoType02h.DATA_LENGTH);
+        super(RFMediumInformation.TYPE_ID, RFMediumInformation.DATA_LENGTH);
 
         if (buffer) {
             const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
@@ -181,14 +185,14 @@ class AddInfoType02h extends AddInfoBase {
  * Implementación de AddInfoType 06h: Extended relative timestamp.
  * Longitud de datos: 4 octetos.
  */
-class AddInfoType06h extends AddInfoBase {
+export class ExtendedRelativeTimestamp extends AddInfoBase {
     private _timestamp: number = 0;
 
     public static readonly TYPE_ID = 0x06;
     public static readonly DATA_LENGTH = 0x04;
 
     constructor(buffer?: Buffer) {
-        super(AddInfoType06h.TYPE_ID, AddInfoType06h.DATA_LENGTH);
+        super(ExtendedRelativeTimestamp.TYPE_ID, ExtendedRelativeTimestamp.DATA_LENGTH);
 
         if (buffer) {
             const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
@@ -220,7 +224,7 @@ class AddInfoType06h extends AddInfoBase {
  * Implementación de AddInfoType 07h: BiBat information.
  * Longitud de datos: 2 octetos.
  */
-class AddInfoType07h extends AddInfoBase {
+export class BiBatInformation extends AddInfoBase {
     private _bibatCtrl: number = 0;
     private _bibatBlock: number = 0;
 
@@ -228,7 +232,7 @@ class AddInfoType07h extends AddInfoBase {
     public static readonly DATA_LENGTH = 0x02;
 
     constructor(buffer?: Buffer) {
-        super(AddInfoType07h.TYPE_ID, AddInfoType07h.DATA_LENGTH);
+        super(BiBatInformation.TYPE_ID, BiBatInformation.DATA_LENGTH);
 
         if (buffer) {
             const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
@@ -271,7 +275,7 @@ class AddInfoType07h extends AddInfoBase {
  * Implementación de AddInfoType 08h: RF Multi information.
  * Longitud de datos: 4 octetos.
  */
-class AddInfoType08h extends AddInfoBase {
+export class RFMultiInformation extends AddInfoBase {
     private _transmissionFrequency: number = 0;
     private _callChannel: number = 0;
     private _physicalAcknowledge: number = 0;
@@ -281,7 +285,7 @@ class AddInfoType08h extends AddInfoBase {
     public static readonly DATA_LENGTH = 0x04;
 
     constructor(buffer?: Buffer) {
-        super(AddInfoType08h.TYPE_ID, AddInfoType08h.DATA_LENGTH);
+        super(RFMultiInformation.TYPE_ID, RFMultiInformation.DATA_LENGTH);
 
         if (buffer) {
             const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
@@ -351,7 +355,7 @@ class AddInfoType08h extends AddInfoBase {
  * Implementación de AddInfoType 09h: Preamble and postamble.
  * Longitud de datos: 3 octetos.
  */
-class AddInfoType09h extends AddInfoBase {
+export class PreambleAndPostamble extends AddInfoBase {
     private _preambleLength: number = 0;
     private _postambleLength: number = 0;
 
@@ -359,7 +363,7 @@ class AddInfoType09h extends AddInfoBase {
     public static readonly DATA_LENGTH = 0x03;
 
     constructor(buffer?: Buffer) {
-        super(AddInfoType09h.TYPE_ID, AddInfoType09h.DATA_LENGTH);
+        super(PreambleAndPostamble.TYPE_ID, PreambleAndPostamble.DATA_LENGTH);
 
         if (buffer) {
             const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
@@ -405,14 +409,14 @@ interface IRfFastAck {
  * Implementación de AddInfoType 0Ah: RF Fast ack information.
  * Longitud de datos: Variable (N * 2 octetos).
  */
-class AddInfoType0Ah extends AddInfoBase {
+export class RFFastACKInformation extends AddInfoBase {
     private _fastAcks: IRfFastAck[] = [];
 
     public static readonly TYPE_ID = 0x0A;
 
     constructor(buffer?: Buffer) {
         // Longitud de datos inicial es 0, se recalculará
-        super(AddInfoType0Ah.TYPE_ID, 0);
+        super(RFFastACKInformation.TYPE_ID, 0);
 
         if (buffer) {
             // No podemos usar parseDataBuffer directamente por la longitud variable
@@ -485,7 +489,7 @@ class AddInfoType0Ah extends AddInfoBase {
  * Implementación de AddInfoType FEh: Manufacturer specific data.
  * Longitud de datos: Variable (N + 3 octetos).
  */
-class AddInfoTypeFEh extends AddInfoBase {
+export class ManufacturerSpecificData extends AddInfoBase {
     private _manufacturerId: number = 0;
     private _subfunction: number = 0;
     private _data: Buffer = Buffer.alloc(0);
@@ -495,7 +499,7 @@ class AddInfoTypeFEh extends AddInfoBase {
 
     constructor(buffer?: Buffer) {
         // Longitud de datos inicial es 3 (mínimo), se recalculará
-        super(AddInfoTypeFEh.TYPE_ID, AddInfoTypeFEh.MIN_DATA_LENGTH);
+        super(ManufacturerSpecificData.TYPE_ID, ManufacturerSpecificData.MIN_DATA_LENGTH);
 
         if (buffer) {
             // No podemos usar parseDataBuffer directamente por la longitud variable
@@ -515,7 +519,7 @@ class AddInfoTypeFEh extends AddInfoBase {
                 throw new Error(`[AddInfoTypeFEh] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`);
             }
 
-            if (length < AddInfoTypeFEh.MIN_DATA_LENGTH) {
+            if (length < ManufacturerSpecificData.MIN_DATA_LENGTH) {
                 throw new Error(`[AddInfoTypeFEh] Longitud de datos inválida. Debe ser al menos 3, se recibió ${length}.`);
             }
             
@@ -563,45 +567,3 @@ class AddInfoTypeFEh extends AddInfoBase {
         return buffer;
     }
 }
-
-// --- Ejemplo de uso (opcional, para demostración) ---
-// try {
-//     console.log("--- Creando AddInfoType02h (RF Info) por defecto ---");
-//     const rfInfo = new AddInfoType02h();
-//     rfInfo.serialNumberOrDoA = Buffer.from([0x01, 0x02, 0x03, 0x04, 0x05, 0x06]);
-//     rfInfo.lfn = 0xAB;
-//     rfInfo.routeLastFlag = true;
-//     rfInfo.rssi = 0b10; // medium
-//     console.log(rfInfo.getBuffer().toString('hex')); // Debería ser: 02088a010203040506ab
-
-//     console.log("\n--- Parseando AddInfoType06h (Timestamp) ---");
-//     const tsBuffer = Buffer.from([0x06, 0x04, 0x00, 0x1A, 0xBC, 0xDE]);
-//     const timestamp = new AddInfoType06h(tsBuffer);
-//     console.log(`Timestamp: ${timestamp.timestamp} (0x${timestamp.timestamp.toString(16)})`); // 1752286
-
-//     console.log("\n--- Creando AddInfoType08h (RF Multi) ---");
-//     const rfMulti = new AddInfoType08h();
-//     rfMulti.transmissionFrequency = 0x02; // F1 (RF1.M)
-//     rfMulti.fastCallChannel = 0x01; // F2
-//     rfMulti.slowCallChannel = 0x0F; // use current
-//     rfMulti.physicalAcknowledge = 3; // 3 acks
-//     rfMulti.receptionFrequency = 0x07; // Fx (RF1.M)
-//     console.log(rfMulti.getBuffer().toString('hex')); // Debería ser: 0804021f0307
-
-//     console.log("\n--- Creando AddInfoTypeFEh (Manuf. Specific) ---");
-//     const manuf = new AddInfoTypeFEh();
-//     manuf.manufacturerId = 0x00CD; // KNX Association
-//     manuf.subfunction = 0x01;
-//     manuf.data = Buffer.from([0xDE, 0xAD, 0xBE, 0xEF]);
-//     console.log(manuf.getBuffer().toString('hex')); // Debería ser: fe0700cd01deadbeef
-    
-//     console.log("\n--- Parseando AddInfoTypeFEh (Manuf. Specific) ---");
-//     const manufBuffer = Buffer.from([0xFE, 0x05, 0x12, 0x34, 0xFF, 0xAA, 0xBB]);
-//     const parsedManuf = new AddInfoTypeFEh(manufBuffer);
-//     console.log(`Manuf ID: 0x${parsedManuf.manufacturerId.toString(16)}`); // 1234
-//     console.log(`Subfunction: 0x${parsedManuf.subfunction.toString(16)}`); // ff
-//     console.log(`Data: ${parsedManuf.data.toString('hex')}`); // aabb
-
-// } catch (e) {
-//     console.error("Error en el ejemplo de uso:", e);
-// }
