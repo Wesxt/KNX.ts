@@ -6,7 +6,7 @@ import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
 import { APCI } from "./APCI";
 import { APCIEnum } from "./enum/APCIEnum";
 
-interface DescribeEstructure {
+export interface DescribeEstructure {
   /**
    * Proporciona una descripción legible del estado actual de las propiedades del sistema.
    * @returns Un objeto que describe el estado de cada propiedad.
@@ -14,7 +14,7 @@ interface DescribeEstructure {
   describe(): Record<string, string | number | Buffer | Record<string, any>>;
 }
 
-interface ServiceMessage extends DescribeEstructure {
+export interface ServiceMessage extends DescribeEstructure {
   /** Write the service to the buffer */
   toBuffer(): Buffer;
 }
@@ -860,14 +860,14 @@ export function verifyAndRemoveFCS(buffer: Buffer): Buffer {
  * @author Arnold Beleño Zuletta
  */
 export class EMI {
-  constructor() { }
+  constructor() { throw new Error('This class is static'); }
 
   /**
    * Crea una instancia de un servicio EMI a partir de un buffer
    * @param buffer Buffer completo del mensaje EMI (incluyendo Message Code)
    * @returns Instancia del servicio correspondiente
    */
-  fromBuffer(buffer: Buffer): ServiceMessage {
+  static fromBuffer(buffer: Buffer): ServiceMessage {
     if (buffer.length === 0) {
       throw new Error("Buffer is empty");
     }
@@ -896,7 +896,7 @@ export class EMI {
     }
 
     // Buscar la clase en los grupos estáticos
-    const groups = [this.LayerAccess, this.BusmonitorEMI, this.DataLinkLayerEMI, this.NetworkLayerEMI, this.TransportLayerEMI, this.ApplicationLayerEMI];
+    const groups = [EMI.LayerAccess, EMI.BusmonitorEMI, EMI.DataLinkLayerEMI, EMI.NetworkLayerEMI, EMI.TransportLayerEMI, EMI.ApplicationLayerEMI];
 
     for (const group of groups) {
       // @ts-ignore
@@ -912,7 +912,7 @@ export class EMI {
   /**
    * @deprecated **No uses esto, está en desuso**
    */
-  LayerAccess = {
+  static LayerAccess = {
     "PEI_Switch.req": class PEISwitchReq implements ServiceMessage {
       constructor(value: PEI_Switch_req) {
         this.systemStatus = value.systemStatus;
@@ -1083,7 +1083,7 @@ export class EMI {
    *
    * **Note:** The LM_Reset.ind message is not implemented.
    */
-  BusmonitorEMI = {
+  static BusmonitorEMI = {
     "L_Busmon.ind": class LBusmonInd implements ServiceMessage {
       constructor(value: L_Busmon_ind) {
         if (typeof value !== "object" || value === null) {
@@ -1272,7 +1272,7 @@ export class EMI {
    * In normal operation mode of the Data Link Layer, exactly the L_Data.req, the L_Data.ind, the
    * L_Data.con, the L_Poll_Data.req and the L_Poll_Data.con messages shall be available.
    */
-  DataLinkLayerEMI = {
+  static DataLinkLayerEMI = {
     "L_Data.req": class LDataReq implements ServiceMessage {
       constructor(value: L_Data_req) {
         if (typeof value !== "object" || value === null) {
@@ -1987,7 +1987,7 @@ export class EMI {
    * N_Data_Broadcast.req, N_Data_Broadcast.con, N_Data_Broadcast.ind, N_Poll_Data.req and
    * N_Poll_Data.con messages are available. All NL services belong to EMI/IMI2 only.
    */
-  NetworkLayerEMI = {
+  static NetworkLayerEMI = {
     "N_Data_Individual.req": class NDataIndividualReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
       controlField: ControlField;
@@ -3014,7 +3014,7 @@ export class EMI {
       }
     },
   } as const;
-  TransportLayerEMI = {
+  static TransportLayerEMI = {
     "T_Connect.req": class TConnectReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Connect.req"]["EMI2/IMI2"].value;
       control = 0x00;
@@ -4070,7 +4070,7 @@ export class EMI {
    * M_User_Data_Connected.req, M_User_Data_Connected.ind, M_User_Data_Connected.con,
    * M_User_Data_Individual.req, M_User_Data_Individual.ind and M_User_Data_Individual.con services.
    */
-  ApplicationLayerEMI = {
+  static ApplicationLayerEMI = {
     "M_Connect.ind": class MConnectInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_Connect.ind"]["EMI2/IMI2"].value;
       sourceAddress: string;
@@ -4836,12 +4836,14 @@ export class EMI {
     },
   } as const;
 }
-type KeysOfEMI = Exclude<keyof EMI, "LayerAccess">;
+
+
+type KeysOfEMI = "BusmonitorEMI" | "DataLinkLayerEMI" | "NetworkLayerEMI" | "TransportLayerEMI" | "ApplicationLayerEMI";
 
 /**
  * List of services that do not implement the static fromBuffer method yet.
  */
-type ExcludedServices = keyof EMI;
+type ExcludedServices = never;
 
 /**
  * Validates that a class constructor has a static fromBuffer method
@@ -4860,14 +4862,12 @@ type EMIServiceConstructor<T> = T extends { new(...args: any[]): infer I; }
  * correctly implements the static fromBuffer method.
  */
 type EMIValidator = {
-  new(): {
-    [K in KeysOfEMI]: {
-      [S in keyof EMI[K]]: S extends ExcludedServices
-      ? any
-      : EMI[K][S] extends { new(...args: any[]): any; }
-      ? EMIServiceConstructor<EMI[K][S]>
-      : any;
-    };
+  [K in KeysOfEMI]: {
+    [S in keyof typeof EMI[K]]: S extends ExcludedServices
+    ? any
+    : typeof EMI[K][S] extends { new(...args: any[]): any; }
+    ? EMIServiceConstructor<typeof EMI[K][S]>
+    : any;
   };
 };
 // !! This is for verify all class if have the method fromBuffer

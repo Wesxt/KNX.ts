@@ -1,4 +1,5 @@
-import { Buffer } from 'buffer';
+import { Buffer } from "buffer";
+import { KNXHelper } from "../utils/class/KNXHelper";
 
 /**
  * Interfaz base para todos los tipos de AddInfo.
@@ -20,7 +21,7 @@ interface IAddInfoType {
 /**
  * Clase base abstracta para ayudar a implementar IAddInfoType.
  */
-abstract class AddInfoBase implements IAddInfoType {
+export abstract class AddInfoBase implements IAddInfoType {
     protected _typeId: number;
     protected _dataLength: number; // Longitud de los datos (sin TypeID y Length byte)
 
@@ -52,27 +53,70 @@ abstract class AddInfoBase implements IAddInfoType {
      */
     protected static parseDataBuffer(buffer: Buffer, expectedType: number, expectedLength?: number): Buffer {
         if (buffer.length < 2) {
-            throw new Error(`[AddInfoBase] Buffer demasiado corto. Se esperaban al menos 2 octetos, se recibieron ${buffer.length}.`);
+            throw new Error(
+                `[AddInfoBase] Buffer demasiado corto. Se esperaban al menos 2 octetos, se recibieron ${buffer.length}.`
+            );
         }
 
         const typeId = buffer.readUInt8(0);
         const length = buffer.readUInt8(1);
 
         if (typeId !== expectedType) {
-            throw new Error(`[AddInfoBase] Type ID incorrecto. Se esperaba 0x${expectedType.toString(16)}, se recibió 0x${typeId.toString(16)}.`);
+            throw new Error(
+                `[AddInfoBase] Type ID incorrecto. Se esperaba 0x${expectedType.toString(16)}, se recibió 0x${typeId.toString(
+                    16
+                )}.`
+            );
         }
 
         const dataBuffer = buffer.subarray(2);
 
         if (dataBuffer.length !== length) {
-            throw new Error(`[AddInfoBase] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`);
+            throw new Error(
+                `[AddInfoBase] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`
+            );
         }
 
         if (expectedLength !== undefined && length !== expectedLength) {
-            throw new Error(`[AddInfoBase] Longitud de datos incorrecta. Se esperaba ${expectedLength}, se recibió ${length}.`);
+            throw new Error(
+                `[AddInfoBase] Longitud de datos incorrecta. Se esperaba ${expectedLength}, se recibió ${length}.`
+            );
         }
 
         return dataBuffer;
+    }
+}
+
+export class PLMediumInfo extends AddInfoBase {
+    public static readonly TYPE_ID = 0x01;
+    public static readonly DATA_LENGTH = 0x02;
+
+    constructor(buffer?: Buffer) {
+        super(PLMediumInfo.TYPE_ID, PLMediumInfo.DATA_LENGTH);
+
+        if (buffer) {
+            const data = AddInfoBase.parseDataBuffer(buffer, PLMediumInfo.TYPE_ID, PLMediumInfo.DATA_LENGTH);
+            data.copy(this._domainAddress, 0, 2);
+        }
+    }
+
+    private _domainAddress: Buffer = Buffer.alloc(2);
+
+    public set domainAddress(value: Buffer) {
+        this._domainAddress = value;
+    }
+
+    public get domainAddress() {
+        return this._domainAddress;
+    }
+
+    public getBuffer(): Buffer {
+        const buffer = Buffer.alloc(4); // 1 (Type) + 1 (Length) + 2 (Data)
+        buffer.writeUInt8(this._typeId, 0);
+        buffer.writeUInt8(this._dataLength, 1);
+        buffer.writeUInt8(this._domainAddress[0], 2);
+        buffer.writeUInt8(this._domainAddress[1], 3);
+        return buffer;
     }
 }
 
@@ -112,7 +156,7 @@ export class RFMediumInformation extends AddInfoBase {
         return (this._rfInfo & 0b10000000) !== 0;
     }
     public set routeLastFlag(value: boolean) {
-        this._rfInfo = value ? (this._rfInfo | 0b10000000) : (this._rfInfo & ~0b10000000);
+        this._rfInfo = value ? this._rfInfo | 0b10000000 : this._rfInfo & ~0b10000000;
     }
 
     public get rssi(): number {
@@ -121,26 +165,26 @@ export class RFMediumInformation extends AddInfoBase {
     public set rssi(value: number) {
         this._rfInfo = (this._rfInfo & ~0b00110000) | ((value & 0b11) << 4);
     }
-    
+
     public get retransmitterRssi(): number {
         return (this._rfInfo & 0b00001100) >> 2;
     }
     public set retransmitterRssi(value: number) {
         this._rfInfo = (this._rfInfo & ~0b00001100) | ((value & 0b11) << 2);
     }
-    
+
     public get batteryState(): boolean {
         return (this._rfInfo & 0b00000010) !== 0;
     }
     public set batteryState(value: boolean) {
-        this._rfInfo = value ? (this._rfInfo | 0b00000010) : (this._rfInfo & ~0b00000010);
+        this._rfInfo = value ? this._rfInfo | 0b00000010 : this._rfInfo & ~0b00000010;
     }
 
     public get unidirFlag(): boolean {
         return (this._rfInfo & 0b00000001) !== 0;
     }
     public set unidirFlag(value: boolean) {
-        this._rfInfo = value ? (this._rfInfo | 0b00000001) : (this._rfInfo & ~0b00000001);
+        this._rfInfo = value ? this._rfInfo | 0b00000001 : this._rfInfo & ~0b00000001;
     }
 
     // --- Getters y Setters para otros campos ---
@@ -159,7 +203,7 @@ export class RFMediumInformation extends AddInfoBase {
         return this._lfn;
     }
     public set lfn(value: number) {
-        this._lfn = value & 0xFF;
+        this._lfn = value & 0xff;
     }
 
     // --- Método getBuffer ---
@@ -168,11 +212,11 @@ export class RFMediumInformation extends AddInfoBase {
         const buffer = Buffer.alloc(10); // 1 (Type) + 1 (Length) + 8 (Data)
         buffer.writeUInt8(this._typeId, 0);
         buffer.writeUInt8(this._dataLength, 1);
-        
+
         buffer.writeUInt8(this._rfInfo, 2);
         this._serialNumberOrDoA.copy(buffer, 3);
         buffer.writeUInt8(this._lfn, 9);
-        
+
         return buffer;
     }
 }
@@ -243,18 +287,18 @@ export class BiBatInformation extends AddInfoBase {
 
     public get bibatCtrl(): number {
         // Devuelve solo los 4 bits superiores
-        return (this._bibatCtrl & 0xF0) >> 4;
+        return (this._bibatCtrl & 0xf0) >> 4;
     }
     public set bibatCtrl(value: number) {
         // Establece solo los 4 bits superiores
-        this._bibatCtrl = (this._bibatCtrl & 0x0F) | ((value & 0x0F) << 4);
+        this._bibatCtrl = (this._bibatCtrl & 0x0f) | ((value & 0x0f) << 4);
     }
-    
+
     public get bibatBlock(): number {
         return this._bibatBlock;
     }
     public set bibatBlock(value: number) {
-        this._bibatBlock = value & 0xFF;
+        this._bibatBlock = value & 0xff;
     }
 
     public getBuffer(): Buffer {
@@ -301,22 +345,22 @@ export class RFMultiInformation extends AddInfoBase {
         return this._transmissionFrequency;
     }
     public set transmissionFrequency(value: number) {
-        this._transmissionFrequency = value & 0xFF;
+        this._transmissionFrequency = value & 0xff;
     }
 
     // 4.1.4.3.5.3 Fast and Slow Call Channel
     public get fastCallChannel(): number {
-        return (this._callChannel & 0xF0) >> 4;
+        return (this._callChannel & 0xf0) >> 4;
     }
     public set fastCallChannel(value: number) {
-        this._callChannel = (this._callChannel & 0x0F) | ((value & 0x0F) << 4);
+        this._callChannel = (this._callChannel & 0x0f) | ((value & 0x0f) << 4);
     }
-    
+
     public get slowCallChannel(): number {
-        return this._callChannel & 0x0F;
+        return this._callChannel & 0x0f;
     }
     public set slowCallChannel(value: number) {
-        this._callChannel = (this._callChannel & 0xF0) | (value & 0x0F);
+        this._callChannel = (this._callChannel & 0xf0) | (value & 0x0f);
     }
 
     // 4.1.4.3.5.4 Physical Acknowledge
@@ -324,7 +368,7 @@ export class RFMultiInformation extends AddInfoBase {
         return this._physicalAcknowledge;
     }
     public set physicalAcknowledge(value: number) {
-        this._physicalAcknowledge = value & 0xFF;
+        this._physicalAcknowledge = value & 0xff;
     }
 
     // 4.1.4.3.5.5 Reception frequency
@@ -332,7 +376,7 @@ export class RFMultiInformation extends AddInfoBase {
         return this._receptionFrequency;
     }
     public set receptionFrequency(value: number) {
-        this._receptionFrequency = value & 0xFF;
+        this._receptionFrequency = value & 0xff;
     }
 
     public getBuffer(): Buffer {
@@ -376,14 +420,14 @@ export class PreambleAndPostamble extends AddInfoBase {
         return this._preambleLength;
     }
     public set preambleLength(value: number) {
-        this._preambleLength = value & 0xFFFF;
+        this._preambleLength = value & 0xffff;
     }
-    
+
     public get postambleLength(): number {
         return this._postambleLength;
     }
     public set postambleLength(value: number) {
-        this._postambleLength = value & 0xFF;
+        this._postambleLength = value & 0xff;
     }
 
     public getBuffer(): Buffer {
@@ -412,7 +456,7 @@ interface IRfFastAck {
 export class RFFastACKInformation extends AddInfoBase {
     private _fastAcks: IRfFastAck[] = [];
 
-    public static readonly TYPE_ID = 0x0A;
+    public static readonly TYPE_ID = 0x0a;
 
     constructor(buffer?: Buffer) {
         // Longitud de datos inicial es 0, se recalculará
@@ -427,25 +471,33 @@ export class RFFastACKInformation extends AddInfoBase {
             const length = buffer.readUInt8(1);
 
             if (typeId !== this._typeId) {
-                throw new Error(`[AddInfoType0Ah] Type ID incorrecto. Se esperaba 0x${this._typeId.toString(16)}, se recibió 0x${typeId.toString(16)}.`);
+                throw new Error(
+                    `[AddInfoType0Ah] Type ID incorrecto. Se esperaba 0x${this._typeId.toString(
+                        16
+                    )}, se recibió 0x${typeId.toString(16)}.`
+                );
             }
-            
+
             const dataBuffer = buffer.subarray(2);
 
             if (dataBuffer.length !== length) {
-                throw new Error(`[AddInfoType0Ah] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`);
+                throw new Error(
+                    `[AddInfoType0Ah] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`
+                );
             }
 
             if (length % 2 !== 0) {
-                throw new Error(`[AddInfoType0Ah] Longitud de datos inválida. Debe ser un múltiplo de 2, se recibió ${length}.`);
+                throw new Error(
+                    `[AddInfoType0Ah] Longitud de datos inválida. Debe ser un múltiplo de 2, se recibió ${length}.`
+                );
             }
-            
+
             this._dataLength = length;
 
             for (let i = 0; i < length; i += 2) {
                 this._fastAcks.push({
                     status: dataBuffer.readUInt8(i),
-                    info: dataBuffer.readUInt8(i + 1)
+                    info: dataBuffer.readUInt8(i + 1),
                 });
             }
         }
@@ -454,12 +506,12 @@ export class RFFastACKInformation extends AddInfoBase {
     public getFastAcks(): IRfFastAck[] {
         return [...this._fastAcks];
     }
-    
+
     public setFastAcks(acks: IRfFastAck[]) {
         this._fastAcks = [...acks];
         this._dataLength = this._fastAcks.length * 2;
     }
-    
+
     public addFastAck(ack: IRfFastAck) {
         this._fastAcks.push(ack);
         this._dataLength += 2;
@@ -469,14 +521,14 @@ export class RFFastACKInformation extends AddInfoBase {
         const buffer = Buffer.alloc(2 + this._dataLength);
         buffer.writeUInt8(this._typeId, 0);
         buffer.writeUInt8(this._dataLength, 1);
-        
+
         let offset = 2;
         for (const ack of this._fastAcks) {
-            buffer.writeUInt8(ack.status & 0xFF, offset);
-            buffer.writeUInt8(ack.info & 0xFF, offset + 1);
+            buffer.writeUInt8(ack.status & 0xff, offset);
+            buffer.writeUInt8(ack.info & 0xff, offset + 1);
             offset += 2;
         }
-        
+
         return buffer;
     }
 }
@@ -494,7 +546,7 @@ export class ManufacturerSpecificData extends AddInfoBase {
     private _subfunction: number = 0;
     private _data: Buffer = Buffer.alloc(0);
 
-    public static readonly TYPE_ID = 0xFE;
+    public static readonly TYPE_ID = 0xfe;
     public static readonly MIN_DATA_LENGTH = 3;
 
     constructor(buffer?: Buffer) {
@@ -510,24 +562,29 @@ export class ManufacturerSpecificData extends AddInfoBase {
             const length = buffer.readUInt8(1);
 
             if (typeId !== this._typeId) {
-                throw new Error(`[AddInfoTypeFEh] Type ID incorrecto. Se esperaba 0x${this._typeId.toString(16)}, se recibió 0x${typeId.toString(16)}.`);
+                throw new Error(
+                    `[AddInfoTypeFEh] Type ID incorrecto. Se esperaba 0x${this._typeId.toString(
+                        16
+                    )}, se recibió 0x${typeId.toString(16)}.`
+                );
             }
 
             const dataBuffer = buffer.subarray(2);
 
             if (dataBuffer.length !== length) {
-                throw new Error(`[AddInfoTypeFEh] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`);
+                throw new Error(
+                    `[AddInfoTypeFEh] Discrepancia en la longitud del buffer. El header dice ${length}, pero los datos tienen ${dataBuffer.length} octetos.`
+                );
             }
 
             if (length < ManufacturerSpecificData.MIN_DATA_LENGTH) {
                 throw new Error(`[AddInfoTypeFEh] Longitud de datos inválida. Debe ser al menos 3, se recibió ${length}.`);
             }
-            
+
             this._dataLength = length;
             this._manufacturerId = dataBuffer.readUInt16BE(0);
             this._subfunction = dataBuffer.readUInt8(2);
             this._data = Buffer.from(dataBuffer.subarray(3));
-
         }
     }
 
@@ -535,14 +592,14 @@ export class ManufacturerSpecificData extends AddInfoBase {
         return this._manufacturerId;
     }
     public set manufacturerId(value: number) {
-        this._manufacturerId = value & 0xFFFF;
+        this._manufacturerId = value & 0xffff;
     }
-    
+
     public get subfunction(): number {
         return this._subfunction;
     }
     public set subfunction(value: number) {
-        this._subfunction = value & 0xFF;
+        this._subfunction = value & 0xff;
     }
 
     public get data(): Buffer {
@@ -556,14 +613,14 @@ export class ManufacturerSpecificData extends AddInfoBase {
     public getBuffer(): Buffer {
         this._dataLength = 3 + this._data.length;
         const buffer = Buffer.alloc(2 + this._dataLength);
-        
+
         buffer.writeUInt8(this._typeId, 0);
         buffer.writeUInt8(this._dataLength, 1);
-        
+
         buffer.writeUInt16BE(this._manufacturerId, 2);
         buffer.writeUInt8(this._subfunction, 4);
         this._data.copy(buffer, 5);
-        
+
         return buffer;
     }
 }
