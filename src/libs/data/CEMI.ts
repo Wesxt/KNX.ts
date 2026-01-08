@@ -14,6 +14,9 @@ import {
   RFMultiInformation,
 } from "./KNXAddInfoTypes";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
+import { APCI } from "./APCI";
+import { APCIEnum } from "./enum/APCIEnum";
+import { TPCI } from "./TPCI";
 
 /**
  * Enum for Additional Information Types (PDF Section 4.1.4.3.1)
@@ -179,7 +182,6 @@ export class CEMI implements ServiceMessage {
     KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 6 + bufferAdditionalInfo.length);
     buffer.writeUInt8(this.length, 8 + bufferAdditionalInfo.length);
     // Aqui hay que tener en cuenta al APCI
-    KNXHelper.WriteData(this.NPDU, 9);
   }
   describe() {
     return {

@@ -10,29 +10,29 @@ export enum TPCIType {
   /** Destination address ≠ 0
    * - The T_Data_Group service shall be applied by the user of Transport Layer, to transmit a TSDU (Transport Service Data Unit) over a multicast communication mode to one or more remote partners.
    */
-  T_DATA_GROUP_PDU = 0x01,
+  T_DATA_GROUP_PDU = 0x00,
   /** The T_Data_Tag_Group-service shall be applied by the user of Transport Layer, to transmit a TSDU over a multicast communication mode to one or more remote partners. */
-  T_DATA_TAG_GROUP_PDU = 0x00,
+  T_DATA_TAG_GROUP_PDU = 0x04,
   /** PDU (Protocol Data Unit) individual
    * - The T_Data_Individual service shall be applied by the user of Transport Layer, to transmit a TSDU over a connectionless point-to-point communication mode to exactly one remote partner.
    */
-  T_DATA_INDIVIDUAL_PDU = 0x01,
+  T_DATA_INDIVIDUAL_PDU = 0x00,
   /** PDU (Protocol Data Unit) connected
    * - The T_Data_Connected service shall b applied by the user of Transport Layer, to transmit a TSDU over a Transport Layer connection on a connection-oriented communication mode to a remote partner.
    */
-  T_DATA_CONNECTED_PDU = 0x10,
+  T_DATA_CONNECTED_PDU = 0x40,
   /** Establish connection
    * - The T_Connect service shall be applied by the user of Transport Layer, to establish a Transport Layer connection on a connection-oriented point-to-point communication mode.
-  */
+   */
   T_CONNECT_PDU = 0x80,
   /** End connection
    * - The T_Disconnect service shall be applied by the user of Transport Layer, to release a Transport Layer connection on a connection-oriented point-to-point communication mode.
    */
   T_DISCONNECT_PDU = 0x81,
   /** Acknowledgement */
-  T_ACK_PDU = 0xC0,
+  T_ACK_PDU = 0xc2,
   /** Negative Acknowledgement */
-  T_NAK_PDU = 0xC1
+  T_NAK_PDU = 0xc3,
 }
 
 /**
@@ -44,19 +44,20 @@ export enum TPCIType {
  *   - Bit 6         : Numbered flag (1 = Mensaje numerado, 0 = No numerado)
  *   - Bits 5..2     : Número de secuencia (4 bits: 0..15)
  *   - Bits 1..0     : Reservados para el Application Layer Control Field (APCI) (se fijan a 0)
- * 
+ *
  * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Transport Layer of the KNX System, Version 01.02.03"
  */
 export class TPCI {
   private _buffer: Buffer;
 
-  constructor(initialValue: TPCIType = 0) {
+  constructor(initialValue: TPCIType = 0, seqNum = 1) {
     this._buffer = Buffer.alloc(1);
-    this.setValue(initialValue);
+    this._buffer.writeUint8(initialValue, 0);
+    this.sequenceNumber = seqNum;
   }
 
   /**
-   * Devuelve el valor crudo (8 bits) del TPCI.
+   * Devuelve el valor crudo (8 bits) del TPCI/APCI.
    */
   getValue(): number {
     return this._buffer[0];
@@ -66,7 +67,7 @@ export class TPCI {
    * Asigna el valor crudo (8 bits) del TPCI.
    */
   setValue(value: number): void {
-    this._buffer[0] = value & 0xFF;
+    this._buffer[0] = (value & 0x3f) << 2;
   }
 
   /**
@@ -82,7 +83,7 @@ export class TPCI {
     if (flag) {
       this._buffer[0] |= 0x80; // Fija bit7 en 1
     } else {
-      this._buffer[0] &= 0x7F; // Limpia bit7
+      this._buffer[0] &= 0x7f; // Limpia bit7
     }
   }
 
@@ -99,7 +100,7 @@ export class TPCI {
     if (flag) {
       this._buffer[0] |= 0x40; // Fija bit6 en 1
     } else {
-      this._buffer[0] &= 0xBF; // 0xBF = 10111111, limpia bit6
+      this._buffer[0] &= 0xbf; // 0xBF = 10111111, limpia bit6
     }
   }
 
@@ -108,7 +109,7 @@ export class TPCI {
    * Valor de 0 a 15.
    */
   get sequenceNumber(): number {
-    return (this._buffer[0] >> 2) & 0x0F;
+    return (this._buffer[0] >> 2) & 0x0f;
   }
 
   set sequenceNumber(seq: number) {
@@ -116,27 +117,26 @@ export class TPCI {
       throw new Error("El número de secuencia debe estar entre 0 y 15");
     }
     // Limpiar bits 5..2: máscara para bits 5..2 es 0x3C (0011 1100)
-    this._buffer[0] &= ~0x3C; 
+    this._buffer[0] &= ~0x3c;
     // Pegar seq en bits 5..2
-    this._buffer[0] |= ((seq & 0x0F) << 2);
+    this._buffer[0] |= (seq & 0x0f) << 2;
   }
 
   /**
-   * Bits Reservados (Bits 1 a 0).
+   * Bits Reservados para APCI (Bits 1 a 0).
    * En esta clase se asumen en 0
    */
-  get reserved(): number {
+  get first2bitsOfAPCI(): number {
     return this._buffer[0] & 0x03; // Máscara 00000011
   }
-/**
- * Primeros dos bits para el Application Layer Control Field (APCI)
- */
-  set reserved(val: number) {
+  /**
+   * Primeros dos bits para el Application Layer Control Field (APCI)
+   */
+  set first2bitsOfAPCI(val: number) {
     if (val < 0 || val > 3) {
       throw new Error("Los bits reservados deben estar entre 0 y 3");
     }
-    this._buffer[0] &= 0xFC; // Limpia bits 1..0 (0xFC = 11111100)
-    this._buffer[0] |= (val & 0x03);
+    this._buffer[0] |= val & 0x03;
   }
 
   /**
@@ -150,7 +150,7 @@ export class TPCI {
    * Representa el TPCI en hexadecimal.
    */
   toHex(): string {
-    return `0x${this._buffer[0].toString(16).padStart(2, '0').toUpperCase()}`;
+    return `0x${this._buffer[0].toString(16).padStart(2, "0").toUpperCase()}`;
   }
   /**
    * Describe la codificación actual del objecto KNXTPCI (Transport Layer Control Field)
@@ -161,20 +161,29 @@ export class TPCI {
     Data/ControlFlag: ${this.dataControlFlag},
     Numbered: ${this.numberedFlag},
     SequenceNumber: ${this.sequenceNumber} (${this.sequenceNumber.toString(2)}),
-    Reserved, the first two bits are for the Application Layer Control Field (APCI): ${this.reserved} (${this.reserved.toString(2)})`
+    Reserved, the first two bits are for the Application Layer Control Field (APCI): ${
+      this.first2bitsOfAPCI
+    } (${this.first2bitsOfAPCI.toString(2)})`;
   }
 
   mapTPCIType(value: TPCIType | number): string {
     switch (value) {
-      case TPCIType.T_DATA_BROADCAST_PDU: return 'T_Data_Broadcast_PDU';
-      case TPCIType.T_DATA_GROUP_PDU: return 'T_Data_Group_PDU';
-      case TPCIType.T_DATA_CONNECTED_PDU: return 'T_DATA_CONNECTED_PDU';
-      case TPCIType.T_CONNECT_PDU: return 'T_CONNECT_PDU';
-      case TPCIType.T_DISCONNECT_PDU: return 'T_DISCONNECT_PDU';
-      case TPCIType.T_ACK_PDU: return 'T_ACK_PDU';
-      case TPCIType.T_NAK_PDU: return 'T_NAK_PDU';
-      default: return 'Unknown PDU';
+      case TPCIType.T_DATA_BROADCAST_PDU:
+        return "T_Data_Broadcast_PDU";
+      case TPCIType.T_DATA_GROUP_PDU:
+        return "T_Data_Group_PDU";
+      case TPCIType.T_DATA_CONNECTED_PDU:
+        return "T_DATA_CONNECTED_PDU";
+      case TPCIType.T_CONNECT_PDU:
+        return "T_CONNECT_PDU";
+      case TPCIType.T_DISCONNECT_PDU:
+        return "T_DISCONNECT_PDU";
+      case TPCIType.T_ACK_PDU:
+        return "T_ACK_PDU";
+      case TPCIType.T_NAK_PDU:
+        return "T_NAK_PDU";
+      default:
+        return "Unknown PDU";
     }
   }
 }
-
