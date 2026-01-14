@@ -1,4 +1,3 @@
-import { buffer } from "stream/consumers";
 import { KNXHelper } from "../utils/class/KNXHelper";
 import { ExtendedControlField } from "./ControlFieldExtended";
 import { ControlField, ServiceMessage } from "./EMI";
@@ -14,9 +13,7 @@ import {
   RFMultiInformation,
 } from "./KNXAddInfoTypes";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
-import { APCI } from "./APCI";
-import { APCIEnum } from "./enum/APCIEnum";
-import { TPCI } from "./TPCI";
+import { TPDU } from "./TPDU";
 
 /**
  * Enum for Additional Information Types (PDF Section 4.1.4.3.1)
@@ -132,7 +129,7 @@ export class CEMI implements ServiceMessage {
    * @param ControlField2 Extended Control Field
    * @param sourceAddress Ej: "1.1.1" or "1/1/1"
    * @param destinationAddress Ej: "1.1.1" or "1/1/1"
-   * @param NPDU Data
+   * @param TPDU Transport Protocol Data Unit
    */
   constructor(
     messageCode: number,
@@ -141,7 +138,7 @@ export class CEMI implements ServiceMessage {
     controlField2: ExtendedControlField,
     sourceAddress: string,
     destinationAddress: string,
-    NPDU: Buffer
+    TPDU: TPDU
   ) {
     const filterCEMIValues = Object.values(MESSAGE_CODE_FIELD).map((item) => {
       if (item && "CEMI" in item) return item.CEMI.value;
@@ -154,8 +151,8 @@ export class CEMI implements ServiceMessage {
     this.controlField2 = controlField2;
     this.sourceAddress = sourceAddress;
     this.destinationAddress = destinationAddress;
-    this.NPDU = NPDU;
-    this.length = KNXHelper.GetDataLength(NPDU);
+    this.TPDU = TPDU;
+    this.length = TPDU.length;
   }
   messageCode: number = 0;
   additionalInfo: AdditionalInformationField = new AdditionalInformationField();
@@ -166,11 +163,11 @@ export class CEMI implements ServiceMessage {
   /** Network Protocol Data Unit => length */
   length: number = 0;
   /** Network Protocol Data Unit => TPCI/APCI */
-  NPDU: Buffer = Buffer.alloc(0);
+  TPDU: TPDU = new TPDU();
 
   toBuffer(): Buffer {
     // Typically the length is 10 bytes
-    // messageCode || additional Info || control field 1 || control field 2 || source address || destination address || length || NPDU => APCI/TPCI
+    // messageCode || additional Info || control field 1 || control field 2 || source address || destination address || length || NPDU => APCI/TPCI => It appears to be only the TPDU because it makes no sense to discard the hop count (which is the network control field) and continue calling it NPDU
     // 1 byte      ||  1 byte         ||  1 byte         ||    1 byte       ||  2 bytes       ||   2 bytes           || 1 byte ||  1 byte => if the data is minor than 256 => depends of APCI and DataPointType (DPT)
     const buffer = Buffer.alloc(10 + this.additionalInfo.additionalInfoLength + this.length);
     buffer.writeUInt8(this.messageCode, 0);
@@ -181,8 +178,12 @@ export class CEMI implements ServiceMessage {
     KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 4 + bufferAdditionalInfo.length);
     KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 6 + bufferAdditionalInfo.length);
     buffer.writeUInt8(this.length, 8 + bufferAdditionalInfo.length);
-    // Aqui hay que tener en cuenta al APCI
+    this.TPDU.toBuffer().copy(buffer, 9 + bufferAdditionalInfo.length);
+    return buffer;
   }
+
+  static fromBuffer(buffer: Buffer) {}
+
   describe() {
     return {
       messageCode: this.messageCode,
@@ -192,12 +193,14 @@ export class CEMI implements ServiceMessage {
       sourceAddress: this.sourceAddress,
       destinationAddress: this.destinationAddress,
       length: this.length,
-      NPDU:
-        "0x" +
-        this.NPDU.toString("hex")
-          .toUpperCase()
-          .match(/.{1,2}/g)
-          ?.join(" "),
+      TPDU: this.TPDU.describe(),
     };
   }
 }
+
+type CEMIFromBuffer = {
+  new (...args: any[]): CEMI;
+  fromBuffer(buffer: Buffer): CEMI;
+};
+
+CEMI satisfies CEMIFromBuffer;

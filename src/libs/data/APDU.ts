@@ -4,10 +4,15 @@ import { ServiceMessage } from "./EMI";
 import { APCIEnum } from "./enum/APCIEnum";
 import { TPCI, TPCIType } from "./TPCI";
 
+/**
+ * This is the Application Protocol Data Unit (TPDU).
+ * - **Warning**: This class is practically the same implementation as the TPDU. It's structured this way because of how APCI is implemented in the code, which depends on the byte responsible for TPCI.
+ * - **Warning**: It is completely arbitrary to use it as an APDU or as a TPDU; however, according to the specification, this is exactly like a TPDU.
+ */
 export class APDU implements ServiceMessage {
   _tpci: TPCI;
-  private _apci: APCI;
-  private _data: Buffer;
+  _apci: APCI;
+  _data: Buffer;
 
   constructor(
     tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU),

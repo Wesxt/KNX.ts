@@ -66,7 +66,7 @@ export class NPDU implements ServiceMessage {
     return buffer;
   }
 
-  describe(): Record<string, string | number | Buffer | Record<string, any>> {
+  describe() {
     return {
       layer: "Network Layer (NPDU)",
       addressType: AddressType[this.addressType],

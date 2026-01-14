@@ -1,29 +1,46 @@
-import { APDU } from "./APDU";
 import { TPCI, TPCIType } from "./TPCI";
 import { ServiceMessage } from "./EMI";
+import { KNXHelper } from "../utils/class/KNXHelper";
+import { APCI } from "./APCI";
+import { APCIEnum } from "./enum/APCIEnum";
 
 export class TPDU implements ServiceMessage {
-  private _tpci: TPCI;
-  private _apdu: APDU;
+  _tpci: TPCI;
+  _apci: APCI;
+  _data: Buffer;
 
-  constructor(tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU), apdu: APDU = new APDU()) {
+  constructor(
+    tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU),
+    apci: APCI = new APCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit),
+    data: Buffer = Buffer.alloc(0)
+  ) {
     this._tpci = tpci;
-    this._apdu = apdu;
-    this._apdu._tpci = tpci; // Es necesario que lo tenga para la codificación del APCI
+    this._apci = apci;
+    this._data = data;
   }
 
   get length(): number {
-    // longitud del APDU con TPCI
-    return this._apdu.length;
+    return KNXHelper.GetDataLength(this._data);
   }
 
-  toBuffer(): Buffer {}
+  /**
+   * Devuelve un buffer con TPCI/APCI + data
+   */
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(1 + (this._data.length > 0 ? this._data.length : 1));
+    const packNumber = this._apci.packNumber();
+    this._tpci.first2bitsOfAPCI = packNumber[0];
+    buffer[0] = this._tpci.getValue();
+    buffer[1] = packNumber[1];
+    KNXHelper.WriteData(buffer, this._data, 1);
+    return buffer;
+  }
 
-  describe(): any {
+  describe() {
     return {
       layer: "Transport Layer (TPDU)",
       tpci: this._tpci.describe(),
-      APDU: this._apdu.describe(),
+      APDU: this._apci.describe(),
     };
   }
 }
