@@ -1,6 +1,7 @@
+import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KNXHelper } from "../utils/KNXHelper";
+import { ControlField } from "./ControlField";
 import { ExtendedControlField } from "./ControlFieldExtended";
-import { ControlField, ServiceMessage } from "./EMI";
 import {
   AddInfoBase,
   BiBatInformation,
@@ -165,6 +166,41 @@ export class CEMI implements ServiceMessage {
   destinationAddress: string = "";
   length: number = 0;
   TPDU: TPDU = new TPDU();
+
+  static DataLinkLayerCEMI = {
+    "L_Data.req": class L_Data_req implements ServiceMessage {
+      constructor(
+        additionalInfo: ListAddInfoType | null = null,
+        controlField1: ControlField,
+        controlField2: ExtendedControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        TPDU: TPDU,
+      ) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.controlField1 = controlField1;
+        this.controlField2 = controlField2;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
+        this.TPDU = TPDU;
+        this.length = TPDU.length;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Data.req"].CEMI.value;
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+      controlField1: ControlField = new ControlField();
+      controlField2: ExtendedControlField = new ExtendedControlField();
+      sourceAddress: string = "";
+      destinationAddress: string = "";
+      length: number = 0;
+      TPDU: TPDU = new TPDU();
+      toBuffer(): Buffer {
+        throw new Error("Method not implemented.");
+      }
+      describe(): Record<string, string | number | Buffer | Record<string, any>> {
+        throw new Error("Method not implemented.");
+      }
+    },
+  } as const;
 
   /**
    * Construye el Buffer cEMI siguiendo la especificación 03.06.03

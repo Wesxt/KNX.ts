@@ -4177,11 +4177,229 @@ export class EMI {
       }
     },
   } as const;
+
+  static ManagementEMI = {
+    "M_PropRead.req": class MPropReadReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_PropRead.req"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MPropReadReq(buffer.subarray(1));
+      }
+    },
+    "M_PropRead.con": class MPropReadCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MPropReadCon(buffer.subarray(1));
+      }
+    },
+    "M_PropWrite.req": class MPropWriteReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MPropWriteReq(buffer.subarray(1));
+      }
+    },
+    "M_PropWrite.con": class MPropWriteCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MPropWriteCon(buffer.subarray(1));
+      }
+    },
+    "M_PropInfo.ind": class MPropInfoInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_PropInfo.ind"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MPropInfoInd(buffer.subarray(1));
+      }
+    },
+    "M_FuncPropCommand.req": class MFuncPropCommandReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MFuncPropCommandReq(buffer.subarray(1));
+      }
+    },
+    "M_FuncPropStateRead.req": class MFuncPropStateReadReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MFuncPropStateReadReq(buffer.subarray(1));
+      }
+    },
+    "M_FuncPropCommand.con": class MFuncPropCommandCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MFuncPropCommandCon(buffer.subarray(1));
+      }
+    },
+    "M_FuncPropStateRead.con": class MFuncPropStateReadCon implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.con"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MFuncPropStateReadCon(buffer.subarray(1));
+      }
+    },
+    "M_Reset.req": class MResetReq implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MResetReq(buffer.subarray(1));
+      }
+    },
+    "M_Reset.ind": class MResetInd implements ServiceMessage {
+      messageCode = MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value;
+      data: Buffer;
+      constructor(data: Buffer | { data: Buffer }) {
+        this.data = Buffer.isBuffer(data) ? data : data.data;
+      }
+      toBuffer() {
+        const buffer = Buffer.alloc(1 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        this.data.copy(buffer, 1);
+        return buffer;
+      }
+      describe() {
+        return { messageCode: this.messageCode, data: this.data.toString("hex") };
+      }
+      static fromBuffer(buffer: Buffer) {
+        return new MResetInd(buffer.subarray(1));
+      }
+    },
+  } as const;
 }
 
 // !! Type check in all class
 
-type KeysOfEMI = "BusmonitorEMI" | "DataLinkLayerEMI" | "NetworkLayerEMI" | "TransportLayerEMI" | "ApplicationLayerEMI";
+type KeysOfEMI =
+  | "BusmonitorEMI"
+  | "DataLinkLayerEMI"
+  | "NetworkLayerEMI"
+  | "TransportLayerEMI"
+  | "ApplicationLayerEMI"
+  | "ManagementEMI";
 
 /**
  * List of services that do not implement the static fromBuffer method yet.
