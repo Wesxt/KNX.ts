@@ -193,11 +193,29 @@ export class CEMI implements ServiceMessage {
       destinationAddress: string = "";
       length: number = 0;
       TPDU: TPDU = new TPDU();
+
       toBuffer(): Buffer {
-        throw new Error("Method not implemented.");
+        const buffer = Buffer.alloc(10 + this.TPDU.length);
+        buffer[0] = this.messageCode;
+        buffer[1] = this.additionalInfo.additionalInfoLength;
+        this.additionalInfo.getBuffer().copy(buffer, 2);
+        this.controlField1.buffer.copy(buffer, 3 + this.additionalInfo.additionalInfoLength);
+        this.controlField2.getBuffer().copy(buffer, 4 + this.additionalInfo.additionalInfoLength);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 5 + this.additionalInfo.additionalInfoLength);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 7 + this.additionalInfo.additionalInfoLength);
+        buffer[9 + this.additionalInfo.additionalInfoLength] = this.length;
+        this.TPDU.toBuffer().copy(buffer, 10 + this.additionalInfo.additionalInfoLength);
+        return buffer;
       }
-      describe(): Record<string, string | number | Buffer | Record<string, any>> {
-        throw new Error("Method not implemented.");
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo.describe(),
+          controlField1: this.controlField1.describe(),
+          controlField2: this.controlField2.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+        };
       }
     },
   } as const;

@@ -22,12 +22,21 @@ export class TPDU implements ServiceMessage {
     return KNXHelper.GetDataLength(this._data);
   }
 
+  get TSDU() {
+    return this._apdu;
+  }
+
   /**
    * Devuelve un buffer con TPCI/APCI + data
    */
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(1 + (this._data.length > 0 ? this._data.length : 1));
-    buffer[0] = this._tpci.getValue();
+    // La clase APDU tiene el tpci y el apci en su buffer
+    // para simplificar la envoltura de los octetos por lo tanto
+    // se escribe el tpci desde del apdu para evitar problemas
+    buffer.writeUint8(this._apdu._tpci.getValue(), 0);
+    const packNumber = this._apdu._apci.packNumber();
+    buffer.writeUInt8(packNumber[1], 1);
     KNXHelper.WriteData(buffer, this._data, 1);
     return buffer;
   }
@@ -50,9 +59,8 @@ export class TPDU implements ServiceMessage {
     // 1. Extraer TPCI (Transport Protocol Control Information)
     // El TPCI ocupa los primeros 6 bits del primer octeto.
     // Máscara: 1111 1100 (0xFC)
-    // Pasamos el byte completo sin aplicar la mascara para que el TPCI pueda describir
-    // sus dos ultimos bits que son del APCI.
-    // Perfectamente se puede aplicar la mascara sin ningún problema
+    // ** Se evita usar la mascara 0xfc para que el tpci tenga los dos bits más
+    // ** significativos del APCI
     const tpciByte = buffer.readUInt8(0);
     const tpciValue = tpciByte;
     const tpci = new TPCI(tpciValue);

@@ -30,8 +30,10 @@ export class APDU implements ServiceMessage {
     const buffer = Buffer.alloc(1 + (this._data.length > 0 ? this._data.length : 1));
     const packNumber = this._apci.packNumber();
     this._tpci.first2bitsOfAPCI = packNumber[0];
-    buffer[0] = this._tpci.getValue();
-    buffer[1] = packNumber[1];
+    // TPCI/APCI
+    buffer.writeUInt8(this._tpci.getValue(), 0);
+    buffer.writeUInt8(packNumber[1], 1);
+    // Data
     KNXHelper.WriteData(buffer, this._data, 1);
     return buffer;
   }
@@ -64,7 +66,9 @@ export class APDU implements ServiceMessage {
       byte1 = buffer.readUInt8(1);
     }
 
-    const tpciValue = byte0 & 0xfc;
+    // ** Se evita usar la mascara 0xfc para que el tpci tenga los dos bits más
+    // ** significativos del APCI
+    const tpciValue = byte0;
     const tpci = new TPCI(tpciValue);
 
     // Parte Alta APCI (2 bits): Byte 0 & 0000 0011
