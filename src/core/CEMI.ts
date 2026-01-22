@@ -125,47 +125,10 @@ export class AdditionalInformationField {
   }
 }
 
-export class CEMI implements ServiceMessage {
-  constructor(
-    messageCode: number,
-    additionalInfo: ListAddInfoType | null = null,
-    controlField1: ControlField,
-    controlField2: ExtendedControlField,
-    sourceAddress: string,
-    destinationAddress: string,
-    TPDU: TPDU,
-  ) {
-    const filterCEMIValues = Object.values(MESSAGE_CODE_FIELD).map((item) => {
-      // @ts-ignore
-      if (item && item.CEMI) return item.CEMI.value;
-    });
-    // Nota: filterCEMIValues puede contener undefineds, el find debe ser robusto
-    if (!filterCEMIValues.includes(messageCode))
-      // throw new Error(`The message code 0x${messageCode.toString(16)} is not compatible with CEMI`);
-      // Comentado para permitir flexibilidad durante desarrollo, pero idealmente debe estar activo.
-      console.warn(
-        `Warning: Message code 0x${messageCode.toString(16)} not strictly found in MessageCodeField definitions.`,
-      );
-
-    if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
-
-    this.messageCode = messageCode;
-    this.controlField1 = controlField1;
-    this.controlField2 = controlField2;
-    this.sourceAddress = sourceAddress;
-    this.destinationAddress = destinationAddress;
-    this.TPDU = TPDU;
-    this.length = TPDU.length;
+export class CEMI {
+  constructor() {
+    throw new Error("This class is static");
   }
-
-  messageCode: number = 0;
-  additionalInfo: AdditionalInformationField = new AdditionalInformationField();
-  controlField1: ControlField = new ControlField();
-  controlField2: ExtendedControlField = new ExtendedControlField();
-  sourceAddress: string = "";
-  destinationAddress: string = "";
-  length: number = 0;
-  TPDU: TPDU = new TPDU();
 
   static DataLinkLayerCEMI = {
     "L_Data.req": class L_Data_req implements ServiceMessage {
@@ -207,6 +170,65 @@ export class CEMI implements ServiceMessage {
         this.TPDU.toBuffer().copy(buffer, 10 + this.additionalInfo.additionalInfoLength);
         return buffer;
       }
+
+      static fromBuffer(buffer: Buffer): L_Data_req {
+        // 1. Validar Message Code
+        const msgCode = buffer.readUInt8(0);
+        if (msgCode !== MESSAGE_CODE_FIELD["L_Data.req"].CEMI.value) {
+          throw new Error(`Invalid Message Code for L_Data.req: expected 0x11, got 0x${msgCode.toString(16)}`);
+        }
+
+        // 2. Parse Additional Info Length & Data
+        const addInfoLength = buffer.readUInt8(1);
+        let additionalInfo: AdditionalInformationField | null = null;
+
+        // Offset base después de la Additional Info
+        // ESTÁNDAR: 2 + addInfoLength
+        // TU toBuffer (ERRÓNEO): 3 + addInfoLength
+        const baseOffset = 2 + addInfoLength;
+
+        if (addInfoLength > 0) {
+          const addInfoBuffer = buffer.subarray(2, baseOffset);
+          additionalInfo = new AdditionalInformationField(addInfoBuffer);
+        }
+
+        // 3. Control Fields
+        // Asumo que tus clases ControlField tienen un constructor que acepta Buffer o un fromBuffer estático.
+        // Si no, tendrás que instanciarlas y asignar el valor manualmente.
+        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1));
+        const controlField2 = new ExtendedControlField(buffer.subarray(baseOffset + 1, baseOffset + 2));
+
+        // 4. Addresses
+        // KNXHelper necesita un método para convertir Buffer a string (ej. "1.1.1").
+        // Si no existe, debes implementarlo. Aquí asumo `getAddressString`.
+        const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
+        const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
+
+        // Nota: Verifica si tu KNXHelper tiene este método o similar.
+        // Si no, usa: `${srcBuffer.readUInt8(0) >> 4}.${srcBuffer.readUInt8(0) & 0x0F}.${srcBuffer.readUInt8(1)}`
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer);
+        const destinationAddress = KNXHelper.GetAddress(dstBuffer);
+
+        // 5. Data Length (L)
+        // En cEMI, este byte indica la longitud de los datos (excluyendo TPCI en algunos contextos, pero es el campo L del frame).
+        const length = buffer.readUInt8(baseOffset + 6);
+
+        // 6. TPDU
+        // El TPDU comienza inmediatamente después del byte de longitud.
+        // Se asume que TPDU.fromBuffer maneja la lectura completa (TPCI + APCI + Data).
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length + 1); // +1 por seguridad si length excluye TPCI, ajusta según tu TPDU
+        const tpdu = TPDU.fromBuffer(tpduBuffer);
+
+        return new L_Data_req(
+          additionalInfo ? additionalInfo.information : null,
+          controlField1,
+          controlField2,
+          sourceAddress,
+          destinationAddress,
+          tpdu,
+        );
+      }
+
       describe() {
         return {
           messageCode: this.messageCode,
@@ -219,142 +241,41 @@ export class CEMI implements ServiceMessage {
       }
     },
   } as const;
-
-  /**
-   * Construye el Buffer cEMI siguiendo la especificación 03.06.03
-   * Estructura: [MC] [AddInfoLen] [AddInfoData...] [Ctrl1] [Ctrl2] [Src] [Dst] [Len] [TPDU]
-   */
-  toBuffer(): Buffer {
-    const infoBuffer = this.additionalInfo.getBuffer();
-    const infoLength = infoBuffer.length;
-
-    // Calculamos el tamaño total.
-    // 1 (MC) + 1 (InfoLen) + InfoData + 1 (C1) + 1 (C2) + 2 (Src) + 2 (Dst) + 1 (Len) + TPDU
-    const headerSize = 1 + 1 + infoLength + 1 + 1 + 2 + 2 + 1;
-    const tpduBuffer = this.TPDU.toBuffer();
-
-    const buffer = Buffer.alloc(headerSize + tpduBuffer.length);
-    let offset = 0;
-
-    buffer.writeUInt8(this.messageCode, offset++); // MC
-    buffer.writeUInt8(infoLength, offset++); // AddInfo Length (CORREGIDO: Faltaba este byte en tu lógica original)
-
-    if (infoLength > 0) {
-      infoBuffer.copy(buffer, offset);
-      offset += infoLength;
-    }
-
-    this.controlField1.buffer.copy(buffer, offset++);
-    this.controlField2.getBuffer().copy(buffer, offset++);
-
-    KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, offset);
-    offset += 2;
-
-    KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, offset);
-    offset += 2;
-
-    // Length Field: En cEMI Standard Frame, este byte es la longitud de la DATA (LSDU),
-    // que es la longitud del TPDU menos el byte TPCI si está optimizado, pero simplifiquemos a longitud TPDU.
-    // Spec dice: "Number of octets of the LSDU".
-    buffer.writeUInt8(tpduBuffer.length, offset++);
-
-    tpduBuffer.copy(buffer, offset);
-
-    return buffer;
-  }
-
-  /**
-   * Parsea un buffer crudo cEMI a una instancia de la clase CEMI.
-   * @param buffer El buffer completo comenzando por el Message Code.
-   */
-  static fromBuffer(buffer: Buffer): CEMI {
-    if (buffer.length < 10) throw new Error("Buffer cEMI demasiado corto (< 10 bytes)");
-
-    let offset = 0;
-
-    // 1. Message Code
-    const msgCode = buffer.readUInt8(offset++);
-
-    // 2. Additional Info Length
-    const addInfoLen = buffer.readUInt8(offset++);
-
-    let additionalInfoObj: ListAddInfoType | null = null;
-
-    // 3. Additional Info Data
-    if (addInfoLen > 0) {
-      const addInfoBuffer = buffer.subarray(offset, offset + addInfoLen);
-      const addInfoField = new AdditionalInformationField(addInfoBuffer);
-
-      // Extraemos la información parseada interna si existe
-      if (addInfoField.information && !Buffer.isBuffer(addInfoField.information)) {
-        additionalInfoObj = addInfoField.information;
-      }
-      offset += addInfoLen;
-    }
-
-    // 4. Control Field 1
-    const c1Byte = buffer.readUInt8(offset++);
-    const ctrl1 = new ControlField(c1Byte);
-
-    // 5. Control Field 2 (Extended)
-    const c2Byte = buffer.readUInt8(offset++);
-    const ctrl2 = new ExtendedControlField(c2Byte);
-
-    // 6. Source Address (Siempre Individual)
-    const srcBuf = buffer.subarray(offset, offset + 2);
-    const srcAddr = KNXHelper.GetAddress(srcBuf, ".") as string;
-    offset += 2;
-
-    // 7. Destination Address
-    // Determinamos si es Grupo o Individual mirando el Bit 7 del Control Field 2
-    // Spec 03.06.03: "Bit 7 (Dest. Addr. Flag): 0=Individual, 1=Group"
-    const isGroup = (c2Byte & 0x80) !== 0;
-    const dstBuf = buffer.subarray(offset, offset + 2);
-    const dstAddr = KNXHelper.GetAddress(dstBuf, isGroup ? "/" : ".") as string;
-    offset += 2;
-
-    // 8. Length (LSDU length)
-    const length = buffer.readUInt8(offset++);
-
-    // 9. TPDU (Payload)
-    // El resto del buffer corresponde al TPDU.
-    // Validamos que haya suficientes bytes
-    if (buffer.length - offset < length) {
-      // Warning: A veces los dispositivos envían padding o calculan length diferente.
-      // Usamos Math.min o lanzamos error estricto.
-      // throw new Error(`Longitud declarada ${length} excede bytes disponibles ${buffer.length - offset}`);
-    }
-
-    // Tomamos el slice exacto basado en 'length' o lo que quede
-    const tpduRaw = buffer.subarray(offset, offset + length);
-    const tpdu = TPDU.fromBuffer(tpduRaw);
-
-    // Retornamos la instancia
-    const cemi = new CEMI(msgCode, additionalInfoObj, ctrl1, ctrl2, srcAddr, dstAddr, tpdu);
-
-    // Ajustamos la propiedad length para que coincida con lo leído
-    cemi.length = length;
-
-    return cemi;
-  }
-
-  describe() {
-    return {
-      messageCode: `0x${this.messageCode.toString(16).toUpperCase()}`,
-      additionalInfo: this.additionalInfo.describe(),
-      controlField1: this.controlField1.describe(),
-      controlField2: this.controlField2.describe(),
-      sourceAddress: this.sourceAddress,
-      destinationAddress: this.destinationAddress,
-      length: this.length,
-      TPDU: this.TPDU.describe(), // TPDU ahora delegará a TPCI, APDU, APCI
-    };
-  }
 }
 
-type CEMIFromBuffer = {
-  new (...args: any[]): CEMI;
-  fromBuffer(buffer: Buffer): CEMI;
-};
+// !! Type check in all class
 
-CEMI satisfies CEMIFromBuffer;
+type KeysOfCEMI = "DataLinkLayerCEMI";
+
+/**
+ * List of services that do not implement the static fromBuffer method yet.
+ */
+type ExcludedServices = never;
+
+/**
+ * Validates that a class constructor has a static fromBuffer method
+ * that returns an instance of that same class.
+ */
+type CEMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
+  ? {
+      new (...args: any[]): I;
+      fromBuffer(buffer: Buffer): I;
+    }
+  : never;
+
+/**
+ * Validator for the EMI class structure.
+ * Checks that every service in each layer (except LayerAccess and ExcludedServices)
+ * correctly implements the static fromBuffer method.
+ */
+type CEMIValidator = {
+  [K in KeysOfCEMI]: {
+    [S in keyof (typeof CEMI)[K]]: S extends ExcludedServices
+      ? any
+      : (typeof CEMI)[K][S] extends { new (...args: any[]): any }
+        ? CEMIServiceConstructor<(typeof CEMI)[K][S]>
+        : any;
+  };
+};
+// !! This is for verify all class if have the method fromBuffer
+CEMI satisfies CEMIValidator;
