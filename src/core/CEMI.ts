@@ -44,84 +44,132 @@ type ListAddInfoType =
   | PLMediumInfo;
 
 export class AdditionalInformationField {
-  constructor(value?: Buffer | ListAddInfoType) {
-    // Si viene un Buffer, intentamos leer el TypeID del primer byte
-    this.typeId = value && Buffer.isBuffer(value) && value.length > 0 ? value.readUInt8(0) : null;
+  private _items: AddInfoBase[] = [];
 
-    // Si viene una instancia de clase, la asignamos
-    if (value && value instanceof AddInfoBase) this.information = value;
+  constructor(items: AddInfoBase[] = []) {
+    this._items = items;
+  }
 
-    // Si es buffer, parseamos según el TypeID
-    if (Buffer.isBuffer(value)) {
-      switch (this.typeId) {
-        case CEMIAddInfoType.PL_MEDIUM_INFO:
-          this.information = new PLMediumInfo(value);
-          break;
-        case CEMIAddInfoType.RF_MEDIUM_INFO:
-          this.information = new RFMediumInformation(value);
-          break;
-        case CEMIAddInfoType.BUSMONITOR_STATUS_INFO:
-          this.information = value;
-          this.error = "Error: This addInfoType 'BUSMONITOR_STATUS_INFO' (0x03) is not implemented";
-          // Not implemented in KNXAddInfoTypes yet
-          break;
-        case CEMIAddInfoType.TIMESTAMP_RELATIVE:
-          this.information = value;
-          this.error = "Error: This addInfoType 'TIMESTAMP_RELATIVE' (0x04) is not implemented";
-          // Not implemented in KNXAddInfoTypes yet
-          break;
-        case CEMIAddInfoType.TIME_DELAY_UNTIL_SENDING:
-          this.information = value;
-          this.error = "Error: This addInfoType 'TIME_DELAY_UNTIL_SENDING' (0x05) is not implemented";
-          // Not implemented in KNXAddInfoTypes yet
-          break;
-        case CEMIAddInfoType.EXTENDED_RELATIVE_TIMESTAMP:
-          this.information = new ExtendedRelativeTimestamp(value);
-          break;
-        case CEMIAddInfoType.BIBAT_INFO:
-          this.information = new BiBatInformation(value);
-          break;
-        case CEMIAddInfoType.RF_MULTI_INFO:
-          this.information = new RFMultiInformation(value);
-          break;
-        case CEMIAddInfoType.PREAMBLE_POSTAMBLE:
-          this.information = new PreambleAndPostamble(value);
-          break;
-        case CEMIAddInfoType.RF_FAST_ACK_INFO:
-          this.information = new RFFastACKInformation(value);
-          break;
-        case CEMIAddInfoType.MANUFACTURER_SPECIFIC:
-          this.information = new ManufacturerSpecificData(value);
-          break;
-        default:
-          // Caso: Info Type no implementado o buffer vacío
-          this.information = value;
-          break;
+  /**
+   * Obtiene la lista completa de informaciones adicionales parseadas.
+   */
+  public get items(): AddInfoBase[] {
+    return this._items;
+  }
+
+  /**
+   * Añade una nueva pieza de información adicional.
+   */
+  public add(item: AddInfoBase): void {
+    this._items.push(item);
+  }
+
+  /**
+   * Calcula la longitud total en bytes de este campo (suma de todas las partes).
+   * Ojo: Esto es lo que va en el byte "Additional Info Length" del frame cEMI.
+   */
+  public get length(): number {
+    return this._items.reduce((acc, item) => acc + item.totalLength, 0);
+  }
+
+  /**
+   * Genera el buffer concatenado de todos los elementos.
+   */
+  public toBuffer(): Buffer {
+    const buffers = this._items.map((item) => item.getBuffer());
+    return Buffer.concat(buffers);
+  }
+
+  /**
+   * Parsea el bloque de "Additional Information" completo.
+   * @param buffer El buffer que contiene SOLO la parte de Additional Info (sin el byte de longitud previo).
+   */
+  static fromBuffer(buffer: Buffer): AdditionalInformationField {
+    const items: AddInfoBase[] = [];
+    let offset = 0;
+
+    // Iteramos mientras haya datos por leer en el buffer asignado
+    while (offset < buffer.length) {
+      // 1. Validar que al menos podemos leer Type ID y Length (2 bytes mínimo)
+      if (offset + 2 > buffer.length) {
+        throw new Error("AddInfo invalid, the length is too short");
+        break;
       }
+
+      const typeId = buffer.readUInt8(offset);
+      const len = buffer.readUInt8(offset + 1); // Longitud de la DATA, no del bloque entero
+
+      const totalBlockSize = 2 + len; // Type(1) + Len(1) + Data(len)
+
+      // 2. Validar que el bloque completo cabe en el buffer
+      if (offset + totalBlockSize > buffer.length) {
+        throw new Error(
+          `[AdditionalInformationField] Bloque incompleto para TypeID 0x${typeId.toString(16)}. Se esperaban ${totalBlockSize} bytes, quedan ${buffer.length - offset}.`,
+        );
+      }
+
+      // 3. Extraer el bloque completo (Type + Len + Data) para pasarlo a las clases específicas
+      // NOTA: Tus clases en KNXAddInfoTypes deben saber parsearse a sí mismas, idealmente con un método estático fromBuffer
+      // o un constructor que acepte el payload. Asumo aquí que pasamos la data pura.
+
+      const dataSubset = buffer.subarray(offset + 2, offset + 2 + len);
+
+      let item: AddInfoBase | null = null;
+
+      try {
+        switch (typeId) {
+          case CEMIAddInfoType.PL_MEDIUM_INFO:
+            item = new PLMediumInfo(dataSubset);
+            break;
+          case CEMIAddInfoType.RF_MEDIUM_INFO:
+            item = new RFMediumInformation(dataSubset);
+            break;
+          case CEMIAddInfoType.BUSMONITOR_STATUS_INFO:
+            // item = new BusmonitorStatusInfo(dataSubset); // Implementar si falta
+            break;
+          case CEMIAddInfoType.TIMESTAMP_RELATIVE:
+            // item = new TimestampRelative(dataSubset);
+            break;
+          case CEMIAddInfoType.TIME_DELAY_UNTIL_SENDING:
+            // item = new TimeDelayUntilSending(dataSubset);
+            break;
+          case CEMIAddInfoType.EXTENDED_RELATIVE_TIMESTAMP:
+            item = new ExtendedRelativeTimestamp(dataSubset);
+            break;
+          case CEMIAddInfoType.BIBAT_INFO:
+            item = new BiBatInformation(dataSubset);
+            break;
+          case CEMIAddInfoType.RF_MULTI_INFO:
+            item = new RFMultiInformation(dataSubset);
+            break;
+          case CEMIAddInfoType.PREAMBLE_POSTAMBLE:
+            item = new PreambleAndPostamble(dataSubset);
+            break;
+          case CEMIAddInfoType.RF_FAST_ACK_INFO:
+            item = new RFFastACKInformation(dataSubset);
+            break;
+          case CEMIAddInfoType.MANUFACTURER_SPECIFIC:
+            item = new ManufacturerSpecificData(dataSubset);
+            break;
+          default:
+            // Si el tipo es desconocido, decidimos si ignorarlo o guardarlo como genérico.
+            // Para depuración, es útil saber que llegó algo raro.
+            console.warn(`[AdditionalInformationField] TypeID desconocido: 0x${typeId.toString(16)}`);
+            break;
+        }
+      } catch (err) {
+        console.error(`Error parseando AddInfo Type 0x${typeId.toString(16)}:`, err);
+      }
+
+      if (item) {
+        items.push(item);
+      }
+
+      // Avanzamos el offset
+      offset += totalBlockSize;
     }
 
-    // Calculate length based on the instantiated info class
-    this.additionalInfoLength =
-      this.information && !Buffer.isBuffer(this.information) ? this.information.totalLength : 0;
-  }
-
-  typeId: CEMIAddInfoType | null = null;
-  information: ListAddInfoType | Buffer | null = null;
-  additionalInfoLength: number = 0;
-  private error: string | null = null;
-
-  getBuffer(): Buffer {
-    return this.information && !Buffer.isBuffer(this.information) ? this.information.getBuffer() : Buffer.alloc(0);
-  }
-
-  describe() {
-    return {
-      typeId: this.typeId ? CEMIAddInfoType[this.typeId] : null,
-      typeIdValue: this.typeId,
-      totalLength: this.additionalInfoLength,
-      information: this.information,
-      error: this.error,
-    };
+    return new AdditionalInformationField(items);
   }
 }
 
@@ -133,7 +181,7 @@ export class CEMI {
   static DataLinkLayerCEMI = {
     "L_Data.req": class L_Data_req implements ServiceMessage {
       constructor(
-        additionalInfo: ListAddInfoType | null = null,
+        additionalInfo: AddInfoBase[] | null = null,
         controlField1: ControlField,
         controlField2: ExtendedControlField,
         sourceAddress: string,
@@ -158,16 +206,27 @@ export class CEMI {
       TPDU: TPDU = new TPDU();
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(10 + this.TPDU.length);
+        // Cálculo correcto del tamaño total
+        // Offset base = 2 (MC + AddInfoLen) + AddInfoData
+        const baseOffset = 2 + this.additionalInfo.length;
+
+        // 7 bytes fijos después de AddInfo: CF1(1) + CF2(1) + Src(2) + Dst(2) + Len(1)
+        const buffer = Buffer.alloc(baseOffset + 7 + this.TPDU.length);
+
         buffer[0] = this.messageCode;
-        buffer[1] = this.additionalInfo.additionalInfoLength;
-        this.additionalInfo.getBuffer().copy(buffer, 2);
-        this.controlField1.buffer.copy(buffer, 3 + this.additionalInfo.additionalInfoLength);
-        this.controlField2.getBuffer().copy(buffer, 4 + this.additionalInfo.additionalInfoLength);
-        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 5 + this.additionalInfo.additionalInfoLength);
-        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 7 + this.additionalInfo.additionalInfoLength);
-        buffer[9 + this.additionalInfo.additionalInfoLength] = this.length;
-        this.TPDU.toBuffer().copy(buffer, 10 + this.additionalInfo.additionalInfoLength);
+        buffer[1] = this.additionalInfo.length;
+
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+
+        this.controlField1.buffer.copy(buffer, baseOffset);
+        this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
+        buffer[baseOffset + 6] = this.length;
+        this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
+
         return buffer;
       }
 
@@ -180,64 +239,617 @@ export class CEMI {
 
         // 2. Parse Additional Info Length & Data
         const addInfoLength = buffer.readUInt8(1);
-        let additionalInfo: AdditionalInformationField | null = null;
+        let additionalInfoInstance: AdditionalInformationField | null = null;
 
-        // Offset base después de la Additional Info
-        // ESTÁNDAR: 2 + addInfoLength
-        // TU toBuffer (ERRÓNEO): 3 + addInfoLength
+        // Offset base correcto según estándar (2 + len)
         const baseOffset = 2 + addInfoLength;
 
         if (addInfoLength > 0) {
           const addInfoBuffer = buffer.subarray(2, baseOffset);
-          additionalInfo = new AdditionalInformationField(addInfoBuffer);
+          additionalInfoInstance = AdditionalInformationField.fromBuffer(addInfoBuffer);
         }
 
         // 3. Control Fields
-        // Asumo que tus clases ControlField tienen un constructor que acepta Buffer o un fromBuffer estático.
-        // Si no, tendrás que instanciarlas y asignar el valor manualmente.
-        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1));
+        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1).readUint8());
         const controlField2 = new ExtendedControlField(buffer.subarray(baseOffset + 1, baseOffset + 2));
 
         // 4. Addresses
-        // KNXHelper necesita un método para convertir Buffer a string (ej. "1.1.1").
-        // Si no existe, debes implementarlo. Aquí asumo `getAddressString`.
         const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
         const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
 
-        // Nota: Verifica si tu KNXHelper tiene este método o similar.
-        // Si no, usa: `${srcBuffer.readUInt8(0) >> 4}.${srcBuffer.readUInt8(0) & 0x0F}.${srcBuffer.readUInt8(1)}`
-        const sourceAddress = KNXHelper.GetAddress(srcBuffer);
-        const destinationAddress = KNXHelper.GetAddress(dstBuffer);
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         // 5. Data Length (L)
-        // En cEMI, este byte indica la longitud de los datos (excluyendo TPCI en algunos contextos, pero es el campo L del frame).
+        // Indica la longitud en bytes del LSDU (Link Service Data Unit)
         const length = buffer.readUInt8(baseOffset + 6);
 
         // 6. TPDU
-        // El TPDU comienza inmediatamente después del byte de longitud.
-        // Se asume que TPDU.fromBuffer maneja la lectura completa (TPCI + APCI + Data).
-        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length + 1); // +1 por seguridad si length excluye TPCI, ajusta según tu TPDU
+        // Extraemos exactamente 'length' bytes para el TPDU
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
-        return new L_Data_req(
-          additionalInfo ? additionalInfo.information : null,
+        // Extraemos la información interna del wrapper AdditionalInformationField si existe
+        const addInfoData = additionalInfoInstance?.items ?? null;
+
+        return new L_Data_req(addInfoData, controlField1, controlField2, sourceAddress, destinationAddress, tpdu);
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          controlField1: this.controlField1.describe(),
+          controlField2: this.controlField2.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+        };
+      }
+    },
+    "L_Data.con": class L_Data_con implements ServiceMessage {
+      constructor(
+        additionalInfo: AddInfoBase[] | null = null,
+        controlField1: ControlField,
+        controlField2: ExtendedControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        TPDU: TPDU,
+      ) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.controlField1 = controlField1;
+        this.controlField2 = controlField2;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
+        this.TPDU = TPDU;
+        this.length = TPDU.length;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Data.con"].CEMI.value;
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+      controlField1: ControlField = new ControlField();
+      controlField2: ExtendedControlField = new ExtendedControlField();
+      sourceAddress: string = "";
+      destinationAddress: string = "";
+      length: number = 0;
+      TPDU: TPDU = new TPDU();
+
+      toBuffer(): Buffer {
+        // Cálculo correcto del tamaño total
+        // Offset base = 2 (MC + AddInfoLen) + AddInfoData
+        const baseOffset = 2 + this.additionalInfo.length;
+
+        // 7 bytes fijos después de AddInfo: CF1(1) + CF2(1) + Src(2) + Dst(2) + Len(1)
+        const buffer = Buffer.alloc(baseOffset + 7 + this.TPDU.length);
+
+        buffer[0] = this.messageCode;
+        buffer[1] = this.additionalInfo.length;
+
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+
+        this.controlField1.buffer.copy(buffer, baseOffset);
+        this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
+        buffer[baseOffset + 6] = this.length;
+        this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
+
+        return buffer;
+      }
+
+      static fromBuffer(buffer: Buffer): L_Data_con {
+        // 1. Validar Message Code
+        const msgCode = buffer.readUInt8(0);
+        if (msgCode !== MESSAGE_CODE_FIELD["L_Data.con"].CEMI.value) {
+          throw new Error(`Invalid Message Code for L_Data.con: expected 0x2E, got 0x${msgCode.toString(16)}`);
+        }
+
+        // 2. Parse Additional Info Length & Data
+        const addInfoLength = buffer.readUInt8(1);
+        let additionalInfoInstance: AdditionalInformationField | null = null;
+
+        // Offset base correcto según estándar (2 + len)
+        const baseOffset = 2 + addInfoLength;
+
+        if (addInfoLength > 0) {
+          const addInfoBuffer = buffer.subarray(2, baseOffset);
+          additionalInfoInstance = AdditionalInformationField.fromBuffer(addInfoBuffer);
+        }
+
+        // 3. Control Fields
+        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1).readUint8());
+        const controlField2 = new ExtendedControlField(buffer.subarray(baseOffset + 1, baseOffset + 2));
+
+        // 4. Addresses
+        const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
+        const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
+
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
+
+        // 5. Data Length (L)
+        // Indica la longitud en bytes del LSDU (Link Service Data Unit)
+        const length = buffer.readUInt8(baseOffset + 6);
+
+        // 6. TPDU
+        // Extraemos exactamente 'length' bytes para el TPDU
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length);
+        const tpdu = TPDU.fromBuffer(tpduBuffer);
+
+        // Extraemos la información interna del wrapper AdditionalInformationField si existe
+        const addInfoData = additionalInfoInstance?.items ?? null;
+
+        return new L_Data_con(addInfoData, controlField1, controlField2, sourceAddress, destinationAddress, tpdu);
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          controlField1: this.controlField1.describe(),
+          controlField2: this.controlField2.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+        };
+      }
+    },
+    "L_Data.ind": class L_Data_ind implements ServiceMessage {
+      constructor(
+        additionalInfo: AddInfoBase[] | null = null,
+        controlField1: ControlField,
+        controlField2: ExtendedControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        TPDU: TPDU,
+      ) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.controlField1 = controlField1;
+        this.controlField2 = controlField2;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
+        this.TPDU = TPDU;
+        this.length = TPDU.length;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Data.ind"].CEMI.value;
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+      controlField1: ControlField = new ControlField();
+      controlField2: ExtendedControlField = new ExtendedControlField();
+      sourceAddress: string = "";
+      destinationAddress: string = "";
+      length: number = 0;
+      TPDU: TPDU = new TPDU();
+
+      toBuffer(): Buffer {
+        // Cálculo correcto del tamaño total
+        // Offset base = 2 (MC + AddInfoLen) + AddInfoData
+        const baseOffset = 2 + this.additionalInfo.length;
+
+        // 7 bytes fijos después de AddInfo: CF1(1) + CF2(1) + Src(2) + Dst(2) + Len(1)
+        const buffer = Buffer.alloc(baseOffset + 7 + this.TPDU.length);
+
+        buffer[0] = this.messageCode;
+        buffer[1] = this.additionalInfo.length;
+
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+
+        this.controlField1.buffer.copy(buffer, baseOffset);
+        this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
+        buffer[baseOffset + 6] = this.length;
+        this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
+
+        return buffer;
+      }
+
+      static fromBuffer(buffer: Buffer): L_Data_ind {
+        // 1. Validar Message Code
+        const msgCode = buffer.readUInt8(0);
+        if (msgCode !== MESSAGE_CODE_FIELD["L_Data.ind"].CEMI.value) {
+          throw new Error(`Invalid Message Code for L_Data.ind: expected 0x29, got 0x${msgCode.toString(16)}`);
+        }
+
+        // 2. Parse Additional Info Length & Data
+        const addInfoLength = buffer.readUInt8(1);
+        let additionalInfoInstance: AdditionalInformationField | null = null;
+
+        // Offset base correcto según estándar (2 + len)
+        const baseOffset = 2 + addInfoLength;
+
+        if (addInfoLength > 0) {
+          const addInfoBuffer = buffer.subarray(2, baseOffset);
+          additionalInfoInstance = AdditionalInformationField.fromBuffer(addInfoBuffer);
+        }
+
+        // 3. Control Fields
+        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1).readUint8());
+        const controlField2 = new ExtendedControlField(buffer.subarray(baseOffset + 1, baseOffset + 2));
+
+        // 4. Addresses
+        const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
+        const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
+
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
+
+        // 5. Data Length (L)
+        // Indica la longitud en bytes del LSDU (Link Service Data Unit)
+        const length = buffer.readUInt8(baseOffset + 6);
+
+        // 6. TPDU
+        // Extraemos exactamente 'length' bytes para el TPDU
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length);
+        const tpdu = TPDU.fromBuffer(tpduBuffer);
+
+        // Extraemos la información interna del wrapper AdditionalInformationField si existe
+        const addInfoData = additionalInfoInstance?.items ?? null;
+
+        return new L_Data_ind(addInfoData, controlField1, controlField2, sourceAddress, destinationAddress, tpdu);
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          controlField1: this.controlField1.describe(),
+          controlField2: this.controlField2.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+        };
+      }
+    },
+    "L_Poll_Data.req": class L_Poll_Data_req implements ServiceMessage {
+      constructor(
+        additionalInfo: AddInfoBase[] | null = null,
+        controlField1: ControlField,
+        controlField2: ExtendedControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        numOfSlots: number,
+      ) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.controlField1 = controlField1;
+        this.controlField2 = controlField2;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
+        if (numOfSlots > 15) throw new Error("The numOfSLots is under of 15 (4 bits)");
+        this.numOfSlots = numOfSlots;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Poll_Data.req"].CEMI.value;
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+      controlField1: ControlField = new ControlField();
+      controlField2: ExtendedControlField = new ExtendedControlField();
+      sourceAddress: string = "";
+      destinationAddress: string = "";
+      numOfSlots: number = 0;
+
+      toBuffer(): Buffer {
+        // Cálculo correcto del tamaño total
+        // Offset base = 2 (MC + AddInfoLen) + AddInfoData
+        const baseOffset = 2 + this.additionalInfo.length;
+
+        // 7 bytes fijos después de AddInfo: CF1(1) + CF2(1) + Src(2) + Dst(2) + Len(1)
+        const buffer = Buffer.alloc(baseOffset + 8);
+
+        buffer[0] = this.messageCode;
+        buffer[1] = this.additionalInfo.length;
+
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+
+        this.controlField1.buffer.copy(buffer, baseOffset);
+        this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
+        buffer.writeUInt8(this.numOfSlots, 6 + baseOffset);
+
+        return buffer;
+      }
+
+      static fromBuffer(buffer: Buffer): L_Poll_Data_req {
+        // 1. Validar Message Code
+        const msgCode = buffer.readUInt8(0);
+        if (msgCode !== MESSAGE_CODE_FIELD["L_Poll_Data.req"].CEMI.value) {
+          throw new Error(`Invalid Message Code for L_Poll_Data.req: expected 0x13, got 0x${msgCode.toString(16)}`);
+        }
+
+        // 2. Parse Additional Info Length & Data
+        const addInfoLength = buffer.readUInt8(1);
+        let additionalInfoInstance: AdditionalInformationField | null = null;
+
+        // Offset base correcto según estándar (2 + len)
+        const baseOffset = 2 + addInfoLength;
+
+        if (addInfoLength > 0) {
+          const addInfoBuffer = buffer.subarray(2, baseOffset);
+          additionalInfoInstance = AdditionalInformationField.fromBuffer(addInfoBuffer);
+        }
+
+        // 3. Control Fields
+        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1).readUint8());
+        const controlField2 = new ExtendedControlField(buffer.subarray(baseOffset + 1, baseOffset + 2));
+
+        // 4. Addresses
+        const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
+        const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
+
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
+
+        const numOfSlots = buffer.subarray(6 + baseOffset, 7 + baseOffset).readUint8() & 0x0f;
+
+        // Extraemos la información interna del wrapper AdditionalInformationField si existe
+        const addInfoData = additionalInfoInstance?.items ?? null;
+
+        return new L_Poll_Data_req(
+          addInfoData,
           controlField1,
           controlField2,
           sourceAddress,
           destinationAddress,
-          tpdu,
+          numOfSlots,
         );
       }
 
       describe() {
         return {
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo.describe(),
+          additionalInfo: this.additionalInfo,
           controlField1: this.controlField1.describe(),
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
         };
+      }
+    },
+    "L_Poll_Data.con": class L_Poll_Data_con implements ServiceMessage {
+      constructor(
+        additionalInfo: AddInfoBase[] | null = null,
+        controlField1: ControlField,
+        controlField2: ExtendedControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        numOfSlots: number,
+        pollData: number,
+      ) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.controlField1 = controlField1;
+        this.controlField2 = controlField2;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
+        if (numOfSlots > 15) throw new Error("The numOfSLots is under of 15 (4 bits)");
+        this.numOfSlots = numOfSlots;
+        if (pollData > 14) throw new Error("The pollData is under of 14 (4 bits)");
+        this.pollData = pollData;
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Data.ind"].CEMI.value;
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+      controlField1: ControlField = new ControlField();
+      controlField2: ExtendedControlField = new ExtendedControlField();
+      sourceAddress: string = "";
+      destinationAddress: string = "";
+      numOfSlots: number = 0;
+      pollData: number = 0;
+
+      toBuffer(): Buffer {
+        // Cálculo correcto del tamaño total
+        // Offset base = 2 (MC + AddInfoLen) + AddInfoData
+        const baseOffset = 2 + this.additionalInfo.length;
+
+        // 7 bytes fijos después de AddInfo: CF1(1) + CF2(1) + Src(2) + Dst(2) + Len(1)
+        const buffer = Buffer.alloc(baseOffset + 8);
+
+        buffer[0] = this.messageCode;
+        buffer[1] = this.additionalInfo.length;
+
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+
+        this.controlField1.buffer.copy(buffer, baseOffset);
+        this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
+        KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
+        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
+        buffer.writeUInt8(this.numOfSlots, 6 + baseOffset);
+        buffer.writeUInt8(this.pollData, 7 + baseOffset);
+
+        return buffer;
+      }
+
+      static fromBuffer(buffer: Buffer): L_Poll_Data_con {
+        // 1. Validar Message Code
+        const msgCode = buffer.readUInt8(0);
+        if (msgCode !== MESSAGE_CODE_FIELD["L_Poll_Data.con"].CEMI.value) {
+          throw new Error(`Invalid Message Code for L_Poll_Data.con: expected 0x25, got 0x${msgCode.toString(16)}`);
+        }
+
+        // 2. Parse Additional Info Length & Data
+        const addInfoLength = buffer.readUInt8(1);
+        let additionalInfoInstance: AdditionalInformationField | null = null;
+
+        // Offset base correcto según estándar (2 + len)
+        const baseOffset = 2 + addInfoLength;
+
+        if (addInfoLength > 0) {
+          const addInfoBuffer = buffer.subarray(2, baseOffset);
+          additionalInfoInstance = AdditionalInformationField.fromBuffer(addInfoBuffer);
+        }
+
+        // 3. Control Fields
+        const controlField1 = new ControlField(buffer.subarray(baseOffset, baseOffset + 1).readUint8());
+        const controlField2 = new ExtendedControlField(buffer.subarray(baseOffset + 1, baseOffset + 2));
+
+        // 4. Addresses
+        const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
+        const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
+
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
+
+        const numOfSlots = buffer.subarray(6 + baseOffset, 7 + baseOffset).readUint8() & 0x0f;
+        const pollData = buffer.subarray(7 + baseOffset, 8 + baseOffset).readUint8() & 0x0f;
+
+        // Extraemos la información interna del wrapper AdditionalInformationField si existe
+        const addInfoData = additionalInfoInstance?.items ?? null;
+
+        return new L_Poll_Data_con(
+          addInfoData,
+          controlField1,
+          controlField2,
+          sourceAddress,
+          destinationAddress,
+          numOfSlots,
+          pollData,
+        );
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          controlField1: this.controlField1.describe(),
+          controlField2: this.controlField2.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+        };
+      }
+    },
+    "L_Raw.req": class L_Raw_req implements ServiceMessage {
+      constructor(additionalInfo: AddInfoBase[] | null = null, data: Buffer) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["L_Raw.req"].CEMI.value;
+      additionalInfo = new AdditionalInformationField();
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+        this.data.copy(buffer, baseOffset);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          data: this.data,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["L_Raw.req"].CEMI.value)
+          throw new Error(`Invalid Message Code for L_Raw.req: expected 0x10, got 0x${messageCode.toString(16)}`);
+        const addInfoLength = buffer.readUint8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) {
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        }
+        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const addInfoData = addInfo?.items ?? null;
+        return new L_Raw_req(addInfoData, data);
+      }
+    },
+    "L_Raw.con": class L_Raw_con implements ServiceMessage {
+      constructor(additionalInfo: AddInfoBase[] | null = null, data: Buffer) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["L_Raw.con"].CEMI.value;
+      additionalInfo = new AdditionalInformationField();
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+        this.data.copy(buffer, baseOffset);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          data: this.data,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["L_Raw.con"].CEMI.value)
+          throw new Error(`Invalid Message Code for L_Raw.con: expected 0x2f, got 0x${messageCode.toString(16)}`);
+        const addInfoLength = buffer.readUint8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) {
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        }
+        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const addInfoData = addInfo?.items ?? null;
+        return new L_Raw_con(addInfoData, data);
+      }
+    },
+    "L_Raw.ind": class L_Raw_ind implements ServiceMessage {
+      constructor(additionalInfo: AddInfoBase[] | null = null, data: Buffer) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["L_Raw.ind"].CEMI.value;
+      additionalInfo = new AdditionalInformationField();
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+        this.data.copy(buffer, baseOffset);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          data: this.data,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["L_Raw.ind"].CEMI.value)
+          throw new Error(`Invalid Message Code for L_Raw.ind: expected 0x2D, got 0x${messageCode.toString(16)}`);
+        const addInfoLength = buffer.readUint8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) {
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        }
+        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const addInfoData = addInfo?.items ?? null;
+        return new L_Raw_ind(addInfoData, data);
       }
     },
   } as const;
@@ -247,15 +859,8 @@ export class CEMI {
 
 type KeysOfCEMI = "DataLinkLayerCEMI";
 
-/**
- * List of services that do not implement the static fromBuffer method yet.
- */
 type ExcludedServices = never;
 
-/**
- * Validates that a class constructor has a static fromBuffer method
- * that returns an instance of that same class.
- */
 type CEMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
   ? {
       new (...args: any[]): I;
@@ -263,11 +868,6 @@ type CEMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
     }
   : never;
 
-/**
- * Validator for the EMI class structure.
- * Checks that every service in each layer (except LayerAccess and ExcludedServices)
- * correctly implements the static fromBuffer method.
- */
 type CEMIValidator = {
   [K in KeysOfCEMI]: {
     [S in keyof (typeof CEMI)[K]]: S extends ExcludedServices
@@ -277,5 +877,5 @@ type CEMIValidator = {
         : any;
   };
 };
-// !! This is for verify all class if have the method fromBuffer
+
 CEMI satisfies CEMIValidator;

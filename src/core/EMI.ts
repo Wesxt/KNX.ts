@@ -63,6 +63,7 @@ import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { checksum } from "../utils/checksumFrame";
 import { SystemStatus, Status } from "./SystemStatus";
 import { SAP } from "./enum/SAP";
+import { AdditionalInformationField } from "./CEMI";
 
 class InvalidInputObject extends Error {
   constructor(className: string) {
@@ -318,13 +319,13 @@ export class EMI {
           throw new Error("L_Busmon.ind must be an object with specific properties.");
         }
         // Initialize properties based on the value provided
-        this.messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"]["EMI2/IMI2"].value;
         this.status = value.status;
         this.timeStamp = value.timeStamp;
         this.controlField1 = value.controlField1;
         this.LPDU = value.LPDU;
       }
-      messageCode: number;
+      messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"]["EMI2/IMI2"].value;
+      additionalInfo = new AdditionalInformationField();
       status: Status;
       #timeStamp: number = 0;
       controlField1: ControlField;
