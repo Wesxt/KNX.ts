@@ -5,6 +5,7 @@ import { ExtendedControlField } from "./ControlFieldExtended";
 import {
   AddInfoBase,
   BiBatInformation,
+  BusmonitorStatusInfo,
   ExtendedRelativeTimestamp,
   ManufacturerSpecificData,
   PLMediumInfo,
@@ -12,9 +13,12 @@ import {
   RFFastACKInformation,
   RFMediumInformation,
   RFMultiInformation,
+  TimeDelayUntilSending,
+  TimestampRelative,
 } from "./KNXAddInfoTypes";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
 import { TPDU } from "./layers/data/TPDU";
+import { TPCI } from "./layers/interfaces/TPCI";
 
 /**
  * Enum for Additional Information Types (PDF Section 4.1.4.3.1)
@@ -32,16 +36,6 @@ export enum CEMIAddInfoType {
   RF_FAST_ACK_INFO = 0x0a,
   MANUFACTURER_SPECIFIC = 0xfe,
 }
-
-type ListAddInfoType =
-  | RFMediumInformation
-  | BiBatInformation
-  | RFFastACKInformation
-  | ExtendedRelativeTimestamp
-  | RFMultiInformation
-  | PreambleAndPostamble
-  | ManufacturerSpecificData
-  | PLMediumInfo;
 
 export class AdditionalInformationField {
   private _items: AddInfoBase[] = [];
@@ -125,13 +119,13 @@ export class AdditionalInformationField {
             item = new RFMediumInformation(dataSubset);
             break;
           case CEMIAddInfoType.BUSMONITOR_STATUS_INFO:
-            // item = new BusmonitorStatusInfo(dataSubset); // Implementar si falta
+            item = new BusmonitorStatusInfo(dataSubset); // Implementar si falta
             break;
           case CEMIAddInfoType.TIMESTAMP_RELATIVE:
-            // item = new TimestampRelative(dataSubset);
+            item = new TimestampRelative(dataSubset);
             break;
           case CEMIAddInfoType.TIME_DELAY_UNTIL_SENDING:
-            // item = new TimeDelayUntilSending(dataSubset);
+            item = new TimeDelayUntilSending(dataSubset);
             break;
           case CEMIAddInfoType.EXTENDED_RELATIVE_TIMESTAMP:
             item = new ExtendedRelativeTimestamp(dataSubset);
@@ -852,12 +846,159 @@ export class CEMI {
         return new L_Raw_ind(addInfoData, data);
       }
     },
+    "L_Busmon.ind": class L_Busmon_ind implements ServiceMessage {
+      constructor(additionalInfo: AddInfoBase[] | null, data: Buffer) {
+        this.data = data;
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+      }
+      messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"].CEMI.value;
+      additionalInfo = new AdditionalInformationField([new BusmonitorStatusInfo(), new TimestampRelative()]);
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8 + this.data.length);
+        const baseOffset = 2 + this.additionalInfo.length;
+        buffer.writeUint8(this.messageCode, 0);
+        buffer.writeUint8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
+        }
+        this.data.copy(buffer, baseOffset + 1, baseOffset + 1 + this.data.length);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          data: this.data,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["L_Busmon.ind"].CEMI.value)
+          throw new Error(`Invalid Message Code for L_Busmon.ind: expected 0x2B, got 0x${messageCode.toString(16)}`);
+        const addInfoLength = buffer.readUint8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) {
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        }
+        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const addInfoData = addInfo?.items ?? null;
+        return new L_Busmon_ind(addInfoData, data);
+      }
+    },
   } as const;
+
+  static TransportLayerCEMI = {
+    "T_Data_Connected.req": class T_Data_Connected_ind implements ServiceMessage {
+      constructor(addInfo: AddInfoBase[] | null, TPDU: TPDU) {
+        if (addInfo) this.additionalInfo = new AdditionalInformationField(addInfo);
+        this.tpdu = TPDU;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"].CEMI.value;
+      additionalInfo = new AdditionalInformationField();
+      tpdu = new TPDU(new TPCI(0));
+
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset + 6 + 1 + this.tpdu.length);
+        buffer.writeUint8(this.messageCode, 0);
+        buffer.writeUint8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
+        }
+        buffer.writeUint8(this.tpdu.length, baseOffset + 6);
+        this.tpdu.toBuffer().copy(buffer, baseOffset + 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          tpdu: this.tpdu,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"].CEMI.value;
+        if (messageCode !== buffer.readUint8(0)) {
+          throw new Error(
+            `Invalid Message Code for T_Data_Connected.ind: expected 0x41, got 0x${messageCode.toString(16)}`,
+          );
+        }
+        const addInfoLength = buffer.readUInt8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) {
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        }
+        const addInfoData = addInfo?.items ?? null;
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7 + baseOffset));
+        return new T_Data_Connected_ind(addInfoData, tpdu);
+      }
+    },
+    "T_Data_Connected.ind": class T_Data_Connected_ind implements ServiceMessage {
+      constructor(addInfo: AddInfoBase[] | null, TPDU: TPDU) {
+        if (addInfo) this.additionalInfo = new AdditionalInformationField(addInfo);
+        this.tpdu = TPDU;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"].CEMI.value;
+      additionalInfo = new AdditionalInformationField();
+      tpdu = new TPDU(new TPCI(0));
+
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset + 6 + 1 + this.tpdu.length);
+        buffer.writeUint8(this.messageCode, 0);
+        buffer.writeUint8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
+        }
+        buffer.writeUint8(this.tpdu.length, baseOffset + 6);
+        this.tpdu.toBuffer().copy(buffer, baseOffset + 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo,
+          tpdu: this.tpdu,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"].CEMI.value;
+        if (messageCode !== buffer.readUint8(0)) {
+          throw new Error(
+            `Invalid Message Code for T_Data_Connected.ind: expected 0x89, got 0x${messageCode.toString(16)}`,
+          );
+        }
+        const addInfoLength = buffer.readUInt8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) {
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        }
+        const addInfoData = addInfo?.items ?? null;
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7 + baseOffset));
+        return new T_Data_Connected_ind(addInfoData, tpdu);
+      }
+    },
+  } as const;
+
+  static ManagementCEMI = {} as const;
 }
 
 // !! Type check in all class
 
-type KeysOfCEMI = "DataLinkLayerCEMI";
+type KeysOfCEMI = "DataLinkLayerCEMI" | "TransportLayerCEMI";
 
 type ExcludedServices = never;
 

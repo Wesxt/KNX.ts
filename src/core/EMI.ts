@@ -63,7 +63,6 @@ import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { checksum } from "../utils/checksumFrame";
 import { SystemStatus, Status } from "./SystemStatus";
 import { SAP } from "./enum/SAP";
-import { AdditionalInformationField } from "./CEMI";
 
 class InvalidInputObject extends Error {
   constructor(className: string) {
@@ -325,7 +324,6 @@ export class EMI {
         this.LPDU = value.LPDU;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"]["EMI2/IMI2"].value;
-      additionalInfo = new AdditionalInformationField();
       status: Status;
       #timeStamp: number = 0;
       controlField1: ControlField;

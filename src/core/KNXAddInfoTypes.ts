@@ -1,5 +1,6 @@
+// KNXAddInfoTypes.ts
 import { Buffer } from "buffer";
-import { KNXHelper } from "../utils/KNXHelper";
+import { Status } from "./SystemStatus";
 
 /**
  * Interfaz base para todos los tipos de AddInfo.
@@ -621,6 +622,144 @@ export class ManufacturerSpecificData extends AddInfoBase {
     buffer.writeUInt8(this._subfunction, 4);
     this._data.copy(buffer, 5);
 
+    return buffer;
+  }
+}
+
+// -------------------------------------------------------------------
+// 4.1.4.3.1 AddInfo-Type 03h: Busmonitor Status Info
+// -------------------------------------------------------------------
+
+/**
+ * 4.1.4.3.1 AddInfo-Type 03h: Busmonitor Status Info
+ * Longitud de datos: 1 octeto.
+ * Utiliza la clase Status existente para la gestión de bits.
+ */
+export class BusmonitorStatusInfo extends AddInfoBase {
+  public static readonly TYPE_ID = 0x03;
+  public static readonly DATA_LENGTH = 0x01;
+
+  private _status: Status;
+
+  constructor(buffer?: Buffer) {
+    super(BusmonitorStatusInfo.TYPE_ID, BusmonitorStatusInfo.DATA_LENGTH);
+
+    if (buffer) {
+      // Validamos y extraemos la data pura (1 byte)
+      const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
+      // Delegamos la creación a tu método estático existente
+      this._status = Status.fromByte(dataBuffer.readUInt8(0));
+    } else {
+      // Constructor por defecto: Estado limpio
+      this._status = new Status({
+        frameError: false,
+        bitError: false,
+        parityError: false,
+        overflow: false,
+        lost: false,
+        sequenceNumber: 0,
+      });
+    }
+  }
+
+  /**
+   * Devuelve la instancia interna de Status para manipulación directa.
+   */
+  public get status(): Status {
+    return this._status;
+  }
+
+  public set status(value: Status) {
+    this._status = value;
+  }
+
+  public getBuffer(): Buffer {
+    const buffer = Buffer.alloc(3); // 1 (Type) + 1 (Length) + 1 (Data)
+    buffer.writeUInt8(this._typeId, 0);
+    buffer.writeUInt8(this._dataLength, 1);
+    buffer.writeUInt8(this._status.value, 2);
+    return buffer;
+  }
+}
+
+// -------------------------------------------------------------------
+// 4.1.4.3.9 AddInfo-Type 04h: Timestamp Relative
+// -------------------------------------------------------------------
+
+/**
+ * Implementación de AddInfoType 04h: Timestamp Relative.
+ * Longitud de datos: 2 octetos.
+ * Representa una marca de tiempo relativa (generalmente en ms o ticks desde el último evento).
+ */
+export class TimestampRelative extends AddInfoBase {
+  private _timestamp: number = 0;
+
+  public static readonly TYPE_ID = 0x04;
+  public static readonly DATA_LENGTH = 0x02;
+
+  constructor(buffer?: Buffer) {
+    super(TimestampRelative.TYPE_ID, TimestampRelative.DATA_LENGTH);
+
+    if (buffer) {
+      const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
+      this._timestamp = dataBuffer.readUInt16BE(0);
+    }
+  }
+
+  public get timestamp(): number {
+    return this._timestamp;
+  }
+
+  public set timestamp(value: number) {
+    this._timestamp = value & 0xffff;
+  }
+
+  public getBuffer(): Buffer {
+    const buffer = Buffer.alloc(4); // 1 (Type) + 1 (Length) + 2 (Data)
+    buffer.writeUInt8(this._typeId, 0);
+    buffer.writeUInt8(this._dataLength, 1);
+    buffer.writeUInt16BE(this._timestamp, 2);
+    return buffer;
+  }
+}
+
+// -------------------------------------------------------------------
+// 4.1.4.3.10 AddInfo-Type 05h: Time Delay Until Sending
+// -------------------------------------------------------------------
+
+/**
+ * Implementación de AddInfoType 05h: Time Delay Until Sending.
+ * Longitud de datos: 2 octetos.
+ * Define un retardo antes de enviar la trama al medio.
+ */
+export class TimeDelayUntilSending extends AddInfoBase {
+  private _delay: number = 0;
+
+  public static readonly TYPE_ID = 0x05;
+  public static readonly DATA_LENGTH = 0x02;
+
+  constructor(buffer?: Buffer) {
+    super(TimeDelayUntilSending.TYPE_ID, TimeDelayUntilSending.DATA_LENGTH);
+
+    if (buffer) {
+      const dataBuffer = AddInfoBase.parseDataBuffer(buffer, this._typeId, this._dataLength);
+      this._delay = dataBuffer.readUInt16BE(0);
+    }
+  }
+
+  public get delay(): number {
+    return this._delay;
+  }
+
+  public set delay(value: number) {
+    this._delay = value & 0xffff;
+  }
+
+  public getBuffer(): Buffer {
+    const buffer = Buffer.alloc(4); // 1 (Type) + 1 (Length) + 2 (Data)
+    buffer.writeUInt8(this._typeId, 0);
+    buffer.writeUInt8(this._dataLength, 1);
+    buffer.writeUInt16BE(this._delay, 2);
     return buffer;
   }
 }
