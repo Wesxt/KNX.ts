@@ -17,6 +17,7 @@ import {
   TimestampRelative,
 } from "./KNXAddInfoTypes";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
+import { ErrorCodeSet } from "./enum/ErrorCodeSet";
 import { TPDU } from "./layers/data/TPDU";
 import { TPCI } from "./layers/interfaces/TPCI";
 
@@ -993,7 +994,562 @@ export class CEMI {
     },
   } as const;
 
-  static ManagementCEMI = {} as const;
+  static ManagementCEMI = {
+    // ---------------------------------------------------------------------
+    // M_PropRead
+    // ---------------------------------------------------------------------
+    "M_PropRead.req": class M_PropRead_req implements ServiceMessage {
+      constructor(
+        interfaceObjectType: number,
+        objectInstance: number,
+        propertyId: number,
+        numberOfElements: number,
+        startIndex: number,
+      ) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyId;
+        this.numberOfElements = numberOfElements;
+        this.startIndex = startIndex;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_PropRead.req"].CEMI.value; // 0xFC
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      numberOfElements: number = 1;
+      startIndex: number = 1;
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt16BE(this.interfaceObjectType, 1);
+        buffer.writeUInt8(this.objectInstance, 3);
+        buffer.writeUInt8(this.propertyId, 4);
+        buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+          numberOfElements: this.numberOfElements,
+          startIndex: this.startIndex,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer): M_PropRead_req {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_PropRead.req"].CEMI.value)
+          throw new Error(`Invalid Message Code for M_PropRead.req: expected 0xFC, got 0x${messageCode.toString(16)}`);
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const byte5 = buffer.readUInt16BE(5);
+        const startIndex = byte5 & 0x0fff;
+        const numberOfElements = byte5 & 0xf000;
+
+        return new M_PropRead_req(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex);
+      }
+    },
+    "M_PropRead.con": class M_PropRead_con implements ServiceMessage {
+      constructor(
+        interfaceObjectType: number,
+        objectInstance: number,
+        propertyId: number,
+        numberOfElements: number,
+        startIndex: number,
+        data: Buffer,
+      ) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyId;
+        this.numberOfElements = numberOfElements;
+        this.startIndex = startIndex;
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value; // 0xFC
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      numberOfElements: number = 1;
+      startIndex: number = 1;
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt16BE(this.interfaceObjectType, 1);
+        buffer.writeUInt8(this.objectInstance, 3);
+        buffer.writeUInt8(this.propertyId, 4);
+        buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
+        this.data.copy(buffer, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+          numberOfElements: this.numberOfElements,
+          startIndex: this.startIndex,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer): M_PropRead_con {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value)
+          throw new Error(`Invalid Message Code for M_PropRead.con: expected 0xFB, got 0x${messageCode.toString(16)}`);
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const byte5 = buffer.readUInt16BE(5);
+        const startIndex = byte5 & 0x0fff;
+        const numberOfElements = byte5 & 0xf000;
+        const data = buffer.subarray(7, buffer.length - 1);
+
+        return new M_PropRead_con(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex, data);
+      }
+    },
+
+    // ---------------------------------------------------------------------
+    // M_PropWrite
+    // ---------------------------------------------------------------------
+    "M_PropWrite.req": class M_PropWrite_req implements ServiceMessage {
+      constructor(
+        interfaceObjectType: number,
+        objectInstance: number,
+        propertyId: number,
+        numberOfElements: number,
+        startIndex: number,
+        data: Buffer,
+      ) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyId;
+        this.numberOfElements = numberOfElements;
+        this.startIndex = startIndex;
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value; // 0xFC
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      numberOfElements: number = 1;
+      startIndex: number = 1;
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.data.length);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt16BE(this.interfaceObjectType, 1);
+        buffer.writeUInt8(this.objectInstance, 3);
+        buffer.writeUInt8(this.propertyId, 4);
+        buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
+        this.data.copy(buffer, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+          numberOfElements: this.numberOfElements,
+          startIndex: this.startIndex,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer): M_PropWrite_req {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value)
+          throw new Error(`Invalid Message Code for M_PropWrite.req: expected 0xF6, got 0x${messageCode.toString(16)}`);
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const byte5 = buffer.readUInt16BE(5);
+        const startIndex = byte5 & 0x0fff;
+        const numberOfElements = byte5 & 0xf000;
+        const data = buffer.subarray(7, buffer.length - 1);
+
+        return new M_PropWrite_req(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex, data);
+      }
+    },
+
+    "M_PropWrite.con": class M_PropWrite_con implements ServiceMessage {
+      constructor(
+        interfaceObjectType: number,
+        objectInstance: number,
+        propertyId: number,
+        numberOfElements: number,
+        startIndex: number,
+        errorInfo: ErrorCodeSet,
+      ) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyId;
+        this.numberOfElements = numberOfElements;
+        this.startIndex = startIndex;
+        this.errorInfo = errorInfo;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value; // 0xFC
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      numberOfElements: number = 1;
+      startIndex: number = 1;
+      errorInfo: number;
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(8);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt16BE(this.interfaceObjectType, 1);
+        buffer.writeUInt8(this.objectInstance, 3);
+        buffer.writeUInt8(this.propertyId, 4);
+        buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
+        buffer.writeUint8(this.errorInfo, 7);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+          numberOfElements: this.numberOfElements,
+          startIndex: this.startIndex,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer): M_PropWrite_con {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value)
+          throw new Error(`Invalid Message Code for M_PropWrite.con: expected 0xF5, got 0x${messageCode.toString(16)}`);
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const byte5 = buffer.readUInt16BE(5);
+        const startIndex = byte5 & 0x0fff;
+        const numberOfElements = byte5 & 0xf000;
+        const errorInfo = buffer.subarray(7).readUint8();
+
+        return new M_PropWrite_con(
+          interfaceObjectType,
+          objectInstance,
+          propertyId,
+          numberOfElements,
+          startIndex,
+          errorInfo,
+        );
+      }
+    },
+    // ---------------------------------------------------------------------
+    // M_PropInfo
+    // ---------------------------------------------------------------------
+    "M_PropInfo.ind": class M_PropInfo_ind implements ServiceMessage {
+      constructor(
+        interfaceObjectType: number,
+        objectInstance: number,
+        propertyId: number,
+        numberOfElements: number,
+        startIndex: number,
+        data: Buffer,
+      ) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyId;
+        this.numberOfElements = numberOfElements;
+        this.startIndex = startIndex;
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_PropInfo.ind"].CEMI.value; // 0xF7
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      numberOfElements: number = 1;
+      startIndex: number = 1;
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(7 + this.data.length);
+
+        buffer.writeUInt8(this.messageCode, 0);
+
+        buffer.writeUInt16BE(this.interfaceObjectType, 1);
+        buffer.writeUInt8(this.objectInstance, 3);
+        buffer.writeUInt8(this.propertyId, 4);
+        buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
+        this.data.copy(buffer, 7);
+
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+          numberOfElements: this.numberOfElements,
+          startIndex: this.startIndex,
+          data: this.data,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer): M_PropInfo_ind {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_PropInfo.ind"].CEMI.value)
+          throw new Error(`Invalid Message Code for M_PropInfo.ind: expected 0xF7, got 0x${messageCode.toString(16)}`);
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const byte5 = buffer.readUInt16BE(5);
+        const startIndex = byte5 & 0x0fff;
+        const numberOfElements = byte5 & 0xf000;
+        const data = buffer.subarray(7);
+
+        return new M_PropInfo_ind(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex, data);
+      }
+    },
+
+    // ---------------------------------------------------------------------
+    // M_FuncPropCommand
+    // ---------------------------------------------------------------------
+    "M_FuncPropCommand.req": class M_FuncPropCommand_req implements ServiceMessage {
+      constructor(interfaceObjectType: number, objectInstance: number, propertyIndentifier: number, data: Buffer) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyIndentifier;
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value;
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(5 + this.data.length);
+        buffer.writeUint8(this.messageCode, 0);
+        buffer.writeUint16BE(this.interfaceObjectType, 1);
+        buffer.writeUint8(this.objectInstance, 3);
+        buffer.writeUint8(this.propertyId, 4);
+        this.data.copy(buffer, 5);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value)
+          throw new Error(
+            `Invalid Message Code for M_FuncPropCommand.req: expected 0xF8, got 0x${messageCode.toString(16)}`,
+          );
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const data = buffer.subarray(5);
+        return new M_FuncPropCommand_req(interfaceObjectType, objectInstance, propertyId, data);
+      }
+    },
+    "M_FuncPropCommand.con": class M_FuncPropCommand_con implements ServiceMessage {
+      constructor(
+        interfaceObjectType: number,
+        objectInstance: number,
+        propertyIndentifier: number,
+        return_code: number,
+        data: Buffer,
+      ) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyIndentifier;
+        this.return_code = return_code;
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value;
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      return_code: number = 0;
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(6 + this.data.length);
+        buffer.writeUint8(this.messageCode, 0);
+        buffer.writeUint16BE(this.interfaceObjectType, 1);
+        buffer.writeUint8(this.objectInstance, 3);
+        buffer.writeUint8(this.propertyId, 4);
+        buffer.writeUint8(this.return_code, 5);
+        this.data.copy(buffer, 6);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+          return_code: this.return_code,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value)
+          throw new Error(
+            `Invalid Message Code for M_FuncPropCommand.con: expected 0xFA, got 0x${messageCode.toString(16)}`,
+          );
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const return_code = buffer.readUint8(5);
+        const data = buffer.subarray(6);
+        return new M_FuncPropCommand_con(interfaceObjectType, objectInstance, propertyId, return_code, data);
+      }
+    },
+    "M_FuncPropStateRead.req": class M_FuncPropCommand_con implements ServiceMessage {
+      constructor(interfaceObjectType: number, objectInstance: number, propertyIndentifier: number, data: Buffer) {
+        this.interfaceObjectType = interfaceObjectType;
+        this.objectInstance = objectInstance;
+        this.propertyId = propertyIndentifier;
+        this.data = data;
+      }
+
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value;
+      interfaceObjectType: number = 0;
+      objectInstance: number = 0;
+      propertyId: number = 0;
+      data: Buffer = Buffer.alloc(1);
+
+      toBuffer(): Buffer {
+        const buffer = Buffer.alloc(5 + this.data.length);
+        buffer.writeUint8(this.messageCode, 0);
+        buffer.writeUint16BE(this.interfaceObjectType, 1);
+        buffer.writeUint8(this.objectInstance, 3);
+        buffer.writeUint8(this.propertyId, 4);
+        this.data.copy(buffer, 5);
+        return buffer;
+      }
+
+      describe() {
+        return {
+          messageCode: this.messageCode,
+          interfaceObjectType: this.interfaceObjectType,
+          objectInstance: this.objectInstance,
+          propertyId: this.propertyId,
+        };
+      }
+
+      static fromBuffer(buffer: Buffer) {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value)
+          throw new Error(
+            `Invalid Message Code for M_FuncPropStateRead.req: expected 0xF9, got 0x${messageCode.toString(16)}`,
+          );
+
+        const interfaceObjectType = buffer.readUInt16BE(1);
+        const objectInstance = buffer.readUInt8(3);
+        const propertyId = buffer.readUInt8(4);
+        const data = buffer.subarray(5);
+        return new M_FuncPropCommand_con(interfaceObjectType, objectInstance, propertyId, data);
+      }
+    },
+    // ---------------------------------------------------------------------
+    // M_Reset
+    // ---------------------------------------------------------------------
+    // "M_Reset.req": class M_Reset_req implements ServiceMessage {
+    //   constructor(additionalInfo: AddInfoBase[] | null = null) {
+    //     if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+    //   }
+    //   messageCode = MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value; // 0xF1
+    //   additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+
+    //   toBuffer(): Buffer {
+    //     const baseOffset = 2 + this.additionalInfo.length;
+    //     const buffer = Buffer.alloc(baseOffset);
+    //     buffer.writeUInt8(this.messageCode, 0);
+    //     buffer.writeUInt8(this.additionalInfo.length, 1);
+    //     if (this.additionalInfo.length > 0) {
+    //       this.additionalInfo.toBuffer().copy(buffer, 2);
+    //     }
+    //     return buffer;
+    //   }
+    //   describe() {
+    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo };
+    //   }
+
+    //   static fromBuffer(buffer: Buffer): M_Reset_req {
+    //     const messageCode = buffer.readUInt8(0);
+    //     if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value) throw new Error("Invalid MC for M_Reset.req");
+    //     // Parse AddInfo Logic similiar to others...
+    //     const addInfoLength = buffer.readUInt8(1);
+    //     const baseOffset = 2 + addInfoLength;
+    //     let addInfo: AdditionalInformationField | null = null;
+    //     if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+    //     return new M_Reset_req(addInfo?.items ?? null);
+    //   }
+    // },
+    // "M_Reset.ind": class M_Reset_ind implements ServiceMessage {
+    //   constructor(additionalInfo: AddInfoBase[] | null = null) {
+    //     if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+    //   }
+    //   messageCode = MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value; // 0xF0
+    //   additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+
+    //   toBuffer(): Buffer {
+    //     const baseOffset = 2 + this.additionalInfo.length;
+    //     const buffer = Buffer.alloc(baseOffset);
+    //     buffer.writeUInt8(this.messageCode, 0);
+    //     buffer.writeUInt8(this.additionalInfo.length, 1);
+    //     if (this.additionalInfo.length > 0) {
+    //       this.additionalInfo.toBuffer().copy(buffer, 2);
+    //     }
+    //     return buffer;
+    //   }
+    //   describe() {
+    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo };
+    //   }
+
+    //   static fromBuffer(buffer: Buffer): M_Reset_ind {
+    //     const messageCode = buffer.readUInt8(0);
+    //     if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value) throw new Error("Invalid MC for M_Reset.ind");
+    //     const addInfoLength = buffer.readUInt8(1);
+    //     const baseOffset = 2 + addInfoLength;
+    //     let addInfo: AdditionalInformationField | null = null;
+    //     if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+    //     return new M_Reset_ind(addInfo?.items ?? null);
+    //   }
+    // },
+  } as const;
 }
 
 // !! Type check in all class
