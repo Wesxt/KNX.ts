@@ -1,4 +1,4 @@
-import { APCIEnum } from "./enum/APCIEnum";
+import { APCIEnum } from "../../enum/APCIEnum";
 
 /**
  * Clase para manejar el Application Control Field (APCI) en comunicaciones KNX,
@@ -92,9 +92,11 @@ export class APCI {
   /**
    * Proporciona una descripción legible del APCI.
    */
-  describe(): string {
-    return `APCI:
-  Command: ${this.command}
-  Full Value: ${this.toHex()} (Buffer: ${this.toBuffer().toString("hex").toUpperCase()})`;
+  describe() {
+    return {
+      obj: this.constructor.name,
+      command: this.command,
+      value: `${this.toHex()} (Buffer: ${this.toBuffer().toString("hex").toUpperCase()})`
+    };
   }
 }

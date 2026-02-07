@@ -98,15 +98,16 @@ export class ExtendedControlField {
   /**
    * Descripción detallada del CTRLE
    */
-  describe(): string {
+  describe() {
     const val = this.buffer[0];
-    return `CTRLE:
-    Hex: 0x${this.toHexString()}
-    AddressType (bit7): ${this.addressType === AddressType.GROUP ? "GROUP(1)" : "INDIVIDUAL(0)"}
-    HopCount (bits6..4): ${this.hopCount}
-    EFF (bits3..0): ${this.eff}
-    Bin: ${val.toString(2).padStart(8, '0')}
-    `;
+    return {
+      obj: this.constructor.name,
+      hex: `0x${this.toHexString()}`,
+      addressType: this.addressType === AddressType.GROUP ? "GROUP(1)" : "INDIVIDUAL(0)",
+      hopCount: this.hopCount,
+      eff: this.eff,
+      binary: val.toString(2).padStart(8, '0')
+    };
   }
 
   /**

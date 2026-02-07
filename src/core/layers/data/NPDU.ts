@@ -1,6 +1,6 @@
 import { ServiceMessage } from "../../../@types/interfaces/ServiceMessage";
 import { AddressType } from "../../enum/EnumControlFieldExtended";
-import { TPDU } from "../../TPDU";
+import { TPDU } from "./TPDU";
 
 /**
  * Clase que representa la Network Protocol Data Unit (NPDU).
@@ -16,12 +16,12 @@ import { TPDU } from "../../TPDU";
  */
 export class NPDU implements ServiceMessage {
   private _hopCount: number = 6; // Valor por defecto estándar en KNX
-  private _TPDU: TPDU; // Datos puros (payload del usuario)
+  public TPDU: TPDU; // Datos puros (payload del usuario)
   private _addressType: AddressType;
   constructor(InstanceOfTPDU: TPDU = new TPDU(), addressType: AddressType = AddressType.GROUP, hopCount: number = 6) {
     this._addressType = addressType;
     this.hopCount = hopCount; // Usa el setter para validar
-    this._TPDU = InstanceOfTPDU;
+    this.TPDU = InstanceOfTPDU;
   }
 
   /**
@@ -51,7 +51,7 @@ export class NPDU implements ServiceMessage {
   }
 
   toBuffer(): Buffer {
-    const tpduBuffer = this._TPDU.toBuffer();
+    const tpduBuffer = this.TPDU.toBuffer();
     const length = tpduBuffer.length;
 
     // Construcción del Byte NPCI (Octeto 0 del NPDU)
@@ -72,7 +72,7 @@ export class NPDU implements ServiceMessage {
       layer: "Network Layer (NPDU)",
       addressType: AddressType[this.addressType],
       hopCount: this.hopCount,
-      TPDU: this._TPDU.describe(),
+      TPDU: this.TPDU.describe(),
     };
   }
 

@@ -9,9 +9,15 @@
     "noUnusedLocals": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "lib": ["ES2024"],
-    "incremental": true
+    "lib": [
+      "ES2024"
+    ],
+    "incremental": true,
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

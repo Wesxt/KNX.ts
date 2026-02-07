@@ -2,7 +2,8 @@
   "scripts": {
     "build": "tsc",
     "start": "tsc && node dist/index.js",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "test:connection": "node dist\\test\\knxd_manual.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.10",

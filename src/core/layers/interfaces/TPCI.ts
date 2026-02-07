@@ -157,16 +157,17 @@ export class TPCI {
    */
   describe() {
     return {
-      buffer: this.toBuffer,
+      buffer: this.toBuffer(),
       hex: this.toHex(),
-      dataOrControlFlag: this.dataControlFlag,
+      dataOrControlFlag: this.dataControlFlag ? "Control" : "Data",
       numbered: this.numberedFlag,
       sequenceNumber: this.sequenceNumber,
       firstTwoBitsFromAPCI: this.first2bitsOfAPCI,
+      TPCIType: this.mapTPCIType(this.getValue())
     };
   }
 
-  mapTPCIType(value: TPCIType | number): string {
+  mapTPCIType(value: TPCIType | number, isForce = false): string {
     switch (value) {
       case TPCIType.T_DATA_BROADCAST_PDU:
         return "T_Data_Broadcast_PDU";
@@ -183,7 +184,20 @@ export class TPCI {
       case TPCIType.T_NAK_PDU:
         return "T_NAK_PDU";
       default:
-        return "Unknown PDU";
+        if (!isForce) {
+          /**
+           * This is to try to analyze if it is:
+           * T_Data_Broadcast-PDU (destination_address = 0)
+           * T_Data_Group-PDU (destination_address <> 0)
+           * T_Data_Tag_Group-PDU
+           * T_Data_Individual-PDU
+           * T_Data_Connected-PDU
+           */
+          const forceAnalysis = value & 0xFC;
+          return this.mapTPCIType(forceAnalysis, true);
+        } else {
+          return 'Unknown PDU';
+        }
     }
   }
 }

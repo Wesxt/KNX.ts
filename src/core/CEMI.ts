@@ -173,6 +173,22 @@ export class CEMI {
     throw new Error("This class is static");
   }
 
+  static fromBuffer(buffer: Buffer): ServiceMessage {
+    const messageCode = buffer.readUInt8(0);
+    const groups = [this.DataLinkLayerCEMI, this.TransportLayerCEMI, this.ManagementCEMI];
+
+    for (const group of groups) {
+      for (const [key, cls] of Object.entries(group)) {
+        const mapping = (MESSAGE_CODE_FIELD as any)[key];
+        if (mapping?.CEMI?.value === messageCode) {
+          return (cls as any).fromBuffer(buffer);
+        }
+      }
+    }
+
+    throw new Error(`Unknown CEMI message code: 0x${messageCode.toString(16)}`);
+  }
+
   static DataLinkLayerCEMI = {
     "L_Data.req": class L_Data_req implements ServiceMessage {
       constructor(
@@ -189,7 +205,7 @@ export class CEMI {
         this.sourceAddress = sourceAddress;
         this.destinationAddress = destinationAddress;
         this.TPDU = TPDU;
-        this.length = TPDU.length;
+        this.length = TPDU.apdu.length;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.req"].CEMI.value;
       additionalInfo: AdditionalInformationField = new AdditionalInformationField();
@@ -252,7 +268,7 @@ export class CEMI {
         const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
         const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
 
-        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, ".") as string;
         const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         // 5. Data Length (L)
@@ -261,7 +277,7 @@ export class CEMI {
 
         // 6. TPDU
         // Extraemos exactamente 'length' bytes para el TPDU
-        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length);
+        const tpduBuffer = buffer.subarray(baseOffset + 7);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
@@ -278,6 +294,7 @@ export class CEMI {
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
+          TPDU: this.TPDU.describe()
         };
       }
     },
@@ -296,7 +313,7 @@ export class CEMI {
         this.sourceAddress = sourceAddress;
         this.destinationAddress = destinationAddress;
         this.TPDU = TPDU;
-        this.length = TPDU.length;
+        this.length = TPDU.apdu.length;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.con"].CEMI.value;
       additionalInfo: AdditionalInformationField = new AdditionalInformationField();
@@ -359,7 +376,7 @@ export class CEMI {
         const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
         const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
 
-        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, ".") as string;
         const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         // 5. Data Length (L)
@@ -368,7 +385,7 @@ export class CEMI {
 
         // 6. TPDU
         // Extraemos exactamente 'length' bytes para el TPDU
-        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length);
+        const tpduBuffer = buffer.subarray(baseOffset + 7);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
@@ -385,6 +402,7 @@ export class CEMI {
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
+          TPDU: this.TPDU.describe()
         };
       }
     },
@@ -403,7 +421,7 @@ export class CEMI {
         this.sourceAddress = sourceAddress;
         this.destinationAddress = destinationAddress;
         this.TPDU = TPDU;
-        this.length = TPDU.length;
+        this.length = TPDU.apdu.length;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.ind"].CEMI.value;
       additionalInfo: AdditionalInformationField = new AdditionalInformationField();
@@ -466,7 +484,7 @@ export class CEMI {
         const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
         const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
 
-        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, ".") as string;
         const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         // 5. Data Length (L)
@@ -475,7 +493,7 @@ export class CEMI {
 
         // 6. TPDU
         // Extraemos exactamente 'length' bytes para el TPDU
-        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length);
+        const tpduBuffer = buffer.subarray(baseOffset + 7);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
@@ -492,6 +510,7 @@ export class CEMI {
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
+          TPDU: this.TPDU.describe()
         };
       }
     },
@@ -571,7 +590,7 @@ export class CEMI {
         const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
         const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
 
-        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, ".") as string;
         const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         const numOfSlots = buffer.subarray(6 + baseOffset, 7 + baseOffset).readUint8() & 0x0f;
@@ -681,7 +700,7 @@ export class CEMI {
         const srcBuffer = buffer.subarray(baseOffset + 2, baseOffset + 4);
         const dstBuffer = buffer.subarray(baseOffset + 4, baseOffset + 6);
 
-        const sourceAddress = KNXHelper.GetAddress(srcBuffer, controlField2.addressType ? "/" : ".") as string;
+        const sourceAddress = KNXHelper.GetAddress(srcBuffer, ".") as string;
         const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         const numOfSlots = buffer.subarray(6 + baseOffset, 7 + baseOffset).readUint8() & 0x0f;
@@ -921,7 +940,7 @@ export class CEMI {
         return {
           messageCode: this.messageCode,
           additionalInfo: this.additionalInfo,
-          tpdu: this.tpdu,
+          tpdu: this.tpdu.describe(),
         };
       }
 
@@ -970,7 +989,7 @@ export class CEMI {
         return {
           messageCode: this.messageCode,
           additionalInfo: this.additionalInfo,
-          tpdu: this.tpdu,
+          tpdu: this.tpdu.describe(),
         };
       }
 
@@ -1558,20 +1577,20 @@ type KeysOfCEMI = "DataLinkLayerCEMI" | "TransportLayerCEMI";
 
 type ExcludedServices = never;
 
-type CEMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
+type CEMIServiceConstructor<T> = T extends { new(...args: any[]): infer I; }
   ? {
-      new (...args: any[]): I;
-      fromBuffer(buffer: Buffer): I;
-    }
+    new(...args: any[]): I;
+    fromBuffer(buffer: Buffer): I;
+  }
   : never;
 
 type CEMIValidator = {
   [K in KeysOfCEMI]: {
     [S in keyof (typeof CEMI)[K]]: S extends ExcludedServices
-      ? any
-      : (typeof CEMI)[K][S] extends { new (...args: any[]): any }
-        ? CEMIServiceConstructor<(typeof CEMI)[K][S]>
-        : any;
+    ? any
+    : (typeof CEMI)[K][S] extends { new(...args: any[]): any; }
+    ? CEMIServiceConstructor<(typeof CEMI)[K][S]>
+    : any;
   };
 };
 

@@ -5,45 +5,45 @@ import { APCI } from "../interfaces/APCI";
 import { TPCI, TPCIType } from "../interfaces/TPCI";
 
 export class APDU implements ServiceMessage {
-  _tpci: TPCI;
-  _apci: APCI;
-  _data: Buffer;
+  tpci: TPCI;
+  apci: APCI;
+  data: Buffer;
 
   constructor(
     tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU),
     apci: APCI = new APCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit),
     data: Buffer = Buffer.alloc(0),
   ) {
-    this._tpci = tpci;
-    this._apci = apci;
-    this._data = data;
+    this.tpci = tpci;
+    this.apci = apci;
+    this.data = data;
   }
 
   get length(): number {
-    return KNXHelper.GetDataLength(this._data);
+    return KNXHelper.GetDataLength(this.data);
   }
 
   /**
    * Devuelve un buffer con TPCI/APCI + data
    */
   toBuffer(): Buffer {
-    const buffer = Buffer.alloc(1 + (this._data.length > 0 ? this._data.length : 1));
-    const packNumber = this._apci.packNumber();
-    this._tpci.first2bitsOfAPCI = packNumber[0];
+    const buffer = Buffer.alloc(1 + (this.data.length > 0 ? this.data.length : 1));
+    const packNumber = this.apci.packNumber();
+    this.tpci.first2bitsOfAPCI = packNumber[0];
     // TPCI/APCI
-    buffer.writeUInt8(this._tpci.getValue(), 0);
+    buffer.writeUInt8(this.tpci.getValue(), 0);
     buffer.writeUInt8(packNumber[1], 1);
     // Data
-    KNXHelper.WriteData(buffer, this._data, 1);
+    KNXHelper.WriteData(buffer, this.data, 1);
     return buffer;
   }
 
   describe() {
     return {
       layer: "Application Layer (APDU)",
-      tpci: this._tpci.describe(),
-      apci: this._apci.describe(),
-      data: this._data,
+      tpci: this.tpci.describe(),
+      apci: this.apci.describe(),
+      data: this.data,
     };
   }
 
@@ -106,6 +106,7 @@ export class APDU implements ServiceMessage {
         const shortData = byte1 & 0x3f;
         // Lo convertimos a Buffer de 1 byte para mantener consistencia
         data = Buffer.from([shortData]);
+
       } else {
         // Caso raro: Longitud 1 (Solo comando sin datos, ej. Read request)
         data = Buffer.alloc(0);

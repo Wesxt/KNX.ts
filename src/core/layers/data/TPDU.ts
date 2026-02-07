@@ -4,48 +4,51 @@ import { TPCI, TPCIType } from "../interfaces/TPCI";
 import { APDU } from "./APDU";
 
 export class TPDU implements ServiceMessage {
-  _tpci: TPCI;
-  _apdu: APDU;
-  _data: Buffer;
+  tpci: TPCI;
+  apdu: APDU;
+  data: Buffer;
 
   constructor(
     tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU),
     apdu: APDU = new APDU(),
     data: Buffer = Buffer.alloc(0),
   ) {
-    this._tpci = tpci;
-    this._apdu = apdu;
-    this._data = data;
+    this.tpci = tpci;
+    this.apdu = apdu;
+    this.data = data;
   }
 
+  /**
+   * Get length all TPDU
+   */
   get length(): number {
-    return KNXHelper.GetDataLength(this._data);
+    return this.toBuffer().length;
   }
 
   get TSDU() {
-    return this._apdu;
+    return this.apdu;
   }
 
   /**
    * Devuelve un buffer con TPCI/APCI + data
    */
   toBuffer(): Buffer {
-    const buffer = Buffer.alloc(1 + (this._data.length > 0 ? this._data.length : 1));
+    const buffer = Buffer.alloc(1 + (this.data.length > 0 ? this.data.length : 1));
     // La clase APDU tiene el tpci y el apci en su buffer
     // para simplificar la envoltura de los octetos por lo tanto
     // se escribe el tpci desde del apdu para evitar problemas
-    buffer.writeUint8(this._apdu._tpci.getValue(), 0);
-    const packNumber = this._apdu._apci.packNumber();
+    buffer.writeUint8(this.apdu.tpci.getValue(), 0);
+    const packNumber = this.apdu.apci.packNumber();
     buffer.writeUInt8(packNumber[1], 1);
-    KNXHelper.WriteData(buffer, this._data, 1);
+    KNXHelper.WriteData(buffer, this.data, 1);
     return buffer;
   }
 
   describe() {
     return {
       layer: "Transport Layer (TPDU)",
-      tpci: this._tpci.describe(),
-      APDU: this._apdu.describe(),
+      tpci: this.tpci.describe(),
+      APDU: this.apdu.describe(),
     };
   }
 
@@ -70,6 +73,6 @@ export class TPDU implements ServiceMessage {
     // últimos 2 bits del primer byte (que son parte del APCI).
     const apdu = APDU.fromBuffer(buffer);
 
-    return new TPDU(tpci, apdu);
+    return new TPDU(tpci, apdu, apdu.data);
   }
 }

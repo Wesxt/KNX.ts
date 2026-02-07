@@ -1,8 +1,8 @@
 import { FrameKind, FrameType, Priority } from "../../core/enum/EnumControlField";
 import { AddressType, ExtendedFrameFormat } from "../../core/enum/EnumControlFieldExtended";
-import { APCIEnum } from "../../core/APCI";
-import { KnxDataEncoder } from "../../core/KNXDataEncode";
-import { TPCIType } from "../../core/TPCI";
+import { APCIEnum } from "../../core/enum/APCIEnum";
+import { KnxDataEncoder } from "../../core/data/KNXDataEncode";
+import { TPCIType } from "../../core/layers/interfaces/TPCI";
 import { AllDpts } from "../types/AllDpts";
 
 export interface ControlFieldData {

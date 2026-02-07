@@ -1,6 +1,6 @@
 import { SerialPort } from "serialport";
 import EventEmitter from "events";
-import { L_Data_Extended, L_Data_Standard } from "../@types/interfaces/KNXTP1";
+// import { L_Data_Extended, L_Data_Standard } from "../@types/interfaces/KNXTP1";
 
 // Constantes del protocolo UART
 const UART_SERVICES = {
@@ -39,7 +39,7 @@ export class TPUARTConnection extends EventEmitter {
   private port: SerialPort;
   private receiver: Receiver;
   private lastUartState: number = 0;
-  private KNXTP = new KNXTP1();
+  // private KNXTP = new KNXTP1();
 
   constructor(portPath: string) {
     super();
@@ -85,15 +85,15 @@ export class TPUARTConnection extends EventEmitter {
     });
   }
 
-  async sendGroupValueWriteInLDataStandard(LDataStandard: L_Data_Standard): Promise<void> {
-    const telegram = this.KNXTP.createLDataStandardFrame(LDataStandard);
-    await this.sendTelegram(telegram);
-  }
+  // async sendGroupValueWriteInLDataStandard(LDataStandard: L_Data_Standard): Promise<void> {
+  //   const telegram = this.KNXTP.createLDataStandardFrame(LDataStandard);
+  //   await this.sendTelegram(telegram);
+  // }
 
-  async sendGroupValueWriteInLDataExtended(LDataExtended: L_Data_Extended): Promise<void> {
-    const telegram = this.KNXTP.createLDataExtendedFrame(LDataExtended);
-    await this.sendTelegram(telegram);
-  }
+  // async sendGroupValueWriteInLDataExtended(LDataExtended: L_Data_Extended): Promise<void> {
+  //   const telegram = this.KNXTP.createLDataExtendedFrame(LDataExtended);
+  //   await this.sendTelegram(telegram);
+  // }
 
   // private calculateChecksum(data: Buffer): number {
   //     return data.reduce((acc, byte) => acc ^ byte, 0) ^ 0xFF;
