@@ -2,7 +2,7 @@ import { KNXTunneling, KNXTunnelingOptions } from '../connection/KNXTunneling';
 import { KNXRouting } from '../connection/KNXRouting';
 import { ConnectionType } from '../core/enum/KNXnetIPEnum';
 import { ServiceMessage } from '../@types/interfaces/ServiceMessage';
-import util from 'node:util';
+import { getLocalIP } from '../utils/localIp';
 
 // Configuration for local knxd
 const KNXD_IP = '192.168.1.6'; // Change if knxd is on another machine
@@ -21,7 +21,7 @@ async function testTunneling() {
         ip: KNXD_IP,
         port: PORT,
         connectionType: ConnectionType.TUNNEL_CONNECTION,
-        localIp: '192.168.1.8', // Let OS decide or use getLocalIP()
+        localIp: getLocalIP(), // Let OS decide or use getLocalIP()
         transport: 'UDP'
     };
 
@@ -31,11 +31,17 @@ async function testTunneling() {
         console.log('[Tunneling] Connected!');
         console.log(`[Tunneling] Channel ID: ${client['channelId']}`);
         if (info) console.log('[Tunneling] Info:', info);
-        let data = true;
-        setInterval(() => {
-            data = !data;
-            client.write("1/1/1", "1.001", { value: data });
-        }, 5000);
+        // let data = 0;
+        client.write("1/1/1", 5, { valueDpt5: 1 });
+        client.write("1/1/1", 5, { valueDpt5: 62 });
+        client.write("1/1/1", 5, { valueDpt5: 63 });
+        client.write("1/1/1", 5, { valueDpt5: 64 });
+        client.write("1/1/1", 5, { valueDpt5: 65 });
+
+        // setInterval(() => {
+        //     data++;
+        //     client.write("1/1/1", 5, { valueDpt5: data });
+        // }, 1000);
     });
 
     client.on('disconnected', () => {
@@ -47,13 +53,17 @@ async function testTunneling() {
     });
 
     client.on('indication', (msg: ServiceMessage) => {
-        console.log(msg);
-        console.log(util.inspect(msg.describe(), {
-            showHidden: false,
-            depth: null,
-            colors: true
-        }));
+        console.log('CEMI', msg.constructor.name, msg.toBuffer());
+        // console.log(util.inspect(msg.describe(), {
+        //     showHidden: false,
+        //     depth: null,
+        //     colors: true
+        // }));
         // console.log('[Tunneling] Received Indication (cEMI)');
+    });
+
+    client.on('raw_indication', (msg: Buffer) => {
+        console.log('RAW', msg);
     });
 
     try {

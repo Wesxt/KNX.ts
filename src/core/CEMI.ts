@@ -277,7 +277,8 @@ export class CEMI {
 
         // 6. TPDU
         // Extraemos exactamente 'length' bytes para el TPDU
-        const tpduBuffer = buffer.subarray(baseOffset + 7);
+        // !!! The length specified in the message is the length of the APDU; therefore, when constructing the TPDU, one more octet is needed for the TPCI.
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length + 1);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
@@ -385,7 +386,8 @@ export class CEMI {
 
         // 6. TPDU
         // Extraemos exactamente 'length' bytes para el TPDU
-        const tpduBuffer = buffer.subarray(baseOffset + 7);
+        // !!! The length specified in the message is the length of the APDU; therefore, when constructing the TPDU, one more octet is needed for the TPCI.
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length + 1);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
@@ -493,7 +495,8 @@ export class CEMI {
 
         // 6. TPDU
         // Extraemos exactamente 'length' bytes para el TPDU
-        const tpduBuffer = buffer.subarray(baseOffset + 7);
+        // !!! The length specified in the message is the length of the APDU; therefore, when constructing the TPDU, one more octet is needed for the TPCI.
+        const tpduBuffer = buffer.subarray(baseOffset + 7, baseOffset + 7 + length + 1);
         const tpdu = TPDU.fromBuffer(tpduBuffer);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
@@ -627,7 +630,7 @@ export class CEMI {
         sourceAddress: string,
         destinationAddress: string,
         numOfSlots: number,
-        pollData: number,
+        pollData: Buffer,
       ) {
         if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
         this.controlField1 = controlField1;
@@ -636,7 +639,6 @@ export class CEMI {
         this.destinationAddress = destinationAddress;
         if (numOfSlots > 15) throw new Error("The numOfSLots is under of 15 (4 bits)");
         this.numOfSlots = numOfSlots;
-        if (pollData > 14) throw new Error("The pollData is under of 14 (4 bits)");
         this.pollData = pollData;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.ind"].CEMI.value;
@@ -646,7 +648,7 @@ export class CEMI {
       sourceAddress: string = "";
       destinationAddress: string = "";
       numOfSlots: number = 0;
-      pollData: number = 0;
+      pollData: Buffer = Buffer.alloc(1);
 
       toBuffer(): Buffer {
         // Cálculo correcto del tamaño total
@@ -668,7 +670,7 @@ export class CEMI {
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
         buffer.writeUInt8(this.numOfSlots, 6 + baseOffset);
-        buffer.writeUInt8(this.pollData, 7 + baseOffset);
+        this.pollData.copy(buffer, 7 + baseOffset);
 
         return buffer;
       }
@@ -704,7 +706,7 @@ export class CEMI {
         const destinationAddress = KNXHelper.GetAddress(dstBuffer, controlField2.addressType ? "/" : ".") as string;
 
         const numOfSlots = buffer.subarray(6 + baseOffset, 7 + baseOffset).readUint8() & 0x0f;
-        const pollData = buffer.subarray(7 + baseOffset, 8 + baseOffset).readUint8() & 0x0f;
+        const pollData = buffer.subarray(7 + baseOffset);
 
         // Extraemos la información interna del wrapper AdditionalInformationField si existe
         const addInfoData = additionalInfoInstance?.items ?? null;
@@ -771,7 +773,7 @@ export class CEMI {
         if (addInfoLength > 0) {
           addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
         }
-        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const data = buffer.subarray(baseOffset + 1);
         const addInfoData = addInfo?.items ?? null;
         return new L_Raw_req(addInfoData, data);
       }
@@ -816,7 +818,7 @@ export class CEMI {
         if (addInfoLength > 0) {
           addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
         }
-        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const data = buffer.subarray(baseOffset + 1);
         const addInfoData = addInfo?.items ?? null;
         return new L_Raw_con(addInfoData, data);
       }
@@ -861,7 +863,7 @@ export class CEMI {
         if (addInfoLength > 0) {
           addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
         }
-        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const data = buffer.subarray(baseOffset + 1);
         const addInfoData = addInfo?.items ?? null;
         return new L_Raw_ind(addInfoData, data);
       }
@@ -905,7 +907,7 @@ export class CEMI {
         if (addInfoLength > 0) {
           addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
         }
-        const data = buffer.subarray(baseOffset + 1, baseOffset + 1 + buffer.length);
+        const data = buffer.subarray(baseOffset + 1);
         const addInfoData = addInfo?.items ?? null;
         return new L_Busmon_ind(addInfoData, data);
       }
@@ -931,7 +933,7 @@ export class CEMI {
         if (this.additionalInfo.length > 0) {
           this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
         }
-        buffer.writeUint8(this.tpdu.length, baseOffset + 6);
+        buffer.writeUint8(this.tpdu.apdu.length, baseOffset + 6);
         this.tpdu.toBuffer().copy(buffer, baseOffset + 7);
         return buffer;
       }
@@ -980,7 +982,7 @@ export class CEMI {
         if (this.additionalInfo.length > 0) {
           this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
         }
-        buffer.writeUint8(this.tpdu.length, baseOffset + 6);
+        buffer.writeUint8(this.tpdu.apdu.length, baseOffset + 6);
         this.tpdu.toBuffer().copy(buffer, baseOffset + 7);
         return buffer;
       }

@@ -384,8 +384,10 @@ export class KNXTunneling extends KNXClient {
 
             try {
                 const len = body[0]; // Connection Header Length
-                const cemi = CEMI.fromBuffer(body.subarray(len));
+                const data = body.subarray(len);
+                const cemi = CEMI.fromBuffer(data);
                 this.emit('indication', cemi);
+                this.emit('raw_indication', data);
             } catch (e) { }
         } else if (seq === ((this.rxSequenceNumber - 1) & 0xFF)) {
             // Duplicate frame, send ACK again but don't process

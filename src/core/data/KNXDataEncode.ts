@@ -1,4 +1,3 @@
-import { format } from "util";
 import {
   DPT1,
   DPT2,
@@ -31,8 +30,19 @@ import {
 } from "../../@types/interfaces/DPTs";
 import { AllDpts } from "../../@types/types/AllDpts";
 
+class InvalidParametersForDpt extends TypeError {
+  constructor() {
+    super("The object does not contain valid parameters to encode the dpt");
+  }
+}
+
+class DPTNotFound extends Error {
+  constructor() {
+    super("This DPT is not available for coding or does not exist");
+  }
+}
+
 export class KnxDataEncoder {
-  private static typeErrorData = new TypeError("The object does not contain valid parameters to encode the dpt");
 
   private constructor() {
     throw new Error("This class is static and cannot be instantiated.");
@@ -43,7 +53,7 @@ export class KnxDataEncoder {
     type: "string" | "number" | "bigint" | "boolean" | "symbol" | "undefined" | "object" | "function",
   ) {
     if (typeof data !== "object")
-      throw new TypeError("The parameter 'data' is not object", { cause: format("%s", data) });
+      throw new TypeError("The parameter is not object");
     return Object.values(data).every((item) => typeof item === type);
   }
 
@@ -65,7 +75,7 @@ export class KnxDataEncoder {
   // #region Method for encoding dpts
   static encodeThis<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(dpt: T, data: AllDpts<T>): Buffer {
     let dptNum = this.getDptNumber(dpt);
-    if (dptNum === null) throw this.typeErrorData;
+    if (dptNum === null) throw new DPTNotFound();
 
     // Si el DPT específico no existe, intentamos usar el principal (ej: 5.003 -> 5)
     if (!(this.dptEnum as any).includes(dptNum)) {
@@ -95,7 +105,7 @@ export class KnxDataEncoder {
         if ("char" in data && typeof data.char === "string") return this.encodeDpt4001(data as DPT4);
         break;
       case 5:
-        if ("valueDpt5" in data && typeof data.valueDpt5 === "number" && data.valueDpt5 <= 255 && data.valueDpt5 >= 0)
+        if ("valueDpt5" in data && typeof data.valueDpt5 === "number")
           return this.encodeDpt5(data as DPT5);
         break;
       case 5001:
@@ -360,9 +370,9 @@ export class KnxDataEncoder {
           return this.encodeDpt251600(data as DPT251600);
         break;
       default:
-        throw this.typeErrorData;
+        throw new DPTNotFound();
     }
-    throw this.typeErrorData;
+    throw new InvalidParametersForDpt();
   }
   // #endregion
 
@@ -371,7 +381,7 @@ export class KnxDataEncoder {
     data: AllDpts<T>,
   ): typeof data | Error {
     let dptNum = this.getDptNumber(dpt);
-    if (dptNum === null) throw this.typeErrorData;
+    if (dptNum === null) throw new DPTNotFound();
 
     if (!(this.dptEnum as any).includes(dptNum)) {
       const fallback = Math.floor(dptNum / 1000);
@@ -397,7 +407,7 @@ export class KnxDataEncoder {
         if ("char" in data && typeof data.char === "string") return data;
         break;
       case 5:
-        if ("valueDpt5" in data && typeof data.valueDpt5 === "number" && data.valueDpt5 <= 255 && data.valueDpt5 >= 0)
+        if ("valueDpt5" in data && typeof data.valueDpt5 === "number")
           return data;
         break;
       case 5001:
@@ -655,9 +665,9 @@ export class KnxDataEncoder {
           return data;
         break;
       default:
-        throw this.typeErrorData;
+        throw new DPTNotFound();
     }
-    throw this.typeErrorData;
+    throw new InvalidParametersForDpt();
   }
 
   // #region DPTEnum

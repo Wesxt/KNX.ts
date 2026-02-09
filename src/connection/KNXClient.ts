@@ -57,6 +57,7 @@ export abstract class KNXClient extends EventEmitter {
       data = KnxDataEncoder.encodeThis(dpt, value);
     } else if (typeof value === "boolean") {
       data = Buffer.from([value ? 1 : 0]);
+      (data as any).isShort = true;
     } else if (Buffer.isBuffer(value)) {
       data = value;
     } else if (typeof value === "number") {
@@ -85,6 +86,7 @@ export abstract class KNXClient extends EventEmitter {
       destination,
       tpdu
     );
+    console.log('SEND', cemi.constructor.name, cemi.toBuffer());
 
     return this.send(cemi) as Promise<void>;
   }

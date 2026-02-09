@@ -334,9 +334,9 @@ export class KNXHelper {
   }
   static GetDataLength(data: Buffer) {
     if (data.length <= 0) return 0;
-    if (data.length == 1 && data[0] < 0x3f) return 1;
+    if (data.length == 1 && data[0] <= 0x3f) return 1;
     if (data.length == 4) return 3;
-    if (data[0] < 0x3f) return data.length;
+    if (data[0] <= 0x3f) return data.length;
     return data.length + 1;
   }
 
@@ -412,7 +412,7 @@ export class KNXHelper {
     }
 
     // ESTRATEGIA 2: Optimización "Short Data" (6 bits)
-    // Si es 1 byte y el valor es pequeño (< 0x3F), asumimos que es DPT1/2/3 y lo incrustamos.
+    // Si es 1 byte y el valor es pequeño (<= 0x3F), asumimos que es DPT1/2/3 y lo incrustamos.
     // NOTA: Tiene el riesgo de confundir un DPT5 valor 10 con un DPT1.
     if (data.length === 1 && data[0] <= 0x3f) {
       // Usamos OR para mezclar los 6 bits bajos con el comando existente en dataStart
@@ -427,8 +427,15 @@ export class KNXHelper {
     // ?? No sé si se correcto limpiarlo asi
 
     // Copiamos el buffer entero
-    for (let i = 0; i < data.length; i++) {
-      datagram[dataStart + 1 + i] = data[i];
+
+    if (data[0] <= 0x3f) {
+      for (var i = 1; i < data.length; i++) {
+        datagram[dataStart + i] = data[i];
+      }
+    } else {
+      for (var i = 0; i < data.length; i++) {
+        datagram[dataStart + 1 + i] = data[i];
+      }
     }
   }
 
