@@ -491,8 +491,9 @@ export class KnxDataDecode {
   /**
    * Decodifica un DPT9 (2-octetos) según la especificación KNX:
    *   FloatValue = 0.01 * M * 2^(E)
+   *   S (1 bit) = Signo de la mantisa
    *   E (4 bits) = [0…15]
-   *   M (12 bits, en complemento a dos) = [-2048 … 2047]
+   *   M (11 bits) = Mantisa
    * Si el valor codificado es 0x7FFF, se considera inválido.
    *
    * @returns El valor en punto flotante.
@@ -505,15 +506,12 @@ export class KnxDataDecode {
       throw new Error('DPT9: Invalid data (0x7FFF encountered)');
     }
 
-    // Extraer el exponente (4 bits superiores)
-    const exponent = (raw >> 12) & 0x0f;
-    // Extraer la mantisa (12 bits inferiores)
-    let mantissa = raw & 0x0fff;
+    const s = raw >> 15;
+    const exponent = (raw >> 11) & 0x0f;
+    let mantissa = raw & 0x07ff;
 
-    // Interpretar la mantisa como un entero de 12 bits con signo:
-    if (mantissa & 0x0800) {
-      // Si el bit de signo (bit 11) está a 1
-      mantissa = mantissa - 4096;
+    if (s) {
+      mantissa = mantissa - 2048;
     }
 
     // Calcular el valor real:

@@ -53,15 +53,19 @@ export abstract class KNXClient extends EventEmitter {
    */
   public async write<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(destination: string, dpt: T, value: AllDpts<T>): Promise<void> {
     let data: Buffer;
+    let isShort = false;
     if (dpt !== undefined) {
       data = KnxDataEncoder.encodeThis(dpt, value);
+      isShort = KnxDataEncoder.isShortDpt(dpt);
     } else if (typeof value === "boolean") {
       data = Buffer.from([value ? 1 : 0]);
-      (data as any).isShort = true;
+      isShort = true;
     } else if (Buffer.isBuffer(value)) {
       data = value;
+      isShort = data.length === 1 && data[0] <= 0x3f;
     } else if (typeof value === "number") {
       data = Buffer.from([value]);
+      isShort = value <= 0x3f;
     } else {
       throw new Error("Cannot encode value without DPT or basic type (boolean/number/Buffer)");
     }
@@ -73,7 +77,8 @@ export abstract class KNXClient extends EventEmitter {
       new APDU(
         new TPCI(TPCIType.T_DATA_GROUP_PDU),
         new APCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit),
-        data
+        data,
+        isShort
       ),
       data
     );

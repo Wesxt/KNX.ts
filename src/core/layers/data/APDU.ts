@@ -8,33 +8,36 @@ export class APDU implements ServiceMessage {
   tpci: TPCI;
   apci: APCI;
   data: Buffer;
+  isShort: boolean;
 
   constructor(
     tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU),
     apci: APCI = new APCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit),
     data: Buffer = Buffer.alloc(0),
+    isShort: boolean = false
   ) {
     this.tpci = tpci;
     this.apci = apci;
     this.data = data;
+    this.isShort = isShort;
   }
 
   get length(): number {
-    return KNXHelper.GetDataLength(this.data);
+    return KNXHelper.GetDataLength(this.data, this.isShort);
   }
 
   /**
    * Devuelve un buffer con TPCI/APCI + data
    */
   toBuffer(): Buffer {
-    const buffer = Buffer.alloc(1 + KNXHelper.GetDataLength(this.data));
+    const buffer = Buffer.alloc(1 + this.length);
     const packNumber = this.apci.packNumber();
     this.tpci.first2bitsOfAPCI = packNumber[0];
     // TPCI/APCI
     buffer.writeUInt8(this.tpci.getValue(), 0);
     buffer.writeUInt8(packNumber[1], 1);
     // Data
-    KNXHelper.WriteData(buffer, this.data, 1);
+    KNXHelper.WriteData(buffer, this.data, 1, this.isShort);
     return buffer;
   }
 
@@ -87,6 +90,7 @@ export class APDU implements ServiceMessage {
 
     // 2. Extraer los Datos (Payload)
     let data: Buffer;
+    let isShort = false;
 
     // Regla de longitud KNX:
     // Si el TPDU tiene longitud > 2 bytes, los datos comienzan en el byte 2 (Extended Data).
@@ -97,6 +101,7 @@ export class APDU implements ServiceMessage {
       // Ejemplo: Escribir un flotante (4 bytes) -> buffer total 1 + 1 + 4 = 6 bytes.
       // Los datos empiezan en el índice 2.
       data = buffer.subarray(2);
+      isShort = false;
     } else {
       // Caso: Datos cortos (<= 6 bits)
       // Ejemplo: Escribir Booleano (ON/OFF) o 3-bit scaling.
@@ -106,13 +111,14 @@ export class APDU implements ServiceMessage {
         const shortData = byte1 & 0x3f;
         // Lo convertimos a Buffer de 1 byte para mantener consistencia
         data = Buffer.from([shortData]);
-
+        isShort = true;
       } else {
         // Caso raro: Longitud 1 (Solo comando sin datos, ej. Read request)
         data = Buffer.alloc(0);
+        isShort = false;
       }
     }
 
-    return new APDU(tpci, apci, data);
+    return new APDU(tpci, apci, data, isShort);
   }
 }

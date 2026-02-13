@@ -72,6 +72,17 @@ export class KnxDataEncoder {
     return null;
   }
 
+  /**
+   * Determina si un DPT se empaqueta en el APCI (<= 6 bits)
+   */
+  public static isShortDpt(dpt: any): boolean {
+    const dptNum = this.getDptNumber(dpt);
+    if (dptNum === null) return false;
+    // DPT 1 (1 bit), 2 (2 bits), 3 (4 bits) son "short"
+    const main = Math.floor(dptNum / 1000) || dptNum;
+    return main >= 1 && main <= 3;
+  }
+
   // #region Method for encoding dpts
   static encodeThis<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(dpt: T, data: AllDpts<T>): Buffer {
     let dptNum = this.getDptNumber(dpt);
@@ -751,8 +762,8 @@ export class KnxDataEncoder {
    */
   static encodeDpt5({ valueDpt5: value }: DPT5): Buffer {
     if (value < 0 || value > 255) throw new Error("DPT5 value must be between 0 and 255");
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(value, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
@@ -777,8 +788,8 @@ export class KnxDataEncoder {
    */
   static encodeDpt6({ valueDpt6: value }: DPT6): Buffer {
     if (value < -128 || value > 127) throw new Error("DPT6 value must be between -128 and 127");
-    const buffer = Buffer.alloc(2);
-    buffer.writeInt8(value, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeInt8(value, 0);
     return buffer;
   }
 
@@ -802,8 +813,8 @@ export class KnxDataEncoder {
    */
   static encodeDpt6020({ status, mode }: DPT6020): Buffer {
     const byte = (status << 3) | (mode & 0b111);
-    const data = Buffer.alloc(2);
-    data[1] = byte;
+    const data = Buffer.alloc(1);
+    data[0] = byte;
     return data;
   }
 
@@ -811,9 +822,9 @@ export class KnxDataEncoder {
    * DPT7: 2-byte unsigned (0…65535)
    */
   static encodeDpt7({ valueDpt7: value }: DPT7): Buffer {
-    if (value <= 0 || value >= 65535) throw new Error("DPT7 value must be between 0 and 65535");
-    const buffer = Buffer.alloc(3);
-    buffer.writeUInt16BE(value, 1);
+    if (value < 0 || value > 65535) throw new Error("DPT7 value must be between 0 and 65535");
+    const buffer = Buffer.alloc(2);
+    buffer.writeUInt16BE(value, 0);
     return buffer;
   }
 
@@ -1036,8 +1047,8 @@ export class KnxDataEncoder {
     if (valueDpt12001 < 0 || valueDpt12001 > 0xffffffff) {
       throw new Error("DPT 12.001 value must be between 0 and 4294967295");
     }
-    const buffer = Buffer.alloc(5);
-    buffer.writeUInt32BE(valueDpt12001, 1);
+    const buffer = Buffer.alloc(4);
+    buffer.writeUInt32BE(valueDpt12001, 0);
     return buffer;
   }
 
@@ -1071,8 +1082,8 @@ export class KnxDataEncoder {
     if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
       throw new Error("DPT 13.001 value must be between -2147483648 and 2147483647");
     }
-    const buffer = Buffer.alloc(5);
-    buffer.writeInt32BE(valueDpt13001, 1);
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(valueDpt13001, 0);
     return buffer;
   }
 
@@ -1084,8 +1095,8 @@ export class KnxDataEncoder {
     if (rawValue < -2147483648 || rawValue > 2147483647) {
       throw new Error("DPT 13.002 value, after scaling, must be between -2147483648 and 2147483647");
     }
-    const buffer = Buffer.alloc(5);
-    buffer.writeInt32BE(rawValue, 1);
+    const buffer = Buffer.alloc(4);
+    buffer.writeInt32BE(rawValue, 0);
     return buffer;
   }
 
@@ -1149,8 +1160,8 @@ export class KnxDataEncoder {
    * Codifica DPT14: 4-Octet Float Value (IEEE 754 single precision).
    */
   static encodeDpt14({ valueDpt14 }: DPT14): Buffer {
-    const buffer = Buffer.alloc(5);
-    buffer.writeFloatBE(valueDpt14, 1);
+    const buffer = Buffer.alloc(4);
+    buffer.writeFloatBE(valueDpt14, 0);
     return buffer;
   }
 
@@ -1230,8 +1241,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 255) {
       throw new Error("DPT20 value must be between 0 and 255");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1242,8 +1253,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 3) {
       throw new Error("DPT 20.001 value must be between 0 and 3");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1254,8 +1265,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 2) {
       throw new Error("DPT 20.002 value must be between 0 and 2");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1266,8 +1277,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 2) {
       throw new Error("DPT 20.003 value must be between 0 and 2");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1278,8 +1289,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 3) {
       throw new Error("DPT 20.004 value must be between 0 and 3");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1290,8 +1301,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 2) {
       throw new Error("DPT 20.005 value must be between 0 and 2");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1303,8 +1314,8 @@ export class KnxDataEncoder {
     if (!validValues.includes(valueDpt20)) {
       throw new Error("DPT 20.006 value must be one of: " + validValues.join(", "));
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1315,8 +1326,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 3) {
       throw new Error("DPT 20.007 value must be between 0 and 3");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1327,8 +1338,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 2) {
       throw new Error("DPT 20.008 value must be between 0 and 2");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1339,8 +1350,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 18) {
       throw new Error("DPT 20.011 value must be between 0 and 18");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1351,8 +1362,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 4) {
       throw new Error("DPT 20.012 value must be between 0 and 4");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1363,8 +1374,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 25) {
       throw new Error("DPT 20.013 value must be between 0 and 25");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1375,8 +1386,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 12) {
       throw new Error("DPT 20.014 value must be between 0 and 12");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1387,8 +1398,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 4) {
       throw new Error("DPT 20.017 value must be between 0 and 4");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1399,8 +1410,8 @@ export class KnxDataEncoder {
     if (valueDpt20 !== 1 && valueDpt20 !== 2) {
       throw new Error("DPT 20.020 value must be either 1 (SensorConnection) or 2 (ControllerConnection)");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1411,8 +1422,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 9) {
       throw new Error("DPT 20.021 value must be between 0 and 9");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1423,8 +1434,8 @@ export class KnxDataEncoder {
     if (valueDpt20 < 0 || valueDpt20 > 2) {
       throw new Error("DPT 20.022 value must be between 0 and 2");
     }
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt8(valueDpt20, 1);
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(valueDpt20, 0);
     return buffer;
   }
 
@@ -1435,8 +1446,8 @@ export class KnxDataEncoder {
     if (mask < 0 || mask > 0xffff) throw new Error("mask must be between 0 and 65535");
     if (status < 0 || status > 0xffff) throw new Error("status must be between 0 and 65535");
     const encoded = (mask << 16) | (status & 0xffff);
-    const buffer = Buffer.alloc(5);
-    buffer.writeUInt32BE(encoded, 1);
+    const buffer = Buffer.alloc(4);
+    buffer.writeUInt32BE(encoded, 0);
     return buffer;
   }
 
@@ -1458,8 +1469,8 @@ export class KnxDataEncoder {
     if (valueDpt29 < min || valueDpt29 > max) {
       throw new Error("DPT29 value must be between -9223372036854775808 and 9223372036854775807");
     }
-    const buffer = Buffer.alloc(9);
-    buffer.writeBigInt64BE(valueDpt29, 1);
+    const buffer = Buffer.alloc(8);
+    buffer.writeBigInt64BE(valueDpt29, 0);
     return buffer;
   }
 

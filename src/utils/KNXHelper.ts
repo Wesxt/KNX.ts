@@ -332,110 +332,35 @@ export class KNXHelper {
         return data;
     }
   }
-  static GetDataLength(data: Buffer) {
+  static GetDataLength(data: Buffer, isShort: boolean = false) {
     if (data.length <= 0) return 0;
-    if (data.length == 1 && data[0] <= 0x3f) return 1;
-    if (data.length == 4) return 3;
-    if (data[0] <= 0x3f) return data.length;
+    if (isShort) return 1;
     return data.length + 1;
   }
 
   /**
-   * Método auxiliar para codificar un número en formato DPT9 (2 bytes).
-   * Implementación corregida usando aritmética de bits y complemento a dos real.
-   */
-  private static encodeFloatToDPT9(value: number): Buffer {
-    // 1. Manejo de errores y casos especiales
-    if (isNaN(value) || !isFinite(value)) {
-      // Retornar valor de error estándar KNX o manejar excepción
-      console.warn("DPT9: Valor inválido, enviando buffer vacío/error");
-      return Buffer.from([0x7f, 0xff]);
-    }
-
-    // 2. Cálculo matemático
-    // FloatValue = (0.01 * M) * 2^E
-    let m = value / 0.01;
-    let e = 0;
-
-    // 3. Normalización: Buscar encajar M en 11 bits [-2048, 2047]
-    while ((m > 2047 || m < -2048) && e < 15) {
-      m /= 2;
-      e++;
-    }
-
-    // Redondeo final
-    let mInt = Math.round(m);
-
-    // 4. Clamping (Asegurar límites para no romper el protocolo)
-    if (mInt > 2047) mInt = 2047;
-    if (mInt < -2048) mInt = -2048;
-
-    // Caso especial: Evitar la colisión con "Invalid Data" (0x7FFF) si se diera el caso extremo
-    if (e === 15 && mInt > 2046) mInt = 2046;
-
-    // 5. Empaquetado
-    // El signo se maneja automáticamente en la mantisa de 11 bits (complemento a 2)
-    // pero KNX requiere que el bit de signo esté explícitamente en el bit 15 (MSB del buffer)
-    const signBit = mInt < 0 ? 1 : 0;
-
-    // Máscara 0x7FF (2047) obtiene los 11 bits bajos de la mantisa (sea positiva o negativa)
-    const mantissaBits = mInt & 0x7ff;
-
-    // Estructura: S (1 bit) | E (4 bits) | M (11 bits)
-    const encoded = (signBit << 15) | ((e & 0x0f) << 11) | mantissaBits;
-
-    const buffer = Buffer.alloc(2);
-    buffer.writeUInt16BE(encoded, 0);
-    return buffer;
-  }
-
-  /**
    * Escribe los datos en el datagrama.
-   * Mantiene la firma original y decide la estrategia según la longitud del buffer de entrada.
    * @param datagram PDU
    * @param data
    * @param dataStart Debe ser siempre en el indice donde están los bits menos significativos del APCI
+   * @param isShort Si es true, el dato se incrusta en los 6 bits del APCI (DPT 1, 2, 3)
    */
-  static WriteData(datagram: Buffer, data: Buffer, dataStart: number) {
+  static WriteData(datagram: Buffer, data: Buffer, dataStart: number, isShort: boolean = false) {
     if (!data || data.length === 0) return;
 
-    // ESTRATEGIA 1: DPT9 (Float 16-bit)
-    // Asumimos que si vienen 4 bytes, es un Float32 crudo que debe convertirse a DPT9
-    if (data.length === 4) {
-      const floatValue = data.readFloatLE(0);
-      const dpt9Buffer = this.encodeFloatToDPT9(floatValue);
-
-      // DPT9 siempre ocupa 2 bytes y va después del byte de control APCI
-      datagram[dataStart + 1] = dpt9Buffer[0];
-      datagram[dataStart + 2] = dpt9Buffer[1];
-      return;
-    }
-
-    // ESTRATEGIA 2: Optimización "Short Data" (6 bits)
-    // Si es 1 byte y el valor es pequeño (<= 0x3F), asumimos que es DPT1/2/3 y lo incrustamos.
-    // NOTA: Tiene el riesgo de confundir un DPT5 valor 10 con un DPT1.
-    if (data.length === 1 && data[0] <= 0x3f) {
+    if (isShort) {
+      // ESTRATEGIA: Optimización "Short Data" (6 bits)
       // Usamos OR para mezclar los 6 bits bajos con el comando existente en dataStart
       datagram[dataStart] = (datagram[dataStart] & 0xc0) | (data[0] & 0x3f);
       return;
     }
 
-    // ESTRATEGIA 3: Datos estándar (> 6 bits o arrays largos)
+    // ESTRATEGIA: Datos estándar (> 6 bits o arrays largos)
     // Se escriben a partir del siguiente byte (dataStart + 1)
-    // El byte en dataStart se queda solo con el comando (los bits bajos de datos deben ser 0)
     datagram[dataStart] = datagram[dataStart] & 0xc0; // Limpiamos la parte de datos del byte de control
-    // ?? No sé si se correcto limpiarlo asi
 
-    // Copiamos el buffer entero
-
-    if (data[0] <= 0x3f) {
-      for (var i = 1; i < data.length; i++) {
-        datagram[dataStart + i] = data[i];
-      }
-    } else {
-      for (var i = 0; i < data.length; i++) {
-        datagram[dataStart + 1 + i] = data[i];
-      }
+    for (let i = 0; i < data.length; i++) {
+      datagram[dataStart + 1 + i] = data[i];
     }
   }
 

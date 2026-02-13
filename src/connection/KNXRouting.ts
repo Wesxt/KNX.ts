@@ -15,6 +15,10 @@ export class KNXRouting extends KNXClient {
 
   private busyCounter: number = 0; // N for random wait time calculation
   private lastBusyTime: number = 0;
+  private decrementTimer: NodeJS.Timeout | null = null;
+  private decrementInterval: NodeJS.Timeout | null = null;
+
+  private readonly MAX_QUEUE_SIZE = 50; // Increased for safety
 
   constructor(options: KNXClientOptions) {
     super(options);
@@ -22,7 +26,7 @@ export class KNXRouting extends KNXClient {
   }
 
   async connect(): Promise<void> {
-    this.socket = dgram.createSocket("udp4");
+    this.socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
     this.socket.on("message", (msg, rinfo) => {
       this.handleMessage(msg, rinfo);
@@ -32,17 +36,19 @@ export class KNXRouting extends KNXClient {
       this.emit("error", err);
     });
 
-    return new Promise((resolve) => {
-      (this.socket as dgram.Socket).bind(this.options.port, this.options.localIp, () => {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket as dgram.Socket;
+      socket.bind(this.options.port, () => {
         try {
-          (this.socket as dgram.Socket).setBroadcast(true);
-          (this.socket as dgram.Socket).setMulticastTTL(128);
-          (this.socket as dgram.Socket).addMembership(this.options.ip!, this.options.localIp!);
-          (this.socket as dgram.Socket).setMulticastLoopback(true);
+          socket.setBroadcast(true);
+          socket.setMulticastTTL(128);
+          socket.addMembership(this.options.ip!, this.options.localIp!);
+          socket.setMulticastLoopback(true);
           this.emit("connected");
           resolve();
         } catch (err) {
           this.emit("error", err);
+          reject(err);
         }
       });
     });
@@ -53,11 +59,21 @@ export class KNXRouting extends KNXClient {
       (this.socket as dgram.Socket).close();
       this.socket = null;
     }
+    this.clearTimers();
+  }
+
+  private clearTimers() {
+    if (this.routingBusyTimer) clearTimeout(this.routingBusyTimer);
+    if (this.decrementTimer) clearTimeout(this.decrementTimer);
+    if (this.decrementInterval) clearInterval(this.decrementInterval);
+    this.routingBusyTimer = null;
+    this.decrementTimer = null;
+    this.decrementInterval = null;
   }
 
   /**
    * Send a cEMI message via Routing Indication.
-   * Enqueues the message to respect rate limiting.
+   * Enqueues the message to respect rate limiting and flow control.
    */
   async send(data: Buffer | ServiceMessage): Promise<void> {
     const cemiBuffer = Buffer.isBuffer(data) ? data : data.toBuffer();
@@ -65,12 +81,19 @@ export class KNXRouting extends KNXClient {
     header.totalLength = 6 + cemiBuffer.length;
     const packet = Buffer.concat([header.toBuffer(), cemiBuffer]);
 
+    if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
+      // Queue overflow: discard oldest message (FIFO) or newest? 
+      // Spec 3.7.3: "one telegram has to be discarded. The telegram to be routed last ... shall be cast off."
+      this.msgQueue.shift();
+      this.emit("queue_overflow");
+    }
+
     this.msgQueue.push(packet);
     this.processQueue();
   }
 
   /**
-   * Processes the message queue with Rate Limiting (50 telegrams/s -> ~20ms gap)
+   * Processes the message queue with Rate Limiting and Flow Control
    */
   private processQueue() {
     if (this.isProcessingQueue || this.isRoutingBusy || this.msgQueue.length === 0) return;
@@ -79,12 +102,13 @@ export class KNXRouting extends KNXClient {
 
     const now = Date.now();
     const timeSinceLastSend = now - this.lastSentTime;
-    const waitTime = Math.max(0, 20 - timeSinceLastSend); // Ensure 20ms gap
+    // Default rate limit: 20ms gap (50 telegrams/s)
+    const waitTime = Math.max(0, 20 - timeSinceLastSend);
 
     setTimeout(() => {
       if (this.isRoutingBusy) {
         this.isProcessingQueue = false;
-        return; // Will be restarted by routing_ready event
+        return;
       }
 
       const packet = this.msgQueue.shift();
@@ -93,7 +117,6 @@ export class KNXRouting extends KNXClient {
           if (err) this.emit("error", err);
           this.lastSentTime = Date.now();
           this.isProcessingQueue = false;
-          // Process next
           if (this.msgQueue.length > 0) {
             this.processQueue();
           }
@@ -105,8 +128,8 @@ export class KNXRouting extends KNXClient {
   }
 
   private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo) {
-    // Filter echo (Multicast Loopback)
-    if (this.options.localIp === rinfo.address) return;
+    // Filter echo if configured or if coming from self
+    if (this.options.localIp === rinfo.address && rinfo.port === this.options.port) return;
 
     try {
       const header = KNXnetIPHeader.fromBuffer(msg);
@@ -122,45 +145,61 @@ export class KNXRouting extends KNXClient {
           }
           break;
         case KNXnetIPServiceType.ROUTING_BUSY:
-          const busy = RoutingBusy.fromBuffer(body);
-
-          // Calculate N
-          const now = Date.now();
-          if (now - this.lastBusyTime > 10) { // 10ms window
-            // Start new window or increment? 
-            // Spec: "N shall be incremented by one with each ROUTING_BUSY Frame received after 10 ms have passed since the last ROUTING_BUSY"
-            this.busyCounter++;
-          }
-          // If we want to strictly follow decrementing logic (every 5ms after N*100ms), it's complex for this scope.
-          // We will reset N if it's been a while (e.g. > 1s)
-          if (now - this.lastBusyTime > 1000) {
-            this.busyCounter = 1;
-          }
-          this.lastBusyTime = now;
-
-          if (busy.controlField === 0) {
-            // Calculate random wait time
-            // trandom = [0...1] * N * 50ms
-            const randomFactor = Math.random();
-            const tRandom = Math.floor(randomFactor * this.busyCounter * 50);
-            const totalWait = busy.waitTime + tRandom;
-
-            this.pauseSending(totalWait);
-          }
-          this.emit("routing_busy", busy);
+          this.handleRoutingBusy(RoutingBusy.fromBuffer(body));
           break;
         case KNXnetIPServiceType.ROUTING_LOST_MESSAGE:
-          const lost = RoutingLostMessage.fromBuffer(body);
-          this.emit("routing_lost_message", lost);
+          this.emit("routing_lost_message", RoutingLostMessage.fromBuffer(body));
           break;
         case KNXnetIPServiceType.ROUTING_SYSTEM_BROADCAST:
-          // Could contain system info, just emit for now
           this.emit("routing_system_broadcast", body);
           break;
       }
     } catch (e) {
       this.emit("error", e);
     }
+  }
+
+  private handleRoutingBusy(busy: RoutingBusy) {
+    const now = Date.now();
+    
+    // N (busyCounter) increment logic: increment if > 10ms since last BUSY
+    if (now - this.lastBusyTime > 10) {
+      this.busyCounter++;
+      this.resetDecrementTimer();
+    }
+    this.lastBusyTime = now;
+
+    if (busy.controlField === 0x0000) {
+      // General flow control logic as per Spec 2.3.5
+      // total_time = tw + trandom
+      // trandom = [0...1] * N * 50ms
+      const tw = busy.waitTime;
+      const trandom = Math.floor(Math.random() * this.busyCounter * 50);
+      const totalWait = tw + trandom;
+
+      this.pauseSending(totalWait);
+    }
+    this.emit("routing_busy", busy);
+  }
+
+  private resetDecrementTimer() {
+    if (this.decrementTimer) clearTimeout(this.decrementTimer);
+    if (this.decrementInterval) clearInterval(this.decrementInterval);
+    
+    // tslowduration = N * 100 ms
+    const tslowduration = this.busyCounter * 100;
+    
+    this.decrementTimer = setTimeout(() => {
+      // decrement by one every tbd = 5 ms after tslowduration has elapsed
+      this.decrementInterval = setInterval(() => {
+        if (this.busyCounter > 0) {
+          this.busyCounter--;
+        } else {
+          if (this.decrementInterval) clearInterval(this.decrementInterval);
+          this.decrementInterval = null;
+        }
+      }, 5);
+    }, tslowduration);
   }
 
   private pauseSending(waitTime: number) {
@@ -171,7 +210,7 @@ export class KNXRouting extends KNXClient {
       this.isRoutingBusy = false;
       this.routingBusyTimer = null;
       this.emit("routing_ready");
-      this.processQueue(); // Resume
+      this.processQueue();
     }, waitTime);
   }
 }

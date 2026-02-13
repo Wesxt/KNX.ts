@@ -7,9 +7,29 @@ import { KNXnetIPServiceType, KNXnetIPErrorCodes, HostProtocolCode, ConnectionTy
 import { CEMI } from '../core/CEMI';
 import { ServiceMessage } from '../@types/interfaces/ServiceMessage';
 
+/**
+ * Options for configuring a KNX Tunneling connection.
+ */
 export interface KNXTunnelingOptions extends KNXClientOptions {
+    /**
+     * The transport protocol to use for the connection.
+     * 'UDP' is the default and standard for KNXnet/IP.
+     * 'TCP' is optional and used for connection-oriented communication.
+     */
     transport?: 'UDP' | 'TCP';
+    /**
+     * The type of connection to establish.
+     * Defaults to TUNNEL_CONNECTION (0x04) for standard telegram exchange.
+     * Use DEVICE_MGMT_CONNECTION (0x03) for device configuration and management.
+     */
     connectionType?: ConnectionType;
+    /**
+     * If true, sends a "Route Back" HPAI (IP 0.0.0.0 and port 0).
+     * This instructs the KNXnet/IP server to respond directly to the source IP and port
+     * from which the request originated. Essential for environments with NAT, 
+     * firewalls, or VPNs like ZeroTier.
+     */
+    useRouteBack?: boolean;
 }
 
 export class KNXTunneling extends KNXClient {
@@ -127,10 +147,11 @@ export class KNXTunneling extends KNXClient {
             ? (this.socket as dgram.Socket).address().port
             : (this.socket as net.Socket).localPort!;
 
+        const useRouteBack = (this.options as KNXTunnelingOptions).useRouteBack;
         const hpai = new HPAI(
             this._transport === 'TCP' ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
-            this.options.localIp!,
-            localPort
+            useRouteBack ? '0.0.0.0' : this.options.localIp!,
+            useRouteBack ? 0 : localPort
         );
         // @ts-ignore
         const cri = new CRI(this.options.connectionType!);
@@ -149,7 +170,12 @@ export class KNXTunneling extends KNXClient {
             const localPort = this._transport === 'UDP'
                 ? (this.socket as dgram.Socket).address().port
                 : (this.socket as net.Socket).localPort!;
-            const hpai = new HPAI(this._transport === 'TCP' ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP, this.options.localIp!, localPort);
+            const useRouteBack = (this.options as KNXTunnelingOptions).useRouteBack;
+            const hpai = new HPAI(
+                this._transport === 'TCP' ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
+                useRouteBack ? '0.0.0.0' : this.options.localIp!,
+                useRouteBack ? 0 : localPort
+            );
 
             const header = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_REQUEST, 0);
             const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
@@ -318,11 +344,20 @@ export class KNXTunneling extends KNXClient {
                     }
                     break;
                 case KNXnetIPServiceType.CONNECTIONSTATE_RESPONSE:
-                    if (body[0] === this.channelId && body[1] === KNXnetIPErrorCodes.E_NO_ERROR) {
-                        this.heartbeatFailures = 0;
-                        if (this.heartbeatRetryTimer) {
-                            clearTimeout(this.heartbeatRetryTimer);
-                            this.heartbeatRetryTimer = null;
+                    if (body[0] === this.channelId) {
+                        if (body[1] === KNXnetIPErrorCodes.E_NO_ERROR) {
+                            this.heartbeatFailures = 0;
+                            if (this.heartbeatRetryTimer) {
+                                clearTimeout(this.heartbeatRetryTimer);
+                                this.heartbeatRetryTimer = null;
+                            }
+                        } else {
+                            console.warn(`[Tunneling] Heartbeat response error from server: 0x${body[1].toString(16)}`);
+                            // If it's a connection ID error, we should probably disconnect
+                            if (body[1] === KNXnetIPErrorCodes.E_CONNECTION_ID) {
+                                this.emit('error', new Error("Connection ID no longer valid on server"));
+                                this.disconnect();
+                            }
                         }
                     }
                     break;
@@ -418,7 +453,7 @@ export class KNXTunneling extends KNXClient {
         if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
         this.heartbeatFailures = 0;
 
-        // Spec: Check every 60s
+        // Check every 60s (as per spec)
         this.heartbeatTimer = setInterval(() => {
             this.sendHeartbeatRequest();
         }, 60000);
@@ -429,20 +464,26 @@ export class KNXTunneling extends KNXClient {
             ? (this.socket as dgram.Socket).address().port
             : (this.socket as net.Socket).localPort!;
 
-        const hpai = new HPAI(this._transport === 'TCP' ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP, this.options.localIp!, localPort);
+        const useRouteBack = (this.options as KNXTunnelingOptions).useRouteBack;
+        const hpai = new HPAI(
+            this._transport === 'TCP' ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
+            useRouteBack ? '0.0.0.0' : this.options.localIp!,
+            useRouteBack ? 0 : localPort
+        );
         const header = new KNXnetIPHeader(KNXnetIPServiceType.CONNECTIONSTATE_REQUEST, 0);
         const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
         header.totalLength = 6 + body.length;
 
         this.sendRaw(Buffer.concat([header.toBuffer(), body]));
 
-        // Check timeout in 10s
+        // Check timeout in 10s (spec recommendation)
         if (this.heartbeatRetryTimer) clearTimeout(this.heartbeatRetryTimer);
         this.heartbeatRetryTimer = setTimeout(() => this.handleHeartbeatTimeout(), 10000);
     }
 
     private handleHeartbeatTimeout() {
         this.heartbeatFailures++;
+        console.warn(`[Tunneling] Heartbeat timeout (${this.heartbeatFailures}/3)`);
         if (this.heartbeatFailures >= 3) {
             this.emit('error', new Error("Heartbeat failed 3 times"));
             this.disconnect();
