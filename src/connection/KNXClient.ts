@@ -16,21 +16,14 @@ import { APDU } from "../core/layers/data/APDU";
 import { APCI } from "../core/layers/interfaces/APCI";
 import { APCIEnum } from "../core/enum/APCIEnum";
 import { AllDpts } from "../@types/types/AllDpts";
-
-export interface KNXClientOptions {
-  ip?: string;
-  port?: number;
-  localIp?: string;
-  localPort?: number;
-  [key: string]: any;
-}
+import { KNXClientOptions, KNXRoutingOptions, KNXTunnelingOptions } from "../@types/interfaces/connection";
 
 export abstract class KNXClient extends EventEmitter {
   protected socket: dgram.Socket | net.Socket | null = null;
   protected options: KNXClientOptions;
   protected _transport: "UDP" | "TCP" = "UDP";
 
-  constructor(options: KNXClientOptions = {}) {
+  constructor(options: KNXClientOptions | KNXRoutingOptions | KNXTunnelingOptions = {}) {
     super();
     this.options = {
       ip: "224.0.23.12",

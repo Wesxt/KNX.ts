@@ -6,7 +6,7 @@ export class HPAI {
     public hostProtocol: HostProtocolCode,
     public ipAddress: string,
     public port: number,
-  ) {}
+  ) { }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(8);
@@ -44,7 +44,7 @@ export class CRI {
     public connectionType: ConnectionType,
     public knxLayer: number = 0x02, // Tunnel Link Layer
     public unused: number = 0x00,
-  ) {}
+  ) { }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(4);
@@ -60,7 +60,7 @@ export class CRD {
   constructor(
     public connectionType: ConnectionType,
     public knxAddress: number,
-  ) {}
+  ) { }
 
   static fromBuffer(buffer: Buffer): CRD {
     if (buffer.length < 4) throw new Error("Buffer too short for CRD");
@@ -76,7 +76,7 @@ export class RoutingBusy {
     public deviceState: number,
     public waitTime: number,
     public controlField: number = 0x0000,
-  ) {}
+  ) { }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(6);
@@ -100,7 +100,7 @@ export class RoutingLostMessage {
   constructor(
     public deviceState: number,
     public lostMessages: number,
-  ) {}
+  ) { }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(4);
@@ -121,7 +121,7 @@ export class RoutingLostMessage {
 // --- DIB Structures ---
 
 export abstract class DIB {
-  constructor(public type: DescriptionType) {}
+  constructor(public type: DescriptionType) { }
   abstract toBuffer(): Buffer;
 
   static fromBuffer(buffer: Buffer): DIB {
@@ -157,8 +157,29 @@ export class DeviceInformationDIB extends DIB {
   }
 
   toBuffer(): Buffer {
-    // Implementation omitted for brevity in this direction as mostly read by client
-    return Buffer.alloc(0);
+    const buffer = Buffer.alloc(54);
+    buffer.writeUInt8(54, 0); // Length
+    buffer.writeUInt8(this.type, 1);
+    buffer.writeUInt8(this.knxMedium, 2);
+    buffer.writeUInt8(this.deviceStatus, 3);
+    buffer.writeUInt16BE(this.individualAddress, 4);
+    buffer.writeUInt16BE(this.projectInstallationId, 6);
+    this.serialNumber.copy(buffer, 8);
+
+    const mcast = this.routingMulticastAddress.split(".").map(Number);
+    buffer.writeUInt8(mcast[0], 14);
+    buffer.writeUInt8(mcast[1], 15);
+    buffer.writeUInt8(mcast[2], 16);
+    buffer.writeUInt8(mcast[3], 17);
+
+    const mac = this.macAddress.replace(/:/g, "");
+    Buffer.from(mac, "hex").copy(buffer, 18);
+
+    const nameBuf = Buffer.from(this.friendlyName, "latin1");
+    nameBuf.copy(buffer, 24, 0, Math.min(nameBuf.length, 30));
+    // Remaining bytes are 0 (already allocated with alloc)
+
+    return buffer;
   }
 
   static fromBuffer(buffer: Buffer): DeviceInformationDIB {
@@ -183,12 +204,20 @@ export class DeviceInformationDIB extends DIB {
 }
 
 export class SupportedServicesDIB extends DIB {
-  constructor(public services: { family: number; version: number }[]) {
+  constructor(public services: { family: number; version: number; }[]) {
     super(DescriptionType.SUPP_SVC_FAMILIES);
   }
 
   toBuffer(): Buffer {
-    return Buffer.alloc(0);
+    const buffer = Buffer.alloc(2 + this.services.length * 2);
+    buffer.writeUInt8(buffer.length, 0);
+    buffer.writeUInt8(this.type, 1);
+    let offset = 2;
+    for (const svc of this.services) {
+      buffer.writeUInt8(svc.family, offset++);
+      buffer.writeUInt8(svc.version, offset++);
+    }
+    return buffer;
   }
 
   static fromBuffer(buffer: Buffer): SupportedServicesDIB {
@@ -215,7 +244,12 @@ export class MfrDataDIB extends DIB {
     super(DescriptionType.MFR_DATA);
   }
   toBuffer(): Buffer {
-    return Buffer.alloc(0);
+    const buffer = Buffer.alloc(4 + this.data.length);
+    buffer.writeUInt8(buffer.length, 0);
+    buffer.writeUInt8(this.type, 1);
+    buffer.writeUInt16BE(this.manufacturerId, 2);
+    this.data.copy(buffer, 4);
+    return buffer;
   }
 
   static fromBuffer(buffer: Buffer): MfrDataDIB {
@@ -232,31 +266,31 @@ export class UnknownDIB extends DIB {
   ) {
     super(type);
   }
-      toBuffer(): Buffer { return this.rawData; }
+  toBuffer(): Buffer { return this.rawData; }
+}
+
+export class SRP {
+  constructor(
+    public type: number,
+    public data: Buffer,
+    public isMandatory: boolean = true
+  ) { }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(2 + this.data.length);
+    buffer.writeUInt8(buffer.length, 0);
+    // Type + Mandatory bit (bit 7)
+    let typeByte = this.type;
+    if (this.isMandatory) typeByte |= 0x80;
+    buffer.writeUInt8(typeByte, 1);
+    this.data.copy(buffer, 2);
+    return buffer;
   }
-  
-  export class SRP {
-    constructor(
-      public type: number,
-      public data: Buffer,
-      public isMandatory: boolean = true
-    ) {}
-  
-    toBuffer(): Buffer {
-      const buffer = Buffer.alloc(2 + this.data.length);
-      buffer.writeUInt8(buffer.length, 0);
-      // Type + Mandatory bit (bit 7)
-      let typeByte = this.type;
-      if (this.isMandatory) typeByte |= 0x80;
-      buffer.writeUInt8(typeByte, 1); 
-      this.data.copy(buffer, 2);
-      return buffer;
-    }
-  
-    static fromBuffer(buffer: Buffer): SRP {
-      const len = buffer.readUInt8(0);
-      const type = buffer.readUInt8(1);
-      const data = buffer.subarray(2, len);
-      return new SRP(type & 0x7F, data, (type & 0x80) !== 0);
-    }
+
+  static fromBuffer(buffer: Buffer): SRP {
+    const len = buffer.readUInt8(0);
+    const type = buffer.readUInt8(1);
+    const data = buffer.subarray(2, len);
+    return new SRP(type & 0x7F, data, (type & 0x80) !== 0);
   }
+}

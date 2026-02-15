@@ -1,6 +1,7 @@
 import { KNXRouting } from '../connection/KNXRouting';
 import { ServiceMessage } from '../@types/interfaces/ServiceMessage';
 import { getLocalIP } from '../utils/localIp';
+import { MessageCodeTranslator } from '../utils/MessageCodeTranslator';
 
 // Configuration for KNX Routing
 // Standard Multicast Address for KNXnet/IP Routing
@@ -24,7 +25,9 @@ async function testRouting() {
     const client = new KNXRouting({
         ip: MULTICAST_IP,
         port: PORT,
-        localIp: localIp
+        localIp: localIp,
+        individualAddress: "1.0.250",
+        friendlyName: "Puto el que lo lea"
     });
 
     routing = client;
@@ -38,9 +41,12 @@ async function testRouting() {
     });
 
     client.on('indication', (msg: ServiceMessage) => {
-        console.log('[Routing] Received Indication:', msg.constructor.name);
         // If you want to see the raw data:
-        console.log('RAW CEMI:', msg.toBuffer());
+        console.log('[CEMI]', msg.constructor.name, msg.toBuffer(), msg.describe());
+    });
+
+    client.on('raw_indication', (msg: Buffer) => {
+        console.log('[RAWI]', MessageCodeTranslator.getServiceName(msg.readUint8(0), "CEMI"), msg);
     });
 
     client.on('routing_busy', (busy) => {

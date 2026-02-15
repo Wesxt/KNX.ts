@@ -37,7 +37,7 @@ export class TPDU implements ServiceMessage {
     // La clase APDU tiene el tpci y el apci en su buffer
     // para simplificar la envoltura de los octetos por lo tanto
     // se escribe el tpci desde del apdu para evitar problemas
-    buffer.writeUint8(this.apdu.tpci.getValue(), 0);
+    buffer.writeUint8(this.tpci.getValue(), 0);
     const packNumber = this.apdu.apci.packNumber();
     buffer.writeUInt8(packNumber[1], 1);
     KNXHelper.WriteData(buffer, this.data, 1);

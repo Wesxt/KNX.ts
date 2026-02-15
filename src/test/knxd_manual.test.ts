@@ -1,7 +1,8 @@
-import { KNXTunneling, KNXTunnelingOptions } from '../connection/KNXTunneling';
+import { KNXTunneling } from '../connection/KNXTunneling';
 import { ConnectionType } from '../core/enum/KNXnetIPEnum';
 import { ServiceMessage } from '../@types/interfaces/ServiceMessage';
 import { getLocalIP } from '../utils/localIp';
+import { KNXTunnelingOptions } from '../@types/interfaces/connection';
 
 // Configuration for local knxd
 const KNXD_IP = getLocalIP(); // Change if knxd is on another machine

@@ -1,36 +1,12 @@
 import dgram from 'dgram';
 import net from 'net';
-import { KNXClient, KNXClientOptions } from './KNXClient';
+import { KNXClient } from './KNXClient';
 import { KNXnetIPHeader } from '../core/KNXnetIPHeader';
 import { HPAI, CRI, CRD } from '../core/KNXnetIPStructures';
 import { KNXnetIPServiceType, KNXnetIPErrorCodes, HostProtocolCode, ConnectionType } from '../core/enum/KNXnetIPEnum';
 import { CEMI } from '../core/CEMI';
 import { ServiceMessage } from '../@types/interfaces/ServiceMessage';
-
-/**
- * Options for configuring a KNX Tunneling connection.
- */
-export interface KNXTunnelingOptions extends KNXClientOptions {
-    /**
-     * The transport protocol to use for the connection.
-     * 'UDP' is the default and standard for KNXnet/IP.
-     * 'TCP' is optional and used for connection-oriented communication.
-     */
-    transport?: 'UDP' | 'TCP';
-    /**
-     * The type of connection to establish.
-     * Defaults to TUNNEL_CONNECTION (0x04) for standard telegram exchange.
-     * Use DEVICE_MGMT_CONNECTION (0x03) for device configuration and management.
-     */
-    connectionType?: ConnectionType;
-    /**
-     * If true, sends a "Route Back" HPAI (IP 0.0.0.0 and port 0).
-     * This instructs the KNXnet/IP server to respond directly to the source IP and port
-     * from which the request originated. Essential for environments with NAT, 
-     * firewalls, or VPNs like ZeroTier.
-     */
-    useRouteBack?: boolean;
-}
+import { KNXTunnelingOptions } from '../@types/interfaces/connection';
 
 export class KNXTunneling extends KNXClient {
     private channelId: number = 0;
