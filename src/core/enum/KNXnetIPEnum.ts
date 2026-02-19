@@ -22,7 +22,7 @@ export enum KNXnetIPServiceType {
   ROUTING_INDICATION = 0x0530,
   ROUTING_LOST_MESSAGE = 0x0531,
   ROUTING_BUSY = 0x0532,
-  ROUTING_SYSTEM_BROADCAST = 0x0533
+  ROUTING_SYSTEM_BROADCAST = 0x0533,
 }
 
 export enum KNXnetIPErrorCodes {
@@ -58,12 +58,25 @@ export enum DescriptionType {
   IP_CONFIG = 0x03,
   IP_CUR_CONFIG = 0x04,
   KNX_ADDRESSES = 0x05,
-  MFR_DATA = 0xFE
+  TUNNELLING_INFO = 0x07,
+  DEVICE_INFO_EXTENDED = 0x08,
+  MFR_DATA = 0xfe,
 }
 
-export enum KNXMedium {
+export const enum KNXMedium {
   TP1 = 0x02,
   PL110 = 0x04,
   RF = 0x10,
-  KNXIP = 0x20
+  KNXIP = 0x20,
+}
+
+export const enum AllowedSupportedServiceFamilies {
+  Core = 0x02,
+  DeviceManagement = 0x03,
+  Tunnelling = 0x04,
+  Routing = 0x05,
+  RemoteLogging = 0x06,
+  RemoteConfigurationAndDiagnosis = 0x07,
+  ObjectServer = 0x08,
+  Security = 0x09,
 }

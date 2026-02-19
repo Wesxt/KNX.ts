@@ -29,6 +29,7 @@ export interface KNXRoutingOptions extends KNXClientOptions {
   individualAddress?: string;
   serialNumber?: Buffer;
   friendlyName?: string;
+  macAddress?: string;
 }
 
 export interface KNXClientOptions {

@@ -54,6 +54,14 @@ export class CRI {
     buffer.writeUInt8(this.unused, 3);
     return buffer;
   }
+
+  static fromBuffer(buffer: Buffer): CRI {
+    if (buffer.length < 4) throw new Error("Buffer too short for CRI");
+    const connectionType = buffer.readUInt8(1);
+    const knxLayer = buffer.readUInt8(2);
+    const unused = buffer.readUInt8(3);
+    return new CRI(connectionType, knxLayer, unused);
+  }
 }
 
 export class CRD {
@@ -68,6 +76,14 @@ export class CRD {
     const connectionType = buffer.readUInt8(1);
     const knxAddress = buffer.readUInt16BE(2);
     return new CRD(connectionType, knxAddress);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(4);
+    buffer.writeUInt8(0x04, 0);
+    buffer.writeUInt8(this.connectionType, 1);
+    buffer.writeUInt16BE(this.knxAddress, 2);
+    return buffer;
   }
 }
 
@@ -134,6 +150,14 @@ export abstract class DIB {
         return DeviceInformationDIB.fromBuffer(data);
       case DescriptionType.SUPP_SVC_FAMILIES:
         return SupportedServicesDIB.fromBuffer(data);
+      case DescriptionType.IP_CONFIG:
+        return IPConfigDIB.fromBuffer(data);
+      case DescriptionType.IP_CUR_CONFIG:
+        return IPCurrentConfigDIB.fromBuffer(data);
+      case DescriptionType.TUNNELLING_INFO:
+        return TunnellingInfoDIB.fromBuffer(data);
+      case DescriptionType.DEVICE_INFO_EXTENDED:
+        return ExtendedDeviceInformationDIB.fromBuffer(data);
       case DescriptionType.MFR_DATA:
         return MfrDataDIB.fromBuffer(data);
       default:
@@ -172,7 +196,7 @@ export class DeviceInformationDIB extends DIB {
     buffer.writeUInt8(mcast[2], 16);
     buffer.writeUInt8(mcast[3], 17);
 
-    const mac = this.macAddress.replace(/:/g, "");
+    const mac = this.macAddress.replace(/[:\-]/g, "");
     Buffer.from(mac, "hex").copy(buffer, 18);
 
     const nameBuf = Buffer.from(this.friendlyName, "latin1");
@@ -197,9 +221,156 @@ export class DeviceInformationDIB extends DIB {
     // Friendly name is 30 bytes fixed, null terminated
     const nameBuf = buffer.subarray(24, 54);
     const nullByte = nameBuf.indexOf(0x00);
-    const name = nameBuf.subarray(0, nullByte === -1 ? 30 : nullByte).toString("utf-8");
+    const name = nameBuf.subarray(0, nullByte === -1 ? 30 : nullByte).toString("latin1");
 
     return new DeviceInformationDIB(medium, status, address, projId, serial, multicast, mac, name);
+  }
+}
+
+export class IPConfigDIB extends DIB {
+  constructor(
+    public ipAddress: string,
+    public subnetMask: string,
+    public defaultGateway: string,
+    public ipCapabilities: number,
+    public ipAssignmentMethod: number,
+  ) {
+    super(DescriptionType.IP_CONFIG);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(16);
+    buffer.writeUInt8(16, 0);
+    buffer.writeUInt8(this.type, 1);
+
+    const ip = this.ipAddress.split(".").map(Number);
+    const mask = this.subnetMask.split(".").map(Number);
+    const gw = this.defaultGateway.split(".").map(Number);
+
+    for (let i = 0; i < 4; i++) {
+      buffer.writeUInt8(ip[i], 2 + i);
+      buffer.writeUInt8(mask[i], 6 + i);
+      buffer.writeUInt8(gw[i], 10 + i);
+    }
+
+    buffer.writeUInt8(this.ipCapabilities, 14);
+    buffer.writeUInt8(this.ipAssignmentMethod, 15);
+    return buffer;
+  }
+
+  static fromBuffer(buffer: Buffer): IPConfigDIB {
+    const ip = `${buffer[2]}.${buffer[3]}.${buffer[4]}.${buffer[5]}`;
+    const mask = `${buffer[6]}.${buffer[7]}.${buffer[8]}.${buffer[9]}`;
+    const gw = `${buffer[10]}.${buffer[11]}.${buffer[12]}.${buffer[13]}`;
+    const caps = buffer.readUInt8(14);
+    const method = buffer.readUInt8(15);
+    return new IPConfigDIB(ip, mask, gw, caps, method);
+  }
+}
+
+export class IPCurrentConfigDIB extends DIB {
+  constructor(
+    public ipAddress: string,
+    public subnetMask: string,
+    public defaultGateway: string,
+    public dhcpServer: string,
+    public ipAssignmentMethod: number,
+  ) {
+    super(DescriptionType.IP_CUR_CONFIG);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(20);
+    buffer.writeUInt8(20, 0);
+    buffer.writeUInt8(this.type, 1);
+
+    const ip = this.ipAddress.split(".").map(Number);
+    const mask = this.subnetMask.split(".").map(Number);
+    const gw = this.defaultGateway.split(".").map(Number);
+    const dhcp = this.dhcpServer.split(".").map(Number);
+
+    for (let i = 0; i < 4; i++) {
+      buffer.writeUInt8(ip[i], 2 + i);
+      buffer.writeUInt8(mask[i], 6 + i);
+      buffer.writeUInt8(gw[i], 10 + i);
+      buffer.writeUInt8(dhcp[i], 14 + i);
+    }
+
+    buffer.writeUInt8(this.ipAssignmentMethod, 18);
+    buffer.writeUInt8(0, 19); // Reserved
+    return buffer;
+  }
+
+  static fromBuffer(buffer: Buffer): IPCurrentConfigDIB {
+    const ip = `${buffer[2]}.${buffer[3]}.${buffer[4]}.${buffer[5]}`;
+    const mask = `${buffer[6]}.${buffer[7]}.${buffer[8]}.${buffer[9]}`;
+    const gw = `${buffer[10]}.${buffer[11]}.${buffer[12]}.${buffer[13]}`;
+    const dhcp = `${buffer[14]}.${buffer[15]}.${buffer[16]}.${buffer[17]}`;
+    const method = buffer.readUInt8(18);
+    return new IPCurrentConfigDIB(ip, mask, gw, dhcp, method);
+  }
+}
+
+export class TunnellingInfoDIB extends DIB {
+  constructor(
+    public apduLength: number = 240,
+    public slots: { address: number; status: number }[] = []
+  ) {
+    super(DescriptionType.TUNNELLING_INFO);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(4 + this.slots.length * 4);
+    buffer.writeUInt8(buffer.length, 0);
+    buffer.writeUInt8(this.type, 1);
+    buffer.writeUInt16BE(this.apduLength, 2);
+    let offset = 4;
+    for (const slot of this.slots) {
+      buffer.writeUInt16BE(slot.address, offset);
+      buffer.writeUInt16BE(slot.status, offset + 2);
+      offset += 4;
+    }
+    return buffer;
+  }
+
+  static fromBuffer(buffer: Buffer): TunnellingInfoDIB {
+    const apduLength = buffer.readUInt16BE(2);
+    const slots = [];
+    for (let i = 4; i < buffer.length; i += 4) {
+      slots.push({
+        address: buffer.readUInt16BE(i),
+        status: buffer.readUInt16BE(i + 2)
+      });
+    }
+    return new TunnellingInfoDIB(apduLength, slots);
+  }
+}
+
+export class ExtendedDeviceInformationDIB extends DIB {
+  constructor(
+    public mediumStatus: number,
+    public maximalLocalApduLength: number,
+    public deviceDescriptorType0: number,
+  ) {
+    super(DescriptionType.DEVICE_INFO_EXTENDED);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(8);
+    buffer.writeUInt8(8, 0); // Length
+    buffer.writeUInt8(this.type, 1);
+    buffer.writeUInt8(this.mediumStatus, 2);
+    buffer.writeUInt8(0, 3); // Reserved
+    buffer.writeUInt16BE(this.maximalLocalApduLength, 4);
+    buffer.writeUInt16BE(this.deviceDescriptorType0, 6);
+    return buffer;
+  }
+
+  static fromBuffer(buffer: Buffer): ExtendedDeviceInformationDIB {
+    const mediumStatus = buffer.readUInt8(2);
+    const maximalLocalApduLength = buffer.readUInt16BE(4);
+    const deviceDescriptorType0 = buffer.readUInt16BE(6);
+    return new ExtendedDeviceInformationDIB(mediumStatus, maximalLocalApduLength, deviceDescriptorType0);
   }
 }
 
