@@ -47,6 +47,12 @@ export class CRI {
   ) { }
 
   toBuffer(): Buffer {
+    if (this.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION) {
+      const buffer = Buffer.alloc(2);
+      buffer.writeUInt8(0x02, 0); // Length
+      buffer.writeUInt8(this.connectionType, 1);
+      return buffer;
+    }
     const buffer = Buffer.alloc(4);
     buffer.writeUInt8(0x04, 0); // Length
     buffer.writeUInt8(this.connectionType, 1);
@@ -56,8 +62,13 @@ export class CRI {
   }
 
   static fromBuffer(buffer: Buffer): CRI {
-    if (buffer.length < 4) throw new Error("Buffer too short for CRI");
+    if (buffer.length < 2) throw new Error("Buffer too short for CRI");
+    const len = buffer.readUInt8(0);
     const connectionType = buffer.readUInt8(1);
+    if (len === 2) {
+      return new CRI(connectionType);
+    }
+    if (buffer.length < 4) throw new Error("Buffer too short for CRI");
     const knxLayer = buffer.readUInt8(2);
     const unused = buffer.readUInt8(3);
     return new CRI(connectionType, knxLayer, unused);
@@ -67,18 +78,28 @@ export class CRI {
 export class CRD {
   constructor(
     public connectionType: ConnectionType,
-    public knxAddress: number,
+    public knxAddress: number = 0,
   ) { }
 
   static fromBuffer(buffer: Buffer): CRD {
-    if (buffer.length < 4) throw new Error("Buffer too short for CRD");
-    // Length at 0
+    if (buffer.length < 2) throw new Error("Buffer too short for CRD");
+    const len = buffer.readUInt8(0);
     const connectionType = buffer.readUInt8(1);
+    if (len === 2) {
+      return new CRD(connectionType);
+    }
+    if (buffer.length < 4) throw new Error("Buffer too short for CRD");
     const knxAddress = buffer.readUInt16BE(2);
     return new CRD(connectionType, knxAddress);
   }
 
   toBuffer(): Buffer {
+    if (this.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION) {
+      const buffer = Buffer.alloc(2);
+      buffer.writeUInt8(0x02, 0);
+      buffer.writeUInt8(this.connectionType, 1);
+      return buffer;
+    }
     const buffer = Buffer.alloc(4);
     buffer.writeUInt8(0x04, 0);
     buffer.writeUInt8(this.connectionType, 1);
