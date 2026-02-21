@@ -469,7 +469,7 @@ export class KNXHelper {
     /**
      * 0x0209
      */
-    DISCONNECT_REQUEST: 0x0208,
+    DISCONNECT_REQUEST: 0x0209,
     /**
      * 0x020A
      */

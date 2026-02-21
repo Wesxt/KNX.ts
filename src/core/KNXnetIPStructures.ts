@@ -47,12 +47,6 @@ export class CRI {
   ) { }
 
   toBuffer(): Buffer {
-    if (this.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION) {
-      const buffer = Buffer.alloc(2);
-      buffer.writeUInt8(0x02, 0); // Length
-      buffer.writeUInt8(this.connectionType, 1);
-      return buffer;
-    }
     const buffer = Buffer.alloc(4);
     buffer.writeUInt8(0x04, 0); // Length
     buffer.writeUInt8(this.connectionType, 1);
@@ -94,12 +88,6 @@ export class CRD {
   }
 
   toBuffer(): Buffer {
-    if (this.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION) {
-      const buffer = Buffer.alloc(2);
-      buffer.writeUInt8(0x02, 0);
-      buffer.writeUInt8(this.connectionType, 1);
-      return buffer;
-    }
     const buffer = Buffer.alloc(4);
     buffer.writeUInt8(0x04, 0);
     buffer.writeUInt8(this.connectionType, 1);
