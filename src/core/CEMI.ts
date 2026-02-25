@@ -871,21 +871,29 @@ export class CEMI {
     "L_Busmon.ind": class L_Busmon_ind implements ServiceMessage {
       constructor(additionalInfo: AddInfoBase[] | null, data: Buffer) {
         this.data = data;
-        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        if (additionalInfo)
+          this.additionalInfo = new AdditionalInformationField(additionalInfo);
       }
       messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"].CEMI.value;
-      additionalInfo = new AdditionalInformationField([new BusmonitorStatusInfo(), new TimestampRelative()]);
+      additionalInfo = new AdditionalInformationField([
+        new BusmonitorStatusInfo(),
+        new TimestampRelative(),
+      ]);
       data: Buffer = Buffer.alloc(1);
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.data.length);
         const baseOffset = 2 + this.additionalInfo.length;
-        buffer.writeUint8(this.messageCode, 0);
-        buffer.writeUint8(this.additionalInfo.length, 1);
+        const buffer = Buffer.alloc(baseOffset + this.data.length);
+
+        buffer[0] = this.messageCode;
+        buffer[1] = this.additionalInfo.length;
+
         if (this.additionalInfo.length > 0) {
-          this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
+          this.additionalInfo.toBuffer().copy(buffer, 2);
         }
-        this.data.copy(buffer, baseOffset + 1, baseOffset + 1 + this.data.length);
+
+        this.data.copy(buffer, baseOffset);
+
         return buffer;
       }
 
@@ -900,14 +908,20 @@ export class CEMI {
       static fromBuffer(buffer: Buffer) {
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["L_Busmon.ind"].CEMI.value)
-          throw new Error(`Invalid Message Code for L_Busmon.ind: expected 0x2B, got 0x${messageCode.toString(16)}`);
+          throw new Error(
+            `Invalid Message Code for L_Busmon.ind: expected 0x2B, got 0x${messageCode.toString(
+              16,
+            )}`,
+          );
         const addInfoLength = buffer.readUint8(1);
         const baseOffset = 2 + addInfoLength;
         let addInfo: AdditionalInformationField | null = null;
         if (addInfoLength > 0) {
-          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+          addInfo = AdditionalInformationField.fromBuffer(
+            buffer.subarray(2, baseOffset),
+          );
         }
-        const data = buffer.subarray(baseOffset + 1);
+        const data = buffer.subarray(baseOffset);
         const addInfoData = addInfo?.items ?? null;
         return new L_Busmon_ind(addInfoData, data);
       }

@@ -30,6 +30,12 @@ export interface KNXRoutingOptions extends KNXClientOptions {
   serialNumber?: Buffer;
   friendlyName?: string;
   macAddress?: string;
+  /**
+   * The minimum delay between two consecutive ROUTING_INDICATION frames sent to the bus.
+   * Default is 20ms (standard for TP1 compatibility).
+   * Setting this to a lower value can increase performance but may flood slow KNX segments.
+   */
+  routingDelay?: number;
 }
 
 export interface KNXClientOptions {

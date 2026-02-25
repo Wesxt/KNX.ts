@@ -6,9 +6,9 @@ import {
   KNXMedium,
   HostProtocolCode,
   KNXnetIPErrorCodes,
-  DescriptionType,
   ConnectionType,
   AllowedSupportedServiceFamilies,
+  KNXLayer,
 } from "../core/enum/KNXnetIPEnum";
 import { CEMI } from "../core/CEMI";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
@@ -29,6 +29,10 @@ import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "../utils/KNXHelper";
 import { KNXRoutingOptions } from "../@types/interfaces/connection";
 import { getNetworkInfo } from "../utils/localIp";
+import {
+  BusmonitorStatusInfo,
+  TimestampRelative,
+} from "../core/KNXAddInfoTypes";
 
 export class KNXRouting extends KNXClient {
   private isRoutingBusy: boolean = false;
@@ -50,11 +54,16 @@ export class KNXRouting extends KNXClient {
       sno: number; // Send sequence number
       rno: number; // Receive sequence number
       heartbeatTimer: NodeJS.Timeout;
+      knxAddress: number;
+      knxAddressStr: string;
+      knxLayer: KNXLayer;
     }
   >();
 
-  private readonly MAX_QUEUE_SIZE = 50;
+  private readonly MAX_QUEUE_SIZE = 100;
+  private readonly BUSY_THRESHOLD = 15;
   private readonly HEARTBEAT_TIMEOUT = 120000; // 120 seconds
+  private readonly MAX_TUNNEL_CONNECTIONS = 15; // Typically 15 slots for ETS
 
   constructor(options: KNXRoutingOptions) {
     super(options);
@@ -68,6 +77,7 @@ export class KNXRouting extends KNXClient {
       options.serialNumber || Buffer.from([0x00, 0xfa, 0x12, 0x34, 0x56, 0x78]);
     routingOptions.friendlyName = options.friendlyName || "KNX.ts Routing Node";
     routingOptions.macAddress = options.macAddress || netInfo.mac;
+    routingOptions.routingDelay = options.routingDelay ?? 20;
   }
 
   async connect(): Promise<void> {
@@ -126,37 +136,39 @@ export class KNXRouting extends KNXClient {
    * Enqueues the message to respect rate limiting and flow control.
    */
   async send(data: Buffer | ServiceMessage): Promise<void> {
-    let cemi: ServiceMessage;
+    let cemiBuffer: Buffer;
     if (Buffer.isBuffer(data)) {
-      try {
-        cemi = CEMI.fromBuffer(data);
-      } catch (e) {
-        // If it's not a valid CEMI, we can't process Routing Counter, but we can still try to send it as is
-        return this.enqueuePacket(data);
-      }
+      cemiBuffer = data;
     } else {
-      cemi = data;
+      // Spec 3.9: Routing Counter (Hop Count)
+      // Most DataLinkLayer messages have controlField2 which contains hopCount
+      if ((data as any).controlField2) {
+        const cf2 = (data as any).controlField2 as ExtendedControlField;
+        const hopCount = cf2.hopCount;
+
+        if (hopCount === 0) {
+          // Drop message if hop count is 0
+          return;
+        }
+
+        if (hopCount < 7) {
+          // Decrement hop count if it's between 1 and 6
+          cf2.hopCount = hopCount - 1;
+        }
+        // If hopCount is 7, it's routed without decrementing
+      }
+      cemiBuffer = data.toBuffer();
     }
 
-    // Spec 3.9: Routing Counter (Hop Count)
-    // Most DataLinkLayer messages have controlField2 which contains hopCount
-    if ((cemi as any).controlField2) {
-      const cf2 = (cemi as any).controlField2 as ExtendedControlField;
-      const hopCount = cf2.hopCount;
+    await this.enqueuePacket(cemiBuffer);
+  }
 
-      if (hopCount === 0) {
-        // Drop message if hop count is 0
-        return;
-      }
-
-      if (hopCount < 7) {
-        // Decrement hop count if it's between 1 and 6
-        cf2.hopCount = hopCount - 1;
-      }
-      // If hopCount is 7, it's routed without decrementing
-    }
-
-    await this.enqueuePacket(cemi.toBuffer());
+  /**
+   * Send a raw cEMI message buffer via Routing Indication.
+   * Useful for high performance bridging.
+   */
+  async sendRaw(cemiBuffer: Buffer): Promise<void> {
+    await this.enqueuePacket(cemiBuffer);
   }
 
   /**
@@ -179,6 +191,15 @@ export class KNXRouting extends KNXClient {
     const packet = Buffer.concat([header.toBuffer(), cemiBuffer]);
 
     this.msgQueue.push(packet);
+
+    // Flow control: Send ROUTING_BUSY if queue is filling up
+    if (this.msgQueue.length >= this.BUSY_THRESHOLD && !this.isRoutingBusy) {
+      const routingOptions = this.options as KNXRoutingOptions;
+      const waitTime =
+        (routingOptions.routingDelay ?? 20) * this.msgQueue.length;
+      this.sendRoutingBusy(Math.min(100, waitTime));
+    }
+
     this.processQueue();
   }
 
@@ -206,6 +227,26 @@ export class KNXRouting extends KNXClient {
   }
 
   /**
+   * Sends a ROUTING_BUSY multicast notification.
+   */
+  private sendRoutingBusy(waitTime: number): void {
+    const busyMsg = new RoutingBusy(0, waitTime, 0x0000);
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.ROUTING_BUSY, 12);
+    const packet = Buffer.concat([header.toBuffer(), busyMsg.toBuffer()]);
+
+    if (this.socket) {
+      (this.socket as dgram.Socket).send(
+        packet,
+        this.options.port!,
+        this.options.ip!,
+        (err) => {
+          if (err) this.emit("error", err);
+        },
+      );
+    }
+  }
+
+  /**
    * Processes the message queue with Rate Limiting and Flow Control
    */
   private processQueue() {
@@ -218,61 +259,97 @@ export class KNXRouting extends KNXClient {
 
     this.isProcessingQueue = true;
 
-    const now = Date.now();
-    const timeSinceLastSend = now - this.lastSentTime;
-    // Default rate limit: 20ms gap (50 telegrams/s)
-    const waitTime = Math.max(0, 20 - timeSinceLastSend);
+    const routingOptions = this.options as KNXRoutingOptions;
+    const delay = routingOptions.routingDelay ?? 20;
 
-    setTimeout(() => {
-      if (this.isRoutingBusy) {
+    const executeSend = () => {
+      if (!this.socket || this.isRoutingBusy) {
         this.isProcessingQueue = false;
         return;
       }
 
       const packet = this.msgQueue.shift();
-      if (packet && this.socket) {
+      if (packet) {
+        // Record precise start time to handle cumulative delays
+        const startTime = Date.now();
+
         (this.socket as dgram.Socket).send(
           packet,
           this.options.port!,
           this.options.ip!,
           (err) => {
             if (err) this.emit("error", err);
+
             this.lastSentTime = Date.now();
             this.isProcessingQueue = false;
+
             if (this.msgQueue.length > 0) {
-              this.processQueue();
+              const elapsed = this.lastSentTime - startTime;
+              const nextWait = Math.max(0, delay - elapsed);
+
+              if (nextWait === 0) {
+                // Yield to event loop but process next message as soon as possible
+                setImmediate(() => this.processQueue());
+              } else {
+                setTimeout(() => this.processQueue(), nextWait);
+              }
             }
           },
         );
       } else {
         this.isProcessingQueue = false;
       }
-    }, waitTime);
+    };
+
+    const now = Date.now();
+    const elapsedSinceLast = now - this.lastSentTime;
+    const initialWait = Math.max(0, delay - elapsedSinceLast);
+
+    if (initialWait === 0) {
+      executeSend();
+    } else {
+      setTimeout(executeSend, initialWait);
+    }
   }
 
   private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo) {
     try {
       const header = KNXnetIPHeader.fromBuffer(msg);
       const body = msg.subarray(6);
-      console.log(
-        `[KNXnetIP] Service: 0x${header.serviceType.toString(16).padStart(4, "0")} (${KNXnetIPServiceType[header.serviceType] || "UNKNOWN"}) from ${rinfo.address}:${rinfo.port} - Raw: ${msg.toString("hex")}`,
-      );
-
       switch (header.serviceType) {
         case KNXnetIPServiceType.ROUTING_INDICATION:
           this.emit("raw_indication", body);
+
+          // Efficiently extract srcIA for echo cancellation
+          const msgCode = body[0];
+          const addInfoLen = body[1];
+          let srcIA = -1;
+          if (msgCode === 0x29) {
+            // L_Data.ind
+            srcIA = body.readUInt16BE(2 + addInfoLen + 2);
+          }
+
           // Forward to active tunneling clients
           this._tunnelConnections.forEach((conn, channelId) => {
-            this.sendTunnelingRequest(channelId, body, conn.dataHPAI);
+            // Echo cancellation: Don't forward back to the client that originated this message
+            if (srcIA !== -1 && srcIA === conn.knxAddress) {
+              return;
+            }
+
+            if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
+              const busmonBody = this.convertDataIndToBusmonInd(body);
+              this.sendTunnelingRequest(channelId, busmonBody, conn.dataHPAI);
+            } else {
+              this.sendTunnelingRequest(channelId, body, conn.dataHPAI);
+            }
           });
+
+          // Local events
           try {
             const cemi = CEMI.fromBuffer(body);
             this.emit("indication", cemi);
           } catch (e) {
-            console.error(
-              "[KNXnetIP] Failed to parse CEMI from Indication:",
-              e,
-            );
+            // Silently ignore parsing errors for local events
           }
           break;
         case KNXnetIPServiceType.ROUTING_BUSY:
@@ -399,12 +476,6 @@ export class KNXRouting extends KNXClient {
 
     const cri = CRI.fromBuffer(msg.subarray(22));
 
-    console.log("[KNXnetIP] CONNECT_REQUEST", {
-      clientControlHPAI,
-      clientDataHPAI,
-      connectionType: cri.connectionType,
-    });
-
     const responseHeader = new KNXnetIPHeader(
       KNXnetIPServiceType.CONNECT_RESPONSE,
       0,
@@ -414,7 +485,7 @@ export class KNXRouting extends KNXClient {
     let channelId = 0;
     let body: Buffer;
 
-    for (let i = 1; i < 256; i++) {
+    for (let i = 1; i <= this.MAX_TUNNEL_CONNECTIONS; i++) {
       if (!this._tunnelConnections.has(i)) {
         channelId = i;
         break;
@@ -428,40 +499,74 @@ export class KNXRouting extends KNXClient {
       cri.connectionType === ConnectionType.TUNNEL_CONNECTION ||
       cri.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION
     ) {
-      this._tunnelConnections.set(channelId, {
-        controlHPAI: clientControlHPAI,
-        dataHPAI: clientDataHPAI,
-        sno: 0,
-        rno: 0,
-        heartbeatTimer: setTimeout(
-          () => this.closeConnection(channelId),
-          this.HEARTBEAT_TIMEOUT,
-        ),
-      });
-
-      const serverDataHPAI = new HPAI(
-        HostProtocolCode.IPV4_UDP,
-        this.options.localIp!,
-        (this.socket as dgram.Socket).address().port,
-      );
-
       const routingOptions = this.options as KNXRoutingOptions;
       const hostIA = KNXHelper.GetAddress(
         routingOptions.individualAddress as string,
         ".",
       );
-      const slotIA = (hostIA.readUInt16BE() & 0xff00) | channelId;
 
-      const crd = new CRD(
-        cri.connectionType,
-        cri.connectionType === ConnectionType.TUNNEL_CONNECTION ? slotIA : 0,
-      );
+      // Determine requested or automatic IA
+      let knxAddress = cri.individualAddress;
+      if (knxAddress === null || knxAddress === 0) {
+        // Automatic assignment: Area.Line.channelId
+        knxAddress = (hostIA.readUInt16BE() & 0xff00) | channelId;
+      }
 
-      body = Buffer.concat([
-        Buffer.from([channelId, status]),
-        serverDataHPAI.toBuffer(),
-        crd.toBuffer(),
-      ]);
+      // Check if requested layer is supported
+      if (
+        cri.knxLayer !== KNXLayer.LINK_LAYER &&
+        cri.knxLayer !== KNXLayer.BUSMONITOR_LAYER &&
+        cri.knxLayer !== KNXLayer.RAW_LAYER
+      ) {
+        status = KNXnetIPErrorCodes.E_TUNNELLING_LAYER;
+      }
+
+      // Check if address is already in use by another tunnel
+      if (status === KNXnetIPErrorCodes.E_NO_ERROR) {
+        for (const conn of this._tunnelConnections.values()) {
+          if (conn.knxAddress === knxAddress) {
+            status = KNXnetIPErrorCodes.E_CONNECTION_IN_USE;
+            break;
+          }
+        }
+      }
+
+      if (status === KNXnetIPErrorCodes.E_NO_ERROR) {
+        // Pre-calculate string IA for legacy/events
+        const addrBuf = Buffer.alloc(2);
+        addrBuf.writeUInt16BE(knxAddress);
+        const knxAddressStr = KNXHelper.GetAddress(addrBuf, ".") as string;
+
+        this._tunnelConnections.set(channelId, {
+          controlHPAI: clientControlHPAI,
+          dataHPAI: clientDataHPAI,
+          sno: 0,
+          rno: 0,
+          heartbeatTimer: setTimeout(
+            () => this.closeConnection(channelId),
+            this.HEARTBEAT_TIMEOUT,
+          ),
+          knxAddress: knxAddress,
+          knxAddressStr: knxAddressStr,
+          knxLayer: cri.knxLayer,
+        });
+
+        const serverDataHPAI = new HPAI(
+          HostProtocolCode.IPV4_UDP,
+          this.options.localIp!,
+          (this.socket as dgram.Socket).address().port,
+        );
+
+        const crd = new CRD(cri.connectionType, knxAddress);
+
+        body = Buffer.concat([
+          Buffer.from([channelId, status]),
+          serverDataHPAI.toBuffer(),
+          crd.toBuffer(),
+        ]);
+      } else {
+        body = Buffer.from([0, status]);
+      }
     } else {
       status = KNXnetIPErrorCodes.E_CONNECTION_TYPE;
       body = Buffer.from([0, status]);
@@ -495,7 +600,6 @@ export class KNXRouting extends KNXClient {
     if (conn) {
       clearTimeout(conn.heartbeatTimer);
       this._tunnelConnections.delete(channelId);
-      console.log(`[KNXnetIP] Connection ${channelId} closed (timeout).`);
     }
   }
 
@@ -587,44 +691,73 @@ export class KNXRouting extends KNXClient {
     this.sendTunnelACK(channelId, seq, KNXnetIPErrorCodes.E_NO_ERROR);
     conn.rno = (conn.rno + 1) % 256;
 
+    // Fast path: Efficiently bridge Tunneling Request to Routing Indication
+    const msgCode = cemiBuffer[0];
+    const addInfoLen = cemiBuffer[1];
+
+    // Spec 3.2: KNXnet/IP Client shall not send L_Data.req in Busmonitor mode
+    if (
+      conn.knxLayer === KNXLayer.BUSMONITOR_LAYER &&
+      (msgCode === 0x11 || msgCode === 0x10)
+    ) {
+      // Silently discard or could send an error? Spec says "shall not send", usually server ignores or drops.
+      // We already sent ACK, so we just return here to not bridge to the bus.
+      return;
+    }
+
+    // Spec 2.2.2: Patch source address if 0.0.0 (Only for L_Data)
+    if (msgCode === 0x11) {
+      // L_Data.req
+      const srcIAOffset = 2 + addInfoLen + 2;
+      const srcIA = cemiBuffer.readUInt16BE(srcIAOffset);
+      if (srcIA === 0) {
+        cemiBuffer.writeUInt16BE(conn.knxAddress, srcIAOffset);
+      }
+    }
+
+    // Convert Request to Indication for Routing (Spec 03_08_05 Routing, 3.8)
+    let routingCemiBuffer = cemiBuffer;
+    if (msgCode === 0x11) {
+      // L_Data.req -> L_Data.ind (0x11 -> 0x29)
+      routingCemiBuffer = Buffer.from(cemiBuffer);
+      routingCemiBuffer[0] = 0x29;
+    } else if (msgCode === 0x10) {
+      // L_Raw.req -> L_Raw.ind (0x10 -> 0x2D)
+      routingCemiBuffer = Buffer.from(cemiBuffer);
+      routingCemiBuffer[0] = 0x2d;
+    }
+
+    // Bridge to Routing (multicast)
+    this.sendRaw(routingCemiBuffer);
+
+    // Send Tunneling Confirmation (L_Data.con / L_Raw.con) back to client
+    if (msgCode === 0x11 || msgCode === 0x10) {
+      const conCode = msgCode + 0x1d; // 0x11 -> 0x2E, 0x10 -> 0x2F
+      const conCemiBuffer = Buffer.from(cemiBuffer);
+      conCemiBuffer[0] = conCode;
+      // Ensure bit 0 of CF1 is 0 (No error)
+      const cf1Offset = 2 + addInfoLen;
+      conCemiBuffer[cf1Offset] &= 0xfe;
+
+      this.sendTunnelingConfirmation(channelId, conCemiBuffer, conn.dataHPAI);
+    }
+
+    // Emit indication locally for events
     try {
       const cemi = CEMI.fromBuffer(cemiBuffer);
-      console.log(
-        `[KNXnetIP] Parsed CEMI from Tunneling (Channel ${channelId}):`,
-        cemi.constructor.name,
-      );
-
-      // Emit locally so applications using this class see it immediately
       this.emit("indication", cemi);
-
-      // Bridge to the KNX bus (multicast group)
-      this.send(cemi);
-
-      // Send L_Data.con back to client if it was a request
-      if ("messageCode" in cemi && (cemi as any).messageCode === 0x11) {
-        // L_Data.req
-        this.sendTunnelingConfirmation(channelId, cemiBuffer, conn.dataHPAI);
-      }
     } catch (e) {
-      console.error(
-        "[KNXnetIP] Failed to parse CEMI from tunneling request:",
-        e,
-      );
-      console.error("[KNXnetIP] CEMI Buffer was:", cemiBuffer.toString("hex"));
+      // Parsing failed, but we already bridged the raw data
     }
   }
 
   private sendTunnelingConfirmation(
     channelId: number,
-    reqCemiBuffer: Buffer,
+    conCemiBuffer: Buffer,
     dataHPAI: HPAI,
   ) {
     const conn = this._tunnelConnections.get(channelId);
     if (!conn) return;
-
-    // L_Data.con is 0x2E. Just swap the first byte of the CEMI
-    const conCemiBuffer = Buffer.from(reqCemiBuffer);
-    conCemiBuffer[0] = 0x2e;
 
     const header = new KNXnetIPHeader(
       KNXnetIPServiceType.TUNNELLING_REQUEST,
@@ -675,6 +808,10 @@ export class KNXRouting extends KNXClient {
       case 0x07: // Max APDU Length
         featureValue = Buffer.alloc(2);
         featureValue.writeUInt16BE(254);
+        break;
+      case 0x06: // Interface Individual Address
+        featureValue = Buffer.alloc(2);
+        featureValue.writeUInt16BE(conn.knxAddress);
         break;
       default:
         featureValue = Buffer.alloc(0);
@@ -835,11 +972,21 @@ export class KNXRouting extends KNXClient {
       routingOptions.individualAddress as string,
       ".",
     );
-    const slotIA = (hostIA.readUInt16BE() & 0xff00) | 1;
+    const baseIA = hostIA.readUInt16BE() & 0xff00;
 
-    const tunnelInfo = new TunnellingInfoDIB(254, [
-      { address: slotIA, status: 0x0001 }, // Slot 1 usable and free
-    ]);
+    const slots = [];
+    for (let i = 1; i <= this.MAX_TUNNEL_CONNECTIONS; i++) {
+      const conn = this._tunnelConnections.get(i);
+      // Spec: Bits 15-3 must be 1. Bit 2 (Usable), Bit 1 (Authorised), Bit 0 (Free)
+      // Free slot: 0xFFFF (all bits 1)
+      // Occupied slot: 0xFFFE (bit 0 is 0)
+      slots.push({
+        address: conn ? conn.knxAddress : baseIA | i,
+        status: conn ? 0xfffe : 0xffff,
+      });
+    }
+
+    const tunnelInfo = new TunnellingInfoDIB(254, slots);
 
     return [devInfo, suppSvc, extDevInfo, ipConfig, ipCurrent, tunnelInfo];
   }
@@ -886,5 +1033,32 @@ export class KNXRouting extends KNXClient {
       this.emit("routing_ready");
       this.processQueue();
     }, waitTime);
+  }
+
+  private convertDataIndToBusmonInd(cemiBuffer: Buffer): Buffer {
+    const msgCode = cemiBuffer[0];
+    if (msgCode !== 0x29 && msgCode !== 0x2d) {
+      return cemiBuffer;
+    }
+
+    const addInfoLen = cemiBuffer[1];
+    // Reconstruct raw LPDU from CEMI L_Data.ind
+    // CEMI 0x29: [MC][AddInfoLen][AddInfo][CF1][CF2][Src][Dst][Len][TPDU]
+    // Raw LPDU: [CF1][CF2][Src][Dst][NPCI(Length)][TPDU][FCS]
+    // We don't have the real FCS, so we omit it or use 0.
+    const lpdu = cemiBuffer.subarray(2 + addInfoLen);
+
+    // Create L_Busmon.ind CEMI
+    const busmonStatus = new BusmonitorStatusInfo();
+    const timestamp = new TimestampRelative();
+    timestamp.timestamp = Date.now() & 0xffff;
+
+    const addInfo = Buffer.concat([
+      busmonStatus.getBuffer(),
+      timestamp.getBuffer(),
+    ]);
+
+    const header = Buffer.from([0x2b, addInfo.length]);
+    return Buffer.concat([header, addInfo, lpdu]);
   }
 }

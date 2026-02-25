@@ -33,6 +33,7 @@ export enum KNXnetIPErrorCodes {
   E_CONNECTION_ID = 0x21,
   E_CONNECTION_TYPE = 0x22,
   E_CONNECTION_OPTION = 0x23,
+  E_CONNECTION_IN_USE = 0x2e,
   E_NO_MORE_CONNECTIONS = 0x24,
   E_DATA_CONNECTION = 0x26,
   E_KNX_CONNECTION = 0x27,
@@ -61,6 +62,12 @@ export enum DescriptionType {
   TUNNELLING_INFO = 0x07,
   DEVICE_INFO_EXTENDED = 0x08,
   MFR_DATA = 0xfe,
+}
+
+export enum KNXLayer {
+  LINK_LAYER = 0x02,
+  RAW_LAYER = 0x04,
+  BUSMONITOR_LAYER = 0x80,
 }
 
 export const enum KNXMedium {

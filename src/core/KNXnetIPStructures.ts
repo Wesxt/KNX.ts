@@ -44,14 +44,19 @@ export class CRI {
     public connectionType: ConnectionType,
     public knxLayer: number = 0x02, // Tunnel Link Layer
     public unused: number = 0x00,
+    public individualAddress: number | null = null,
   ) { }
 
   toBuffer(): Buffer {
-    const buffer = Buffer.alloc(4);
-    buffer.writeUInt8(0x04, 0); // Length
+    const len = this.individualAddress !== null ? 6 : 4;
+    const buffer = Buffer.alloc(len);
+    buffer.writeUInt8(len, 0); // Length
     buffer.writeUInt8(this.connectionType, 1);
     buffer.writeUInt8(this.knxLayer, 2);
     buffer.writeUInt8(this.unused, 3);
+    if (this.individualAddress !== null) {
+      buffer.writeUInt16BE(this.individualAddress, 4);
+    }
     return buffer;
   }
 
@@ -65,7 +70,11 @@ export class CRI {
     if (buffer.length < 4) throw new Error("Buffer too short for CRI");
     const knxLayer = buffer.readUInt8(2);
     const unused = buffer.readUInt8(3);
-    return new CRI(connectionType, knxLayer, unused);
+    let individualAddress: number | null = null;
+    if (len === 6 && buffer.length >= 6) {
+      individualAddress = buffer.readUInt16BE(4);
+    }
+    return new CRI(connectionType, knxLayer, unused, individualAddress);
   }
 }
 
@@ -82,6 +91,7 @@ export class CRD {
     if (len === 2) {
       return new CRD(connectionType);
     }
+    // Spec says CRD for Tunneling is 4 bytes and contains IA
     if (buffer.length < 4) throw new Error("Buffer too short for CRD");
     const knxAddress = buffer.readUInt16BE(2);
     return new CRD(connectionType, knxAddress);

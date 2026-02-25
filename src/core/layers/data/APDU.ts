@@ -30,12 +30,19 @@ export class APDU implements ServiceMessage {
    * Devuelve un buffer con TPCI/APCI + data
    */
   toBuffer(): Buffer {
+    if (this.tpci.dataControlFlag) {
+      const buffer = Buffer.alloc(1);
+      buffer.writeUint8(this.tpci.getValue(), 0);
+      return buffer;
+    }
     const buffer = Buffer.alloc(1 + this.length);
     const packNumber = this.apci.packNumber();
     this.tpci.first2bitsOfAPCI = packNumber[0];
     // TPCI/APCI
     buffer.writeUInt8(this.tpci.getValue(), 0);
-    buffer.writeUInt8(packNumber[1], 1);
+    if (buffer.length > 1) {
+      buffer.writeUInt8(packNumber[1], 1);
+    }
     // Data
     KNXHelper.WriteData(buffer, this.data, 1, this.isShort);
     return buffer;

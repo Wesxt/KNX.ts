@@ -33,6 +33,11 @@ export class TPDU implements ServiceMessage {
    * Devuelve un buffer con TPCI/APCI + data
    */
   toBuffer(): Buffer {
+    if (this.tpci.dataControlFlag) {
+      const buffer = Buffer.alloc(1);
+      buffer.writeUint8(this.tpci.getValue(), 0);
+      return buffer;
+    }
     const buffer = Buffer.alloc(1 + this.apdu.length);
     // La clase APDU tiene el tpci y el apci en su buffer
     // para simplificar la envoltura de los octetos por lo tanto

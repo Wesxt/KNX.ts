@@ -25,6 +25,8 @@ async function testRouting() {
     ip: MULTICAST_IP,
     port: PORT,
     localIp: localIp,
+    friendlyName: "Arnold",
+    routingDelay: 0,
     // individualAddress: "1.0.250",
   });
 
