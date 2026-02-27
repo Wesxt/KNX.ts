@@ -11,9 +11,10 @@ export * from "./core/SystemStatus";
 
 // Connection
 export * from "./connection/TPUART";
-export * from "./connection/KNXClient";
-export * from "./connection/KNXRouting";
+export * from "./connection/KNXService";
+export * from "./connection/KNXnetIPServer";
 export * from "./connection/KNXTunneling";
+export * from "./connection/Router";
 
 // Enums
 export * from "./core/enum/APCIEnum";
@@ -25,6 +26,7 @@ export * from "./core/enum/KNXnetIPEnum";
 export * from "./core/enum/SAP";
 
 // Interfaces
+export * from "./@types/interfaces/connection";
 export * from "./@types/interfaces/DPTs";
 export * from "./@types/interfaces/EMI";
 export * from "./@types/interfaces/KNXTP1";
@@ -43,7 +45,7 @@ export * from "./core/layers/data/NPDU";
 export * from "./core/layers/data/TPDU";
 
 // Utils
-// export * from "./utils/CEMIAdapter";
+export * from "./utils/CEMIAdapter";
 export * from "./utils/checksumFrame";
 export * from "./utils/KNXHelper";
 export * from "./utils/localIp";

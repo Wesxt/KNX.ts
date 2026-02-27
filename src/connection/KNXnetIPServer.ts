@@ -1,5 +1,5 @@
 import dgram from "dgram";
-import { KNXClient } from "./KNXClient";
+import { KNXService } from "./KNXService";
 import { KNXnetIPHeader } from "../core/KNXnetIPHeader";
 import {
   KNXnetIPServiceType,
@@ -27,14 +27,22 @@ import {
 } from "../core/KNXnetIPStructures";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "../utils/KNXHelper";
-import { KNXRoutingOptions } from "../@types/interfaces/connection";
+import { KNXnetIPServerOptions } from "../@types/interfaces/connection";
 import { getNetworkInfo } from "../utils/localIp";
 import {
   BusmonitorStatusInfo,
   TimestampRelative,
 } from "../core/KNXAddInfoTypes";
+import { Router } from "./Router";
 
-export class KNXRouting extends KNXClient {
+/**
+ * Implements a KNXnet/IP Server (Gateway) that supports Routing and Tunneling protocols.
+ * This class handles device discovery (Search/Description), manages multiple concurrent
+ * tunneling connections, and bridges communication between IP multicast (Routing) and
+ * point-to-point (Tunneling) clients. It includes implementation for flow control
+ * (RoutingBusy), rate limiting, and echo cancellation.
+ */
+export class KNXnetIPServer extends KNXService {
   private isRoutingBusy: boolean = false;
   private routingBusyTimer: NodeJS.Timeout | null = null;
   private msgQueue: Buffer[] = [];
@@ -65,11 +73,13 @@ export class KNXRouting extends KNXClient {
   private readonly HEARTBEAT_TIMEOUT = 120000; // 120 seconds
   private readonly MAX_TUNNEL_CONNECTIONS = 15; // Typically 15 slots for ETS
 
-  constructor(options: KNXRoutingOptions) {
+  private externalManager: Router | null = null;
+
+  constructor(options: KNXnetIPServerOptions) {
     super(options);
     this._transport = "UDP";
     // Set defaults for discovery if not provided
-    const routingOptions = this.options as KNXRoutingOptions;
+    const routingOptions = this.options as KNXnetIPServerOptions;
     const netInfo = getNetworkInfo();
 
     routingOptions.individualAddress = options.individualAddress || "15.15.0";
@@ -78,6 +88,10 @@ export class KNXRouting extends KNXClient {
     routingOptions.friendlyName = options.friendlyName || "KNX.ts Routing Node";
     routingOptions.macAddress = options.macAddress || netInfo.mac;
     routingOptions.routingDelay = options.routingDelay ?? 20;
+
+    if (options.externals) {
+      this.externalManager = new Router(options.externals);
+    }
   }
 
   async connect(): Promise<void> {
@@ -91,7 +105,7 @@ export class KNXRouting extends KNXClient {
       this.emit("error", err);
     });
 
-    return new Promise((resolve, reject) => {
+    const connectPromise = new Promise<void>((resolve, reject) => {
       const socket = this.socket as dgram.Socket;
       socket.bind(this.options.port, () => {
         try {
@@ -107,9 +121,18 @@ export class KNXRouting extends KNXClient {
         }
       });
     });
+
+    await connectPromise;
+
+    if (this.externalManager) {
+      await this.externalManager.connect();
+    }
   }
 
   disconnect(): void {
+    if (this.externalManager) {
+      this.externalManager.disconnect();
+    }
     if (this.socket) {
       (this.socket as dgram.Socket).close();
       this.socket = null;
@@ -160,6 +183,14 @@ export class KNXRouting extends KNXClient {
       cemiBuffer = data.toBuffer();
     }
 
+    // Local Emit if we are sending, to allow ExternalManager to bridge without loopback reliance
+    try {
+      const cemi = Buffer.isBuffer(data) ? CEMI.fromBuffer(data) : data;
+      this.emit("indication", cemi);
+    } catch (e) {
+      // Ignore parsing errors for local emit
+    }
+
     await this.enqueuePacket(cemiBuffer);
   }
 
@@ -194,7 +225,7 @@ export class KNXRouting extends KNXClient {
 
     // Flow control: Send ROUTING_BUSY if queue is filling up
     if (this.msgQueue.length >= this.BUSY_THRESHOLD && !this.isRoutingBusy) {
-      const routingOptions = this.options as KNXRoutingOptions;
+      const routingOptions = this.options as KNXnetIPServerOptions;
       const waitTime =
         (routingOptions.routingDelay ?? 20) * this.msgQueue.length;
       this.sendRoutingBusy(Math.min(100, waitTime));
@@ -259,7 +290,7 @@ export class KNXRouting extends KNXClient {
 
     this.isProcessingQueue = true;
 
-    const routingOptions = this.options as KNXRoutingOptions;
+    const routingOptions = this.options as KNXnetIPServerOptions;
     const delay = routingOptions.routingDelay ?? 20;
 
     const executeSend = () => {
@@ -499,7 +530,7 @@ export class KNXRouting extends KNXClient {
       cri.connectionType === ConnectionType.TUNNEL_CONNECTION ||
       cri.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION
     ) {
-      const routingOptions = this.options as KNXRoutingOptions;
+      const routingOptions = this.options as KNXnetIPServerOptions;
       const hostIA = KNXHelper.GetAddress(
         routingOptions.individualAddress as string,
         ".",
@@ -927,7 +958,7 @@ export class KNXRouting extends KNXClient {
   }
 
   private getIdentificationDIBs() {
-    const routingOptions = this.options as KNXRoutingOptions;
+    const routingOptions = this.options as KNXnetIPServerOptions;
     const netInfo = getNetworkInfo();
 
     const devInfo = new DeviceInformationDIB(

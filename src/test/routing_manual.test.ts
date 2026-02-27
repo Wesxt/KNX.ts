@@ -1,4 +1,4 @@
-import { KNXRouting } from "../connection/KNXRouting";
+import { KNXnetIPServer } from "../connection/KNXnetIPServer";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { MessageCodeTranslator } from "../utils/MessageCodeTranslator";
 import { getLocalIP } from "../utils/localIp";
@@ -8,11 +8,7 @@ import { getLocalIP } from "../utils/localIp";
 const MULTICAST_IP = "224.0.23.12";
 const PORT = 3671;
 
-// async function sleep(ms: number) {
-//     return new Promise(resolve => setTimeout(resolve, ms));
-// }
-
-let routing: KNXRouting;
+let routing: KNXnetIPServer;
 
 async function testRouting() {
   console.log(`
@@ -21,7 +17,7 @@ async function testRouting() {
   const localIp = getLocalIP();
   console.log(`Using Local IP: ${localIp}`);
 
-  const client = new KNXRouting({
+  const client = new KNXnetIPServer({
     ip: MULTICAST_IP,
     port: PORT,
     localIp: localIp,
@@ -36,7 +32,7 @@ async function testRouting() {
     console.log("[Routing] Socket Bound & Member of Multicast Group!");
   });
 
-  client.on("error", (err) => {
+  client.on("error", (err: any) => {
     console.error("[Routing] Error:", err.message);
   });
 
@@ -53,11 +49,11 @@ async function testRouting() {
     );
   });
 
-  client.on("routing_busy", (busy) => {
+  client.on("routing_busy", (busy: any) => {
     console.warn("[Routing] Server is BUSY. Wait time:", busy.waitTime, "ms");
   });
 
-  client.on("routing_lost_message", (lost) => {
+  client.on("routing_lost_message", (lost: any) => {
     console.error("[Routing] Messages LOST:", lost.lostMessages);
   });
 
