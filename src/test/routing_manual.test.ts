@@ -23,7 +23,8 @@ async function testRouting() {
     localIp: localIp,
     friendlyName: "Arnold",
     routingDelay: 0,
-    // individualAddress: "1.0.250",
+    clientAddrs: "1.15.1:8",
+    individualAddress: "1.15.1",
   });
 
   routing = client;

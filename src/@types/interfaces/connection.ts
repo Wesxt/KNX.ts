@@ -31,6 +31,12 @@ export interface KNXnetIPServerOptions extends KNXClientOptions {
   friendlyName?: string;
   macAddress?: string;
   /**
+   * Defines the client address pool for KNXnet/IP Tunneling connections (e.g. "15.15.10:10" or "1.1.1:5").
+   * Format: "START_ADDRESS:COUNT". This dictates how many tunneling clients can connect concurrently
+   * and which individual addresses they will receive. Defaults to 15 connections starting from Area.Line.1.
+   */
+  clientAddrs?: string;
+  /**
    * The minimum delay between two consecutive ROUTING_INDICATION frames sent to the bus.
    * Default is 20ms (standard for TP1 compatibility).
    * Setting this to a lower value can increase performance but may flood slow KNX segments.
