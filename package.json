@@ -1,14 +1,36 @@
 {
+  "name": "knx.ts",
+  "version": "1.0.0",
+  "description": "A high-performance KNXnet/IP server and client library in TypeScript, focused on ETS stability.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "start": "tsc && node dist/index.js",
     "watch": "tsc -w",
     "test:connection": "node dist/test/knxd_manual.test.js",
     "test:routing": "node dist/test/routing_manual.test.js"
   },
+  "keywords": [
+    "knx",
+    "knxnetip",
+    "tunnelling",
+    "routing",
+    "automation",
+    "smarthome",
+    "typescript"
+  ],
+  "author": "Arnold Steven Beleño Zuletta (Wesxt)",
+  "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.10.10",
-    "typescript": "^5.7.3"
+    "@types/node": "^22.19.13",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "serialport": "^13.0.0"

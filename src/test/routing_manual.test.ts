@@ -39,7 +39,11 @@ async function testRouting() {
 
   client.on("indication", (msg: ServiceMessage) => {
     // If you want to see the raw data:
-    console.log("[CEMI]", msg.constructor.name, msg.toBuffer(), msg.describe());
+    console.log("[CEMI]", msg.constructor.name, msg.toBuffer());
+  });
+
+  client.on("1/1/2", (cemi: ServiceMessage) => {
+    console.log("[Listen in 1/1/2]:", cemi.toBuffer());
   });
 
   client.on("raw_indication", (msg: Buffer) => {

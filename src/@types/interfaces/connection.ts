@@ -3,7 +3,7 @@ import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
 /**
  * Options for configuring a KNX Tunneling connection.
  */
-export interface KNXTunnelingOptions extends KNXClientOptions {
+export interface KNXTunnelingOptions extends KNXnetIPOptions {
   /**
    * The transport protocol to use for the connection.
    * 'UDP' is the default and standard for KNXnet/IP.
@@ -25,7 +25,7 @@ export interface KNXTunnelingOptions extends KNXClientOptions {
   useRouteBack?: boolean;
 }
 
-export interface KNXnetIPServerOptions extends KNXClientOptions {
+export interface KNXnetIPServerOptions extends KNXnetIPOptions {
   individualAddress?: string;
   serialNumber?: Buffer;
   friendlyName?: string;
@@ -59,14 +59,14 @@ export interface ExternalManagerOptions {
   tunneling?: KNXTunnelingOptions[];
 }
 
-export interface KNXClientOptions {
+export interface KNXnetIPOptions {
   ip?: string;
   port?: number;
   localIp?: string;
   localPort?: number;
 }
 
-export interface TPUARTOptions extends KNXClientOptions {
+export interface TPUARTOptions extends KNXnetIPOptions {
   /**
    * The serial port path (e.g., "/dev/ttyS0" or "COM3").
    */

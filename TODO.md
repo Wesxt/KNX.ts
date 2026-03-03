@@ -6,23 +6,43 @@ Pendientes.
 
 Pruebas pendientes por hacer.
 
-## Enrutado de conexiones
+### Conexión TCP
+
+Aún no se ha probado la conexión TCP del host KNXnetIPServer, está en fase experimental.
+
+### Enrutado de conexiones
 
 Tener varias conexiones de IP Tunneling y TPUART con la gestión de conexiones de la clase `Router`
 
-- Ver si los mensajes se enrutan correctamente al KNXnetIPServer para la ip de multidifusión
+- Ver si los mensajes se enrutan correctamente al host KNXnetIPServer para la ip de multidifusión
 
-## TPUART
+### TPUART
 
-Probar con una placa pasarelela a TPUART
+Probar con una placa pasarela al chip SIEMENS TPUART
 
 - Si realiza la conexión correctamente
 - Envio de mensajes y recibirlos
+- Enrutamiento de mensajes
+- Modo Busmonitor
 
-## Implementaciones
+### Varias instancias
+
+- Verificar si varias instancias de host de KNXnetIPserver pueden interactuar entre si con distintos puertos en la misma IP o en distintas
+
+- ¿Que pasa si se conecta un cliente IP Tunneling con la clase KNXTunneling? al host KNXnetIpServer
+
+### Implementaciones
 
 Implementaciones pendientes.
 
-## Modo Busmonitor
+- Manejar dispositivos en progMode, es vital para que sea posible parametrizar con ETS
 
-El KNXnetIPServer es necesario implementarle el busmonitor para gestion de telegramas en ETS.
+- Implementar un metodo para escribir un L_data.req con direcciones individuales, para evitar los grupos.
+
+- Implementar escucha de eventos basado en las direcciones de destino y de fuente
+
+#### Filtros
+
+- Implementar un filtro para direcciones que no se quieren escuchar
+
+- Implementar un filtro para direcciones que no se quieren enrutar

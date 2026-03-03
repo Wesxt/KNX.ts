@@ -20,7 +20,7 @@ import { APCI } from "../core/layers/interfaces/APCI";
 import { APCIEnum } from "../core/enum/APCIEnum";
 import { AllDpts } from "../@types/types/AllDpts";
 import {
-  KNXClientOptions,
+  KNXnetIPOptions,
   KNXnetIPServerOptions,
   KNXTunnelingOptions,
   TPUARTOptions,
@@ -29,7 +29,7 @@ import {
 export abstract class KNXService extends EventEmitter {
   protected socket: dgram.Socket | net.Socket | null = null;
   public readonly options:
-    | KNXClientOptions
+    | KNXnetIPOptions
     | KNXnetIPServerOptions
     | KNXTunnelingOptions
     | TPUARTOptions;
@@ -37,7 +37,7 @@ export abstract class KNXService extends EventEmitter {
 
   constructor(
     options:
-      | KNXClientOptions
+      | KNXnetIPOptions
       | KNXnetIPServerOptions
       | KNXTunnelingOptions
       | TPUARTOptions = {},
@@ -257,7 +257,7 @@ export abstract class KNXService extends EventEmitter {
             }
             devices.push({ ip: hpai.ipAddress, port: hpai.port, dibs });
           }
-        } catch (e) {}
+        } catch (e) { }
       });
 
       socket.bind(() => {
@@ -320,7 +320,7 @@ export abstract class KNXService extends EventEmitter {
             descSocket.close();
             resolve({ dibs });
           }
-        } catch (e) {}
+        } catch (e) { }
       });
 
       descSocket.bind(() => {
