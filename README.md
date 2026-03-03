@@ -69,6 +69,101 @@ tunnel.connect().then(() => {
 });
 ```
 
+## 📡 Events & Callbacks
+
+The library is event-driven. You can listen for system events or specific KNX Group Addresses.
+
+### Common Events
+
+Both `KNXnetIPServer` and `KNXTunneling` emit the following events:
+
+| Event | Description | Callback Arguments |
+|-------|-------------|--------------------|
+| `connected` | Connection established and ready. | `void` (Server) / `{ channelId }` (Tunnel) |
+| `disconnected` | Connection lost or closed. | `void` |
+| `error` | An error occurred during operation. | `Error` |
+| `indication` | Any incoming KNX telegram (L_Data.ind). | `cemi: L_Data_ind` |
+
+### Address-Based Events (Server Only)
+
+You can listen to specific Group Addresses directly:
+
+```typescript
+server.on("1/1/1", (cemi) => {
+  // Triggered only for telegrams to 1/1/1
+});
+```
+
+### Understanding the `cemi` Object
+
+The `cemi` object (specifically `L_Data_ind`) contains all the information about the KNX telegram. Here are the most relevant properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `sourceAddress` | `string` | Physical address of the sender (e.g., `"1.1.5"`). |
+| `destinationAddress` | `string` | Group address (e.g., `"1/1/1"`) or Physical address. |
+| `TPDU.apdu.data` | `Buffer` | The raw payload data. |
+| `TPDU.apdu.apci.command` | `string` | Command type (`A_GroupValue_Write`, `A_GroupValue_Read`, etc.). |
+
+#### Handling Data Payloads
+
+KNX handles data in two ways depending on the size:
+
+- **Short Data (<= 6 bits)**: For DPT1 (Switch), DPT3 (Control), etc. The `cemi.TPDU.apdu.data[0]` contains the value.
+- **Extended Data (> 6 bits)**: For DPT5 (Scaling), DPT9 (Float), etc. The `cemi.TPDU.apdu.data` Buffer contains the full payload (e.g., 2 bytes for DPT9).
+
+## 🔢 Data Encoding & Decoding
+
+The library provides static utilities to handle KNX Data Point Types (DPT) conversion between raw Buffers and high-level TypeScript objects.
+
+### Decoding Incoming Data
+
+Use `KnxDataDecode` to transform raw CEMI data into readable values:
+
+```typescript
+import { KnxDataDecode } from './src/core/data/KNXDataDecode';
+
+server.on('1/1/1', (cemi) => {
+  // Decode as DPT 1 (Boolean)
+  const value = KnxDataDecode.decodeThis(1, cemi.TPDU.apdu.data);
+  console.log('Decoded value:', value); // true or false
+
+  // Decode as DPT 9 (2-byte Float, e.g., Temperature)
+  const temp = KnxDataDecode.decodeThis(9, cemi.TPDU.apdu.data);
+  console.log('Temperature:', temp, '°C');
+});
+```
+
+### Encoding Data for Sending
+
+Use `KnxDataEncoder` with the `encodeThis` method to prepare buffers for KNX telegrams; the second parameter is always an object (Problem: all DPTs other than DPT1 belonging to a property are different keys instead of just "value" values; this will be fixed in the future):
+
+```typescript
+import { KnxDataEncoder } from './src/core/data/KNXDataEncode';
+
+// Encode a Boolean (DPT 1)
+const buf1 = KnxDataEncoder.encodeThis(1, { value: true });
+
+// Encode a Percentage (DPT 5.001)
+const buf5 = KnxDataEncoder.encodeThis(5.001, { valueDpt5001: 50 });
+
+// Encode a Temperature (DPT 9.001)
+const buf9 = KnxDataEncoder.encodeThis(9, { valueDpt9: 22.5 });
+```
+
+### Type Safety & IntelliSense
+
+Both `KnxDataDecode.decodeThis()` and `KnxDataEncoder.encodeThis()` are strictly typed. This means:
+
+- **IntelliSense Support**: Your IDE will automatically suggest the supported DPTs as you type the first parameter.
+- **Automatic Data Validation**: The second parameter (the data object) automatically adjusts its required properties based on the DPT selected in the first parameter.
+- **Supported DPTs**: You can programmatically check the list of supported DPTs by accessing the static `dptEnum` property:
+
+  ```typescript
+  console.log(KnxDataDecode.dptEnum);
+  console.log(KnxDataEncoder.dptEnum);
+  ```
+
 ## 🛠️ Development
 
 To build the project:
