@@ -1,7 +1,7 @@
 import { KNXnetIPServer } from "../connection/KNXnetIPServer";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { MessageCodeTranslator } from "../utils/MessageCodeTranslator";
-import { getLocalIP } from "../utils/localIp";
+// import { getLocalIP } from "../utils/localIp";
 
 // Configuration for KNX Routing
 // Standard Multicast Address for KNXnet/IP Routing
@@ -14,7 +14,7 @@ async function testRouting() {
   console.log(`
 --- Testing Routing (Multicast Group: ${MULTICAST_IP}:${PORT}) ---`);
 
-  const localIp = getLocalIP();
+  const localIp = "192.168.0.169";
   console.log(`Using Local IP: ${localIp}`);
 
   const client = new KNXnetIPServer({
