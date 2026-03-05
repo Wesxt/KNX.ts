@@ -78,7 +78,7 @@ export class KNXnetIPServer extends KNXService {
   private readonly BUSY_THRESHOLD = 15;
   private readonly HEARTBEAT_TIMEOUT = 120000; // 120 seconds
   private readonly RETRANSMIT_TIMEOUT = 1000; // 1 second
-  private readonly MAX_PENDING_REQUESTS_PER_CLIENT = 50; // [MEJORA] Límite de ráfagas
+  private MAX_PENDING_REQUESTS_PER_CLIENT = 100; // [MEJORA] Límite de ráfagas
 
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
@@ -110,6 +110,7 @@ export class KNXnetIPServer extends KNXService {
     routingOptions.friendlyName = options.friendlyName || "KNX.ts Routing Node";
     routingOptions.macAddress = options.macAddress || netInfo.mac;
     routingOptions.routingDelay = options.routingDelay ?? 20;
+    if (routingOptions.MAX_PENDING_REQUESTS_PER_CLIENT) this.MAX_PENDING_REQUESTS_PER_CLIENT = routingOptions.MAX_PENDING_REQUESTS_PER_CLIENT;
 
     console.log(`[Server] Initialized on ${this.options.localIp}:${options.port || 3671}`);
     console.log(`[Server] Serial Number: ${routingOptions.serialNumber.toString("hex").toUpperCase()}`);
@@ -499,17 +500,13 @@ export class KNXnetIPServer extends KNXService {
 
     const responseType = isExtended ? KNXnetIPServiceType.SEARCH_RESPONSE_EXTENDED : KNXnetIPServiceType.SEARCH_RESPONSE;
 
-    // Ensure we report a reachable local IP for the control endpoint
-    let localIp = this.options.localIp!;
-    if (localIp === "0.0.0.0") {
-      localIp = getNetworkInfo().address;
-    }
-    const localPort = (this.socket as dgram.Socket).address().port;
+    const serverHPAI = this.getHPAI(rinfo);
+    const localIp = serverHPAI.ipAddress;
+    const localPort = serverHPAI.port;
 
     console.log(`[Discovery] Responding to ${clientHPAI.ipAddress}:${clientHPAI.port} with Control Endpoint ${localIp}:${localPort}`);
 
-    const serverHPAI = new HPAI(HostProtocolCode.IPV4_UDP, localIp, localPort);
-    const dibs = this.getIdentificationDIBs(responseType);
+    const dibs = this.getIdentificationDIBs(responseType, localIp);
     const body = Buffer.concat([serverHPAI.toBuffer(), ...dibs.map((d) => d.toBuffer())]);
     const responseHeader = new KNXnetIPHeader(responseType, 6 + body.length);
 
@@ -524,7 +521,8 @@ export class KNXnetIPServer extends KNXService {
     // [MEJORA] Route Back validation
     if (!this.resolveRouteBack(clientHPAI, rinfo)) return;
 
-    const dibs = this.getIdentificationDIBs(KNXnetIPServiceType.DESCRIPTION_RESPONSE);
+    const serverHPAI = this.getHPAI(rinfo);
+    const dibs = this.getIdentificationDIBs(KNXnetIPServiceType.DESCRIPTION_RESPONSE, serverHPAI.ipAddress);
     const body = Buffer.concat(dibs.map((d) => d.toBuffer()));
     const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DESCRIPTION_RESPONSE, 6 + body.length);
 
@@ -545,12 +543,13 @@ export class KNXnetIPServer extends KNXService {
     // Ensure we report the local IP of the interface that can actually route back to the client.
     if (rinfo && rinfo.address) {
       const interfaces = os.networkInterfaces();
-      const rinfoPrefix = rinfo.address.split('.').slice(0, 2).join('.'); // Simple match (e.g. 10.144)
+      const rinfoNum = rinfo.address.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
       for (const name of Object.keys(interfaces)) {
         for (const net of interfaces[name]!) {
           if (net.family === "IPv4" && !net.internal) {
-            const netPrefix = net.address.split('.').slice(0, 2).join('.');
-            if (netPrefix === rinfoPrefix) {
+            const netNum = net.address.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+            const maskNum = net.netmask.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+            if ((rinfoNum & maskNum) === (netNum & maskNum)) {
               localIp = net.address;
             }
           }
@@ -774,7 +773,7 @@ export class KNXnetIPServer extends KNXService {
       conn.lastRxTime = now;
     }
     conn.rxCount++;
-    if (conn.rxCount > this.MAX_PENDING_REQUESTS_PER_CLIENT) {
+    if (this.MAX_PENDING_REQUESTS_PER_CLIENT > 0 && conn.rxCount > this.MAX_PENDING_REQUESTS_PER_CLIENT) {
       console.warn(`[Tunneling] Client ${rinfo.address} is flooding (${conn.rxCount} req/s). Dropping connection.`);
       this.closeConnection(channelId, true);
       return;
@@ -826,7 +825,7 @@ export class KNXnetIPServer extends KNXService {
     if (!conn) return;
 
     // [MEJORA] Límite de la cola de salida para prevenir fugas de memoria si un cliente deja de hacer ACKs
-    if (conn.queue.length >= this.MAX_PENDING_REQUESTS_PER_CLIENT) {
+    if (this.MAX_PENDING_REQUESTS_PER_CLIENT > 0 && conn.queue.length >= this.MAX_PENDING_REQUESTS_PER_CLIENT) {
       console.warn(`[Tunneling] Outgoing queue for channel ${channelId} exceeded limit. Dropping connection.`);
       this.closeConnection(channelId, true);
       return;
@@ -994,9 +993,22 @@ export class KNXnetIPServer extends KNXService {
     }
   }
 
-  private getIdentificationDIBs(serviceType?: KNXnetIPServiceType) {
+  private getIdentificationDIBs(serviceType?: KNXnetIPServiceType, requestLocalIp?: string) {
     const routingOptions = this.options as KNXnetIPServerOptions;
     const netInfo = getNetworkInfo();
+    const effectiveLocalIp = requestLocalIp || netInfo.address;
+    let effectiveNetmask = netInfo.netmask;
+
+    if (requestLocalIp && requestLocalIp !== netInfo.address) {
+      const interfaces = os.networkInterfaces();
+      for (const name of Object.keys(interfaces)) {
+        for (const net of interfaces[name]!) {
+          if (net.address === requestLocalIp) {
+            effectiveNetmask = net.netmask;
+          }
+        }
+      }
+    }
 
     // Spec says use TP1 (0x02) for gateway reporting
     const devInfo = new DeviceInformationDIB(
@@ -1022,8 +1034,8 @@ export class KNXnetIPServer extends KNXService {
     }
 
     const extDevInfo = new ExtendedDeviceInformationDIB(0, 254, 0x091a);
-    const ipConfig = new IPConfigDIB(netInfo.address, netInfo.netmask, "0.0.0.0", 0x01, 0x02);
-    const ipCurrent = new IPCurrentConfigDIB(netInfo.address, netInfo.netmask, "0.0.0.0", "0.0.0.0", 0x02);
+    const ipConfig = new IPConfigDIB(effectiveLocalIp, effectiveNetmask, "0.0.0.0", 0x01, 0x02);
+    const ipCurrent = new IPCurrentConfigDIB(effectiveLocalIp, effectiveNetmask, "0.0.0.0", "0.0.0.0", 0x02);
 
     const slots = [];
     for (let i = 1; i <= this.maxTunnelConnections; i++) {

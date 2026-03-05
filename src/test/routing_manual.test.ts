@@ -25,6 +25,7 @@ async function testRouting() {
     routingDelay: 0,
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
+    MAX_PENDING_REQUESTS_PER_CLIENT: 50
   });
 
   routing = client;

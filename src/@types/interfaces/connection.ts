@@ -46,6 +46,10 @@ export interface KNXnetIPServerOptions extends KNXnetIPOptions {
    * Optional configuration for bridging to external connections (TPUART, Tunneling).
    */
   externals?: ExternalManagerOptions;
+  /**
+   * It abruptly stops a Tunneling client connection if it exceeds this limit of request messages per second; this is done to prevent performance degradation (the default is 100); to disable it, set it to less than 1
+   */
+  MAX_PENDING_REQUESTS_PER_CLIENT?: number;
 }
 
 export interface ExternalManagerOptions {
