@@ -30,14 +30,15 @@ import { KNXHelper } from "../utils/KNXHelper";
 import { KNXnetIPServerOptions } from "../@types/interfaces/connection";
 import { getNetworkInfo } from "../utils/localIp";
 import { Router } from "./Router";
+import os from "node:os";
 
 /**
- * Implements a KNXnet/IP Server (Gateway) that supports Routing and Tunneling protocols.
- * This class handles device discovery (Search/Description), manages multiple concurrent
- * tunneling connections, and bridges communication between IP multicast (Routing) and
- * point-to-point (Tunneling) clients. It includes implementation for flow control
- * (RoutingBusy), rate limiting, and echo cancellation.
- */
+  * Implements a KNXnet/IP Server (Gateway) that supports Routing and Tunneling protocols.
+  * This class handles device discovery (Search/Description), manages multiple concurrent
+  * tunneling connections, and bridges communication between IP multicast (Routing) and
+  * point-to-point (Tunneling) clients. It includes implementation for flow control
+  * (RoutingBusy), rate limiting, and echo cancellation.
+  */
 export class KNXnetIPServer extends KNXService {
   private isRoutingBusy: boolean = false;
   private routingBusyTimer: NodeJS.Timeout | null = null;
@@ -49,6 +50,9 @@ export class KNXnetIPServer extends KNXService {
   private lastBusyTime: number = 0;
   private decrementTimer: NodeJS.Timeout | null = null;
   private decrementInterval: NodeJS.Timeout | null = null;
+
+  // [MEJORA] Almacenamos la IA en formato entero para el filtro anti-eco rápido
+  private serverIAInt: number;
 
   private _tunnelConnections = new Map<
     number,
@@ -64,6 +68,9 @@ export class KNXnetIPServer extends KNXService {
       pendingAcks: Map<number, { packet: Buffer; timer: NodeJS.Timeout; }>;
       queue: Buffer[]; // Queue for outgoing Indications (Indication/Confirmation)
       isSending: boolean; // Stop-and-wait state
+      // [MEJORA] Variables para Rate-Limiting (Pacing)
+      rxCount: number;
+      lastRxTime: number;
     }
   >();
 
@@ -71,6 +78,7 @@ export class KNXnetIPServer extends KNXService {
   private readonly BUSY_THRESHOLD = 15;
   private readonly HEARTBEAT_TIMEOUT = 120000; // 120 seconds
   private readonly RETRANSMIT_TIMEOUT = 1000; // 1 second
+  private readonly MAX_PENDING_REQUESTS_PER_CLIENT = 50; // [MEJORA] Límite de ráfagas
 
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
@@ -107,6 +115,8 @@ export class KNXnetIPServer extends KNXService {
     console.log(`[Server] Serial Number: ${routingOptions.serialNumber.toString("hex").toUpperCase()}`);
 
     const serverIA = KNXHelper.GetAddress(routingOptions.individualAddress, ".").readUInt16BE();
+    this.serverIAInt = serverIA;
+
     if (options.clientAddrs) {
       const parts = options.clientAddrs.split(":");
       if (parts.length === 2) {
@@ -143,8 +153,36 @@ export class KNXnetIPServer extends KNXService {
         try {
           socket.setBroadcast(true);
           socket.setMulticastTTL(128);
-          socket.addMembership(this.options.ip!, this.options.localIp!);
           socket.setMulticastLoopback(true);
+
+          // [MEJORA] Multi-homing: Unirse al multicast en todas las interfaces válidas
+          const interfaces = os.networkInterfaces();
+          const joinedInterfaces = new Set<string>();
+
+          // Siempre intenta unirse primero a la localIp especificada
+          if (this.options.localIp && this.options.localIp !== "0.0.0.0") {
+            try {
+              socket.addMembership(this.options.ip!, this.options.localIp);
+              joinedInterfaces.add(this.options.localIp);
+            } catch (e) { }
+          }
+
+          // Itera sobre todas las demás interfaces de red del host
+          for (const name of Object.keys(interfaces)) {
+            for (const net of interfaces[name]!) {
+              if (net.family === "IPv4" && !net.internal) {
+                if (!joinedInterfaces.has(net.address)) {
+                  try {
+                    socket.addMembership(this.options.ip!, net.address);
+                    joinedInterfaces.add(net.address);
+                    console.log(`[Multicast] Joined on interface ${name} (${net.address})`);
+                  } catch (err) {
+                    // Ignora interfaces virtuales que no soportan IGMP
+                  }
+                }
+              }
+            }
+          }
 
           // Central listener for all KNX indications (from IP Multicast, TP, or Tunnels)
           this.on("indication", (cemi: any) => {
@@ -152,7 +190,6 @@ export class KNXnetIPServer extends KNXService {
             const srcIAStr = cemi.sourceAddress;
 
             // Optional: Re-emit by Group Address for specific listening (e.g., server.on("1/1/1", (cemi) => ...))
-            // This is efficient in Node.js and makes the API more intuitive.
             if (cemi.controlField2 && cemi.controlField2.addressType === 1) {
               this.emit(cemi.destinationAddress, cemi);
             }
@@ -200,6 +237,24 @@ export class KNXnetIPServer extends KNXService {
       this.socket = null;
     }
     this.clearTimers();
+  }
+
+  // [MEJORA] Validación estricta Route Back (NAT Traversal) según Especificación 8.6.2.2
+  private resolveRouteBack(hpai: HPAI, rinfo: dgram.RemoteInfo): boolean {
+    const isIpZero = hpai.ipAddress === "0.0.0.0";
+    const isPortZero = hpai.port === 0;
+
+    if (isIpZero && isPortZero) {
+      // Modo "Route Back" válido
+      hpai.ipAddress = rinfo.address;
+      hpai.port = rinfo.port;
+      return true;
+    } else if (isIpZero || isPortZero) {
+      // Si solo UNO de los dos es 0, es un HPAI INVÁLIDO según la spec.
+      return false;
+    }
+    // Es un HPAI estándar, se queda tal cual
+    return true;
   }
 
   private clearTimers() {
@@ -347,10 +402,20 @@ export class KNXnetIPServer extends KNXService {
       const header = KNXnetIPHeader.fromBuffer(msg);
       const body = msg.subarray(6);
       const ourAddress = (this.socket as dgram.Socket).address();
+
+      // Filtro Anti-Eco inicial por IP/Puerto
       if (rinfo.address === this.options.localIp && rinfo.port === ourAddress.port) return;
-      console.log("[Service type]:", KNXnetIPServiceType[header.serviceType]);
+
       switch (header.serviceType) {
         case KNXnetIPServiceType.ROUTING_INDICATION:
+          // [MEJORA] Filtro Anti-Eco Seguro leyendo la Individual Address (IA) origen del CEMI
+          const addInfoLen = body[1];
+          if (body.length >= 6 + addInfoLen) {
+            const srcIA = body.readUInt16BE(4 + addInfoLen);
+            if (srcIA === this.serverIAInt) {
+              return; // Es nuestro propio paquete Multicast reenviado por el router
+            }
+          }
           this.emit("raw_indication", body);
           try {
             const cemi = CEMI.fromBuffer(body);
@@ -405,6 +470,8 @@ export class KNXnetIPServer extends KNXService {
   private handleTunnelingAck(msg: Buffer) {
     const channelId = msg.readUInt8(7);
     const seq = msg.readUInt8(8);
+    const status = msg.readUInt8(9);
+    console.log(`[Tunneling] Received ACK for channel ${channelId}, seq ${seq}, status ${status}`);
     const conn = this._tunnelConnections.get(channelId);
     if (conn) {
       this.resetHeartbeat(channelId);
@@ -416,14 +483,19 @@ export class KNXnetIPServer extends KNXService {
         conn.isSending = false;
         conn.sno = (conn.sno + 1) % 256;
         this.processTunnelQueue(channelId);
+      } else {
+        console.warn(`[Tunneling] Received ACK for unknown/already processed seq ${seq}`);
       }
     }
   }
 
   private handleSearchRequest(msg: Buffer, rinfo: dgram.RemoteInfo, isExtended: boolean) {
     const clientHPAI = HPAI.fromBuffer(msg.subarray(6));
-    if (clientHPAI.ipAddress === "0.0.0.0") clientHPAI.ipAddress = rinfo.address;
-    if (clientHPAI.port === 0) clientHPAI.port = rinfo.port;
+
+    // [MEJORA] Route Back validation
+    if (!this.resolveRouteBack(clientHPAI, rinfo)) {
+      return; // Silently drop invalid HPAI
+    }
 
     const responseType = isExtended ? KNXnetIPServiceType.SEARCH_RESPONSE_EXTENDED : KNXnetIPServiceType.SEARCH_RESPONSE;
 
@@ -448,8 +520,9 @@ export class KNXnetIPServer extends KNXService {
 
   private handleDescriptionRequest(msg: Buffer, rinfo: dgram.RemoteInfo) {
     const clientHPAI = HPAI.fromBuffer(msg.subarray(6));
-    if (clientHPAI.ipAddress === "0.0.0.0") clientHPAI.ipAddress = rinfo.address;
-    if (clientHPAI.port === 0) clientHPAI.port = rinfo.port;
+
+    // [MEJORA] Route Back validation
+    if (!this.resolveRouteBack(clientHPAI, rinfo)) return;
 
     const dibs = this.getIdentificationDIBs(KNXnetIPServiceType.DESCRIPTION_RESPONSE);
     const body = Buffer.concat(dibs.map((d) => d.toBuffer()));
@@ -462,11 +535,29 @@ export class KNXnetIPServer extends KNXService {
     }
   }
 
-  private getHPAI(): HPAI {
+  private getHPAI(rinfo?: dgram.RemoteInfo): HPAI {
     let localIp = this.options.localIp!;
     if (localIp === "0.0.0.0") {
       localIp = getNetworkInfo().address;
     }
+
+    // [MEJORA] Multi-homed IP matching.
+    // Ensure we report the local IP of the interface that can actually route back to the client.
+    if (rinfo && rinfo.address) {
+      const interfaces = os.networkInterfaces();
+      const rinfoPrefix = rinfo.address.split('.').slice(0, 2).join('.'); // Simple match (e.g. 10.144)
+      for (const name of Object.keys(interfaces)) {
+        for (const net of interfaces[name]!) {
+          if (net.family === "IPv4" && !net.internal) {
+            const netPrefix = net.address.split('.').slice(0, 2).join('.');
+            if (netPrefix === rinfoPrefix) {
+              localIp = net.address;
+            }
+          }
+        }
+      }
+    }
+
     return new HPAI(
       HostProtocolCode.IPV4_UDP,
       localIp,
@@ -476,23 +567,31 @@ export class KNXnetIPServer extends KNXService {
 
   private handleConnectRequest(msg: Buffer, rinfo: dgram.RemoteInfo) {
     const clientControlHPAI = HPAI.fromBuffer(msg.subarray(6));
-    if (clientControlHPAI.ipAddress === "0.0.0.0") clientControlHPAI.ipAddress = rinfo.address;
-    if (clientControlHPAI.port === 0) clientControlHPAI.port = rinfo.port;
-
     const clientDataHPAI = HPAI.fromBuffer(msg.subarray(14));
-    if (clientDataHPAI.ipAddress === "0.0.0.0") clientDataHPAI.ipAddress = rinfo.address;
-    if (clientDataHPAI.port === 0) clientDataHPAI.port = rinfo.port;
+
+    // [MEJORA] Route Back validation estricta para el control y el data endpoint
+    if (!this.resolveRouteBack(clientControlHPAI, rinfo)) {
+      console.warn(`[Connect Request] Invalid Control HPAI from ${rinfo.address}. Dropping.`);
+      return;
+    }
+    if (!this.resolveRouteBack(clientDataHPAI, rinfo)) {
+      console.warn(`[Connect Request] Invalid Data HPAI from ${rinfo.address}. Dropping.`);
+      return;
+    }
 
     const cri = CRI.fromBuffer(msg.subarray(22));
     let status = KNXnetIPErrorCodes.E_NO_ERROR;
     let channelId = 0;
 
+    const serverDataHPAI = this.getHPAI(rinfo);
+
     console.log(`[Connect Request] IP: ${rinfo.address}, Type: ${cri.connectionType}, IA: ${cri.individualAddress}, Layer: ${cri.knxLayer}`);
+    console.log(`[Connect Request] clientControlHPAI: ${clientControlHPAI.ipAddress}:${clientControlHPAI.port}, clientDataHPAI: ${clientDataHPAI.ipAddress}:${clientDataHPAI.port}`);
+    console.log(`[Connect Request] Our Server Data HPAI reported back will be: ${serverDataHPAI.ipAddress}:${serverDataHPAI.port}`);
 
     // Check if a connection from the same IP already exists with the same IA
     // If so, it might be a stale connection from a client that crashed/restarted
     let knxAddress = cri.individualAddress;
-    // We'll determine the IA later if it's 0, but for now check if it's specified
     if (knxAddress !== null && knxAddress !== 0) {
       for (const [cid, conn] of this._tunnelConnections.entries()) {
         if (conn.knxAddress === knxAddress && conn.controlHPAI.ipAddress === rinfo.address) {
@@ -528,10 +627,10 @@ export class KNXnetIPServer extends KNXService {
         pendingAcks: new Map(),
         queue: [],
         isSending: false,
+        rxCount: 0,            // [MEJORA] Init Pacing
+        lastRxTime: Date.now() // [MEJORA] Init Pacing
       });
 
-      const serverDataHPAI = this.getHPAI();
-      // CRD for management is typically just 2 bytes (Len 2, Type 3)
       const body = Buffer.concat([
         Buffer.from([channelId, status]),
         serverDataHPAI.toBuffer(),
@@ -578,9 +677,10 @@ export class KNXnetIPServer extends KNXService {
           pendingAcks: new Map(),
           queue: [],
           isSending: false,
+          rxCount: 0,            // [MEJORA] Init Pacing
+          lastRxTime: Date.now() // [MEJORA] Init Pacing
         });
 
-        const serverDataHPAI = this.getHPAI();
         const crd = new CRD(cri.connectionType, knxAddress);
         const body = Buffer.concat([Buffer.from([channelId, status]), serverDataHPAI.toBuffer(), crd.toBuffer()]);
         const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, 6 + body.length);
@@ -625,8 +725,9 @@ export class KNXnetIPServer extends KNXService {
   private handleConnectionStateRequest(msg: Buffer, rinfo: dgram.RemoteInfo) {
     const channelId = msg.readUInt8(6);
     const clientControlHPAI = HPAI.fromBuffer(msg.subarray(8));
-    if (clientControlHPAI.ipAddress === "0.0.0.0") clientControlHPAI.ipAddress = rinfo.address;
-    if (clientControlHPAI.port === 0) clientControlHPAI.port = rinfo.port;
+
+    // [MEJORA] Route Back validation
+    if (!this.resolveRouteBack(clientControlHPAI, rinfo)) return;
 
     let status = KNXnetIPErrorCodes.E_CONNECTION_ID;
     if (this._tunnelConnections.has(channelId)) {
@@ -642,8 +743,9 @@ export class KNXnetIPServer extends KNXService {
   private handleDisconnectRequest(msg: Buffer, rinfo: dgram.RemoteInfo) {
     const channelId = msg.readUInt8(6);
     const clientControlHPAI = HPAI.fromBuffer(msg.subarray(8));
-    if (clientControlHPAI.ipAddress === "0.0.0.0") clientControlHPAI.ipAddress = rinfo.address;
-    if (clientControlHPAI.port === 0) clientControlHPAI.port = rinfo.port;
+
+    // [MEJORA] Route Back validation
+    if (!this.resolveRouteBack(clientControlHPAI, rinfo)) return;
 
     this.closeConnection(channelId, false);
     const body = Buffer.from([channelId, KNXnetIPErrorCodes.E_NO_ERROR]);
@@ -664,6 +766,19 @@ export class KNXnetIPServer extends KNXService {
     }
 
     this.resetHeartbeat(channelId);
+
+    // [MEJORA] Rate Limiting (Pacing) para evitar Flooding por parte del cliente
+    const now = Date.now();
+    if (now - conn.lastRxTime > 1000) {
+      conn.rxCount = 0;
+      conn.lastRxTime = now;
+    }
+    conn.rxCount++;
+    if (conn.rxCount > this.MAX_PENDING_REQUESTS_PER_CLIENT) {
+      console.warn(`[Tunneling] Client ${rinfo.address} is flooding (${conn.rxCount} req/s). Dropping connection.`);
+      this.closeConnection(channelId, true);
+      return;
+    }
 
     if (seq === (conn.rno - 1 + 256) % 256) {
       this.sendTunnelACK(channelId, seq, KNXnetIPErrorCodes.E_NO_ERROR, rinfo);
@@ -709,6 +824,14 @@ export class KNXnetIPServer extends KNXService {
   private sendTunnelingRequest(channelId: number, cemiBuffer: Buffer, dataHPAI: HPAI) {
     const conn = this._tunnelConnections.get(channelId);
     if (!conn) return;
+
+    // [MEJORA] Límite de la cola de salida para prevenir fugas de memoria si un cliente deja de hacer ACKs
+    if (conn.queue.length >= this.MAX_PENDING_REQUESTS_PER_CLIENT) {
+      console.warn(`[Tunneling] Outgoing queue for channel ${channelId} exceeded limit. Dropping connection.`);
+      this.closeConnection(channelId, true);
+      return;
+    }
+
     conn.queue.push(cemiBuffer);
     this.processTunnelQueue(channelId);
   }
@@ -911,8 +1034,6 @@ export class KNXnetIPServer extends KNXService {
       });
     }
 
-    // Spec p.30/31: TunnellingInfoDIB and ExtendedDeviceInformationDIB are NOT allowed in SEARCH_RESPONSE
-    // They are usually only sent in DESCRIPTION_RESPONSE or SEARCH_RESPONSE_EXTENDED
     return [devInfo, suppSvc, extDevInfo, ipConfig, ipCurrent, new TunnellingInfoDIB(254, slots)];
   }
 
