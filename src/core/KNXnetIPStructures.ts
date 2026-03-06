@@ -240,10 +240,9 @@ export class DeviceInformationDIB extends DIB {
 
   toBuffer(): Buffer {
     const nameBuf = Buffer.from(this.friendlyName, "latin1");
-    const nameLength = Math.min(nameBuf.length, 30);
     const buffer = Buffer.alloc(54);
 
-    buffer.writeUInt8(24 + nameLength, 0); // Length
+    buffer.writeUInt8(54, 0); // Length
     buffer.writeUInt8(this.type, 1);
     buffer.writeUInt8(this.knxMedium, 2);
     buffer.writeUInt8(this.deviceStatus, 3);
@@ -260,7 +259,7 @@ export class DeviceInformationDIB extends DIB {
     const mac = this.macAddress.replace(/[:\-]/g, "");
     Buffer.from(mac, "hex").copy(buffer, 18);
 
-    nameBuf.copy(buffer, 24, 0, nameLength);
+    nameBuf.copy(buffer, 24, 0);
 
     return buffer;
   }

@@ -837,10 +837,10 @@ export class KNXnetIPServer extends KNXService {
     }
 
     conn.queue.push(cemiBuffer);
-    this.processTunnelQueue(channelId);
+    this.processTunnelQueue(channelId, dataHPAI);
   }
 
-  private processTunnelQueue(channelId: number) {
+  private processTunnelQueue(channelId: number, dataHPAI?: HPAI) {
     const conn = this._tunnelConnections.get(channelId);
     if (!conn || conn.isSending || conn.queue.length === 0) return;
 
@@ -851,10 +851,11 @@ export class KNXnetIPServer extends KNXService {
     const tunnelHeader = Buffer.from([0x04, channelId, seq, 0x00]);
     const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_REQUEST, KNXnetIPHeader.HEADER_SIZE_10 + tunnelHeader.length + cemiBuffer.length);
     const packet = Buffer.concat([responseHeader.toBuffer(), tunnelHeader, cemiBuffer]);
+    const HPAI = dataHPAI ? dataHPAI : conn.dataHPAI;
 
     const send = (pkt: Buffer) => {
       if (this.socket && this._tunnelConnections.has(channelId)) {
-        (this.socket as dgram.Socket).send(pkt, conn.dataHPAI.port, conn.dataHPAI.ipAddress);
+        (this.socket as dgram.Socket).send(pkt, HPAI.port, HPAI.ipAddress);
       }
     };
 
