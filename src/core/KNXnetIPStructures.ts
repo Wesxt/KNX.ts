@@ -1,17 +1,57 @@
-import { HostProtocolCode, ConnectionType } from "./enum/KNXnetIPEnum";
+import { HostProtocolCode, ConnectionType, TunnelLink } from "./enum/KNXnetIPEnum";
 import { DescriptionType, KNXMedium } from "./enum/KNXnetIPEnum";
+import { DeviceDescriptorType0 } from "./resources/DeviceDescriptorType";
 
 export class HPAI {
   constructor(
-    public hostProtocol: HostProtocolCode,
-    public ipAddress: string,
-    public port: number,
+    private _hostProtocol: HostProtocolCode = HostProtocolCode.IPV4_UDP,
+    private _ipAddress: string,
+    private _port: number = 3671,
   ) { }
+
+  set protocol(proto: HostProtocolCode) {
+    this._hostProtocol = proto;
+  }
+
+  get protocol(): HostProtocolCode {
+    return this._hostProtocol;
+  }
+
+  set port(port: number) {
+    if (
+      isNaN(port) ||
+      typeof port !== 'number' ||
+      port < 0 ||
+      port > 65535
+    ) {
+      throw new Error(`Invalid port ${port}`);
+    }
+    this._port = port;
+  }
+
+  get port(): number {
+    return this._port;
+  }
+
+  set ipAddress(host: string) {
+    if (host == null) {
+      throw new Error('Host undefined');
+    }
+    const m = host.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)/);
+    if (m === null) {
+      throw new Error(`Invalid host format - ${host}`);
+    }
+    this._ipAddress = host;
+  }
+
+  get ipAddress(): string {
+    return this._ipAddress;
+  }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(8);
     buffer.writeUInt8(0x08, 0); // Structure Length
-    buffer.writeUInt8(this.hostProtocol, 1);
+    buffer.writeUInt8(this._hostProtocol, 1);
 
     const ipParts = this.ipAddress.split(".").map(Number);
     if (ipParts.length !== 4) throw new Error("Invalid IP Address");
@@ -41,9 +81,8 @@ export class HPAI {
 
 export class CRI {
   constructor(
-    public connectionType: ConnectionType,
-    public knxLayer: number = 0x02, // Tunnel Link Layer
-    public unused: number = 0x00,
+    public connectionType: ConnectionType = ConnectionType.TUNNEL_CONNECTION,
+    public knxLayer: number = TunnelLink.TUNNEL_LINKLAYER, // Tunnel Link Layer
     public individualAddress: number | null = null,
   ) { }
 
@@ -53,7 +92,7 @@ export class CRI {
     buffer.writeUInt8(len, 0); // Length
     buffer.writeUInt8(this.connectionType, 1);
     buffer.writeUInt8(this.knxLayer, 2);
-    buffer.writeUInt8(this.unused, 3);
+    buffer.writeUInt8(0, 3);
     if (this.individualAddress !== null) {
       buffer.writeUInt16BE(this.individualAddress, 4);
     }
@@ -69,12 +108,12 @@ export class CRI {
     }
     if (buffer.length < 4) throw new Error("Buffer too short for CRI");
     const knxLayer = buffer.readUInt8(2);
-    const unused = buffer.readUInt8(3);
+    // const unused = buffer.readUInt8(3);
     let individualAddress: number | null = null;
     if (len === 6 && buffer.length >= 6) {
       individualAddress = buffer.readUInt16BE(4);
     }
-    return new CRI(connectionType, knxLayer, unused, individualAddress);
+    return new CRI(connectionType, knxLayer, individualAddress);
   }
 }
 
@@ -109,16 +148,16 @@ export class CRD {
 export class RoutingBusy {
   constructor(
     public deviceState: number,
-    public waitTime: number,
-    public controlField: number = 0x0000,
+    public waitTime: number = 100,
+    public routingBusyControl: number = 0x0000,
   ) { }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(6);
-    buffer.writeUInt8(0x06, 0); // Structure Length
+    buffer.writeUInt8(0x04, 0); // Structure Length
     buffer.writeUInt8(this.deviceState, 1);
     buffer.writeUInt16BE(this.waitTime, 2);
-    buffer.writeUInt16BE(this.controlField, 4);
+    buffer.writeUInt16BE(this.routingBusyControl, 4);
     return buffer;
   }
 
@@ -126,8 +165,8 @@ export class RoutingBusy {
     if (buffer.length < 6) throw new Error("Buffer too short for RoutingBusy");
     const deviceState = buffer.readUInt8(1);
     const waitTime = buffer.readUInt16BE(2);
-    const controlField = buffer.readUInt16BE(4);
-    return new RoutingBusy(deviceState, waitTime, controlField);
+    const routingBusyControl = buffer.readUInt16BE(4);
+    return new RoutingBusy(deviceState, waitTime, routingBusyControl);
   }
 }
 
@@ -188,7 +227,7 @@ export abstract class DIB {
 export class DeviceInformationDIB extends DIB {
   constructor(
     public knxMedium: KNXMedium,
-    public deviceStatus: number,
+    public deviceStatus: 1 | 0 | number,
     public individualAddress: number,
     public projectInstallationId: number,
     public serialNumber: Buffer,
@@ -200,8 +239,11 @@ export class DeviceInformationDIB extends DIB {
   }
 
   toBuffer(): Buffer {
+    const nameBuf = Buffer.from(this.friendlyName, "latin1");
+    const nameLength = Math.min(nameBuf.length, 30);
     const buffer = Buffer.alloc(54);
-    buffer.writeUInt8(54, 0); // Length
+
+    buffer.writeUInt8(24 + nameLength, 0); // Length
     buffer.writeUInt8(this.type, 1);
     buffer.writeUInt8(this.knxMedium, 2);
     buffer.writeUInt8(this.deviceStatus, 3);
@@ -218,9 +260,7 @@ export class DeviceInformationDIB extends DIB {
     const mac = this.macAddress.replace(/[:\-]/g, "");
     Buffer.from(mac, "hex").copy(buffer, 18);
 
-    const nameBuf = Buffer.from(this.friendlyName, "latin1");
-    nameBuf.copy(buffer, 24, 0, Math.min(nameBuf.length, 30));
-    // Remaining bytes are 0 (already allocated with alloc)
+    nameBuf.copy(buffer, 24, 0, nameLength);
 
     return buffer;
   }
@@ -237,8 +277,8 @@ export class DeviceInformationDIB extends DIB {
       .toString("hex")
       .match(/.{1,2}/g)!
       .join(":");
-    // Friendly name is 30 bytes fixed, null terminated
-    const nameBuf = buffer.subarray(24, 54);
+
+    const nameBuf = buffer.subarray(24);
     const nullByte = nameBuf.indexOf(0x00);
     const name = nameBuf.subarray(0, nullByte === -1 ? 30 : nullByte).toString("latin1");
 
@@ -330,10 +370,59 @@ export class IPCurrentConfigDIB extends DIB {
   }
 }
 
+export class StatusTunnelingSlot {
+  private _value: number;
+
+  constructor(initialValue: number = 0xFFF8) {
+    this._value = initialValue;
+  }
+
+  get value(): number {
+    return this._value;
+  }
+
+  get usable(): boolean {
+    return (this._value & 0x0004) !== 0;
+  }
+
+  set usable(v: boolean) {
+    if (v) {
+      this._value |= 0x0004; // Set bit 2
+    } else {
+      this._value &= ~0x0004; // Clear bit 2
+    }
+  }
+
+  get authorised(): boolean {
+    return (this._value & 0x0002) !== 0;
+  }
+
+  set authorised(v: boolean) {
+    if (v) {
+      this._value |= 0x0002; // Set bit 1
+    } else {
+      this._value &= ~0x0002; // Clear bit 1
+    }
+  }
+
+  get free(): boolean {
+    return (this._value & 0x0001) !== 0;
+  }
+
+  set free(v: boolean) {
+    if (v) {
+      this._value |= 0x0001; // Set bit 0
+    } else {
+      this._value &= ~0x0001; // Clear bit 0
+    }
+  }
+}
+
+
 export class TunnellingInfoDIB extends DIB {
   constructor(
-    public apduLength: number = 240,
-    public slots: { address: number; status: number }[] = []
+    public apduLength: number = 508,
+    public slots: { address: number; status: StatusTunnelingSlot; }[] = []
   ) {
     super(DescriptionType.TUNNELLING_INFO);
   }
@@ -346,7 +435,7 @@ export class TunnellingInfoDIB extends DIB {
     let offset = 4;
     for (const slot of this.slots) {
       buffer.writeUInt16BE(slot.address, offset);
-      buffer.writeUInt16BE(slot.status, offset + 2);
+      buffer.writeUInt16BE(slot.status.value, offset + 2);
       offset += 4;
     }
     return buffer;
@@ -358,7 +447,7 @@ export class TunnellingInfoDIB extends DIB {
     for (let i = 4; i < buffer.length; i += 4) {
       slots.push({
         address: buffer.readUInt16BE(i),
-        status: buffer.readUInt16BE(i + 2)
+        status: new StatusTunnelingSlot(buffer.readUInt16BE(i + 2))
       });
     }
     return new TunnellingInfoDIB(apduLength, slots);
@@ -367,21 +456,51 @@ export class TunnellingInfoDIB extends DIB {
 
 export class ExtendedDeviceInformationDIB extends DIB {
   constructor(
-    public mediumStatus: number,
-    public maximalLocalApduLength: number,
-    public deviceDescriptorType0: number,
+    mediumStatus: boolean = false,
+    public maximalLocalApduLength: number = 508,
+    public deviceDescriptorType0: DeviceDescriptorType0 = DeviceDescriptorType0.KNXNET_IP_ROUTER,
   ) {
     super(DescriptionType.DEVICE_INFO_EXTENDED);
+    this.mediumStatus = mediumStatus;
+  }
+
+  private _mediumStatus: number = 0;
+
+
+  /**
+   * Indicates whether or not
+   * communication is possible using the
+   * medium connection represented by this
+   * Router Object.
+   * 
+   * - 0: FALSE: communication is possible
+   * - 1: TRUE: communication is impossible
+   */
+  get mediumStatus(): number {
+    return this._mediumStatus;
+  }
+
+  /**
+   * Indicates whether or not
+   * communication is possible using the
+   * medium connection represented by this
+   * Router Object.
+   * 
+   * - 0: FALSE: communication is possible
+   * - 1: TRUE: communication is impossible
+   */
+  set mediumStatus(v: boolean) {
+    this._mediumStatus = v ? 1 : 0;
   }
 
   toBuffer(): Buffer {
     const buffer = Buffer.alloc(8);
-    buffer.writeUInt8(8, 0); // Length
+    buffer.writeUInt8(8, 0); // Structure Length
     buffer.writeUInt8(this.type, 1);
     buffer.writeUInt8(this.mediumStatus, 2);
     buffer.writeUInt8(0, 3); // Reserved
     buffer.writeUInt16BE(this.maximalLocalApduLength, 4);
-    buffer.writeUInt16BE(this.deviceDescriptorType0, 6);
+    buffer.writeUInt16BE(this.deviceDescriptorType0.value, 6);
     return buffer;
   }
 
@@ -389,7 +508,7 @@ export class ExtendedDeviceInformationDIB extends DIB {
     const mediumStatus = buffer.readUInt8(2);
     const maximalLocalApduLength = buffer.readUInt16BE(4);
     const deviceDescriptorType0 = buffer.readUInt16BE(6);
-    return new ExtendedDeviceInformationDIB(mediumStatus, maximalLocalApduLength, deviceDescriptorType0);
+    return new ExtendedDeviceInformationDIB(!!mediumStatus, maximalLocalApduLength, new DeviceDescriptorType0(deviceDescriptorType0));
   }
 }
 
@@ -423,6 +542,44 @@ export class SupportedServicesDIB extends DIB {
       }
     }
     return new SupportedServicesDIB(services);
+  }
+}
+
+export class KNXAddressesDIB extends DIB {
+  constructor(
+    public knxIndividualAddress: number,
+    public additionalIndividualAddresses: number[] = []
+  ) {
+    super(DescriptionType.KNX_ADDRESSES);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(4 + this.additionalIndividualAddresses.length * 2);
+    buffer.writeUInt8(buffer.length, 0); // Structure Length
+    buffer.writeUInt8(this.type, 1);     // Description Type Code
+    buffer.writeUInt16BE(this.knxIndividualAddress, 2);
+
+    let offset = 4;
+    for (const addr of this.additionalIndividualAddresses) {
+      buffer.writeUInt16BE(addr, offset);
+      offset += 2;
+    }
+
+    return buffer;
+  }
+
+  static fromBuffer(buffer: Buffer): KNXAddressesDIB {
+    const len = buffer.readUInt8(0);
+    const knxIndividualAddress = buffer.readUInt16BE(2);
+    const additionalIndividualAddresses: number[] = [];
+
+    for (let i = 4; i < len; i += 2) {
+      if (i + 1 < len) {
+        additionalIndividualAddresses.push(buffer.readUInt16BE(i));
+      }
+    }
+
+    return new KNXAddressesDIB(knxIndividualAddress, additionalIndividualAddresses);
   }
 }
 

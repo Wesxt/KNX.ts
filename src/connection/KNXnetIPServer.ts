@@ -9,6 +9,7 @@ import {
   ConnectionType,
   AllowedSupportedServiceFamilies,
   KNXLayer,
+  KNXTimeoutConstants,
 } from "../core/enum/KNXnetIPEnum";
 import { CEMI } from "../core/CEMI";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
@@ -24,6 +25,7 @@ import {
   TunnellingInfoDIB,
   CRI,
   CRD,
+  StatusTunnelingSlot,
 } from "../core/KNXnetIPStructures";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "../utils/KNXHelper";
@@ -31,6 +33,7 @@ import { KNXnetIPServerOptions } from "../@types/interfaces/connection";
 import { getNetworkInfo } from "../utils/localIp";
 import { Router } from "./Router";
 import os from "node:os";
+import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
 
 /**
   * Implements a KNXnet/IP Server (Gateway) that supports Routing and Tunneling protocols.
@@ -76,8 +79,8 @@ export class KNXnetIPServer extends KNXService {
 
   private readonly MAX_QUEUE_SIZE = 100;
   private readonly BUSY_THRESHOLD = 15;
-  private readonly HEARTBEAT_TIMEOUT = 120000; // 120 seconds
-  private readonly RETRANSMIT_TIMEOUT = 1000; // 1 second
+  private readonly HEARTBEAT_TIMEOUT = KNXTimeoutConstants.CONNECTION_ALIVE_TIME * 1000;
+  private readonly RETRANSMIT_TIMEOUT = KNXTimeoutConstants.TUNNELING_REQUEST_TIMEOUT * 1000;
   private MAX_PENDING_REQUESTS_PER_CLIENT = 100; // [MEJORA] Límite de ráfagas
 
   private maxTunnelConnections: number;
@@ -319,7 +322,7 @@ export class KNXnetIPServer extends KNXService {
       KNXnetIPServiceType.ROUTING_INDICATION,
       0,
     );
-    header.totalLength = 6 + cemiBuffer.length;
+    header.totalLength = KNXnetIPHeader.HEADER_SIZE_10 + cemiBuffer.length;
     const packet = Buffer.concat([header.toBuffer(), cemiBuffer]);
 
     this.msgQueue.push(packet);
@@ -335,11 +338,12 @@ export class KNXnetIPServer extends KNXService {
 
   private sendLostMessage(count: number): void {
     const lostMsg = new RoutingLostMessage(0, count);
+    const msgBody = lostMsg.toBuffer();
     const header = new KNXnetIPHeader(
       KNXnetIPServiceType.ROUTING_LOST_MESSAGE,
-      10,
+      KNXnetIPHeader.HEADER_SIZE_10 + msgBody.length,
     );
-    const packet = Buffer.concat([header.toBuffer(), lostMsg.toBuffer()]);
+    const packet = Buffer.concat([header.toBuffer(), msgBody]);
 
     if (this.socket) {
       (this.socket as dgram.Socket).send(packet, this.options.port!, this.options.ip!, (err) => {
@@ -350,8 +354,9 @@ export class KNXnetIPServer extends KNXService {
 
   private sendRoutingBusy(waitTime: number): void {
     const busyMsg = new RoutingBusy(0, waitTime, 0x0000);
-    const header = new KNXnetIPHeader(KNXnetIPServiceType.ROUTING_BUSY, 12);
-    const packet = Buffer.concat([header.toBuffer(), busyMsg.toBuffer()]);
+    const msgBody = busyMsg.toBuffer();
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.ROUTING_BUSY, KNXnetIPHeader.HEADER_SIZE_10 + msgBody.length);
+    const packet = Buffer.concat([header.toBuffer(), msgBody]);
 
     if (this.socket) {
       (this.socket as dgram.Socket).send(packet, this.options.port!, this.options.ip!, (err) => {
@@ -508,7 +513,7 @@ export class KNXnetIPServer extends KNXService {
 
     const dibs = this.getIdentificationDIBs(responseType, localIp);
     const body = Buffer.concat([serverHPAI.toBuffer(), ...dibs.map((d) => d.toBuffer())]);
-    const responseHeader = new KNXnetIPHeader(responseType, 6 + body.length);
+    const responseHeader = new KNXnetIPHeader(responseType, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
 
     if (this.socket) {
       (this.socket as dgram.Socket).send(Buffer.concat([responseHeader.toBuffer(), body]), clientHPAI.port, clientHPAI.ipAddress);
@@ -524,7 +529,7 @@ export class KNXnetIPServer extends KNXService {
     const serverHPAI = this.getHPAI(rinfo);
     const dibs = this.getIdentificationDIBs(KNXnetIPServiceType.DESCRIPTION_RESPONSE, serverHPAI.ipAddress);
     const body = Buffer.concat(dibs.map((d) => d.toBuffer()));
-    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DESCRIPTION_RESPONSE, 6 + body.length);
+    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DESCRIPTION_RESPONSE, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
 
     console.log(`[Description] Responding to ${clientHPAI.ipAddress}:${clientHPAI.port}`);
 
@@ -635,7 +640,7 @@ export class KNXnetIPServer extends KNXService {
         serverDataHPAI.toBuffer(),
         Buffer.from([0x02, ConnectionType.DEVICE_MGMT_CONNECTION])
       ]);
-      const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, 6 + body.length);
+      const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
       if (this.socket) (this.socket as dgram.Socket).send(Buffer.concat([responseHeader.toBuffer(), body]), clientControlHPAI.port, clientControlHPAI.ipAddress);
       return;
     } else if (cri.connectionType === ConnectionType.TUNNEL_CONNECTION) {
@@ -682,7 +687,7 @@ export class KNXnetIPServer extends KNXService {
 
         const crd = new CRD(cri.connectionType, knxAddress);
         const body = Buffer.concat([Buffer.from([channelId, status]), serverDataHPAI.toBuffer(), crd.toBuffer()]);
-        const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, 6 + body.length);
+        const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
         if (this.socket) (this.socket as dgram.Socket).send(Buffer.concat([responseHeader.toBuffer(), body]), clientControlHPAI.port, clientControlHPAI.ipAddress);
         return;
       }
@@ -711,8 +716,8 @@ export class KNXnetIPServer extends KNXService {
 
       if (sendDisconnect && this.socket) {
         // Send DISCONNECT_REQUEST to client (Spec 5.4/5.5)
-        const header = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_REQUEST, 16);
         const body = Buffer.concat([Buffer.from([channelId, 0x00]), this.getHPAI().toBuffer()]);
+        const header = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_REQUEST, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
         (this.socket as dgram.Socket).send(Buffer.concat([header.toBuffer(), body]), conn.controlHPAI.port, conn.controlHPAI.ipAddress);
       }
 
@@ -748,7 +753,7 @@ export class KNXnetIPServer extends KNXService {
 
     this.closeConnection(channelId, false);
     const body = Buffer.from([channelId, KNXnetIPErrorCodes.E_NO_ERROR]);
-    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_RESPONSE, 6 + body.length);
+    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_RESPONSE, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
     if (this.socket) (this.socket as dgram.Socket).send(Buffer.concat([responseHeader.toBuffer(), body]), clientControlHPAI.port, clientControlHPAI.ipAddress);
   }
 
@@ -844,7 +849,7 @@ export class KNXnetIPServer extends KNXService {
     const seq = conn.sno;
 
     const tunnelHeader = Buffer.from([0x04, channelId, seq, 0x00]);
-    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_REQUEST, 6 + tunnelHeader.length + cemiBuffer.length);
+    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_REQUEST, KNXnetIPHeader.HEADER_SIZE_10 + tunnelHeader.length + cemiBuffer.length);
     const packet = Buffer.concat([responseHeader.toBuffer(), tunnelHeader, cemiBuffer]);
 
     const send = (pkt: Buffer) => {
@@ -870,7 +875,7 @@ export class KNXnetIPServer extends KNXService {
 
   private sendTunnelACK(channelId: number, seq: number, status: number, rinfo?: dgram.RemoteInfo) {
     const body = Buffer.from([0x04, channelId, seq, status]);
-    const header = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_ACK, 6 + body.length);
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_ACK, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
     const conn = this._tunnelConnections.get(channelId);
     if (this.socket) {
       const port = conn ? conn.dataHPAI.port : (rinfo ? rinfo.port : 0);
@@ -902,9 +907,10 @@ export class KNXnetIPServer extends KNXService {
     }
     const featBody = Buffer.concat([Buffer.from([featId, retCode]), featVal]);
     const tunnelHeader = Buffer.from([0x04, channelId, conn.sno, 0x00]);
-    const header = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE, 6 + tunnelHeader.length + featBody.length);
+    const body = Buffer.concat([tunnelHeader, featBody]);
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
     if (this.socket) {
-      (this.socket as dgram.Socket).send(Buffer.concat([header.toBuffer(), tunnelHeader, featBody]), conn.dataHPAI.port, conn.dataHPAI.ipAddress);
+      (this.socket as dgram.Socket).send(Buffer.concat([header.toBuffer(), body]), conn.dataHPAI.port, conn.dataHPAI.ipAddress);
       conn.sno = (conn.sno + 1) % 256;
     }
   }
@@ -970,8 +976,9 @@ export class KNXnetIPServer extends KNXService {
 
     const seq = conn.sno;
     const tunnelHeader = Buffer.from([0x04, channelId, seq, 0x00]);
-    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST, 6 + tunnelHeader.length + cemiBuffer.length);
-    const packet = Buffer.concat([responseHeader.toBuffer(), tunnelHeader, cemiBuffer]);
+    const body = Buffer.concat([tunnelHeader, cemiBuffer]);
+    const responseHeader = new KNXnetIPHeader(KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
+    const packet = Buffer.concat([responseHeader.toBuffer(), body]);
 
     const send = (pkt: Buffer) => {
       if (this.socket && this._tunnelConnections.has(channelId)) {
@@ -986,7 +993,7 @@ export class KNXnetIPServer extends KNXService {
 
   private sendDeviceConfigACK(channelId: number, seq: number, status: number) {
     const body = Buffer.from([0x04, channelId, seq, status]);
-    const header = new KNXnetIPHeader(KNXnetIPServiceType.DEVICE_CONFIGURATION_ACK, 6 + body.length);
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.DEVICE_CONFIGURATION_ACK, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
     const conn = this._tunnelConnections.get(channelId);
     if (conn && this.socket) {
       (this.socket as dgram.Socket).send(Buffer.concat([header.toBuffer(), body]), conn.dataHPAI.port, conn.dataHPAI.ipAddress);
@@ -1032,17 +1039,20 @@ export class KNXnetIPServer extends KNXService {
     if (serviceType === KNXnetIPServiceType.SEARCH_RESPONSE) {
       return [devInfo, suppSvc];
     }
-
-    const extDevInfo = new ExtendedDeviceInformationDIB(0, 254, 0x091a);
+    const deviceDescriptorType0 = DeviceDescriptorType0.KNXNET_IP_ROUTER;
+    const extDevInfo = new ExtendedDeviceInformationDIB(false, 254, deviceDescriptorType0);
     const ipConfig = new IPConfigDIB(effectiveLocalIp, effectiveNetmask, "0.0.0.0", 0x01, 0x02);
     const ipCurrent = new IPCurrentConfigDIB(effectiveLocalIp, effectiveNetmask, "0.0.0.0", "0.0.0.0", 0x02);
-
-    const slots = [];
+    const slots: { address: number; status: StatusTunnelingSlot; }[] = [];
     for (let i = 1; i <= this.maxTunnelConnections; i++) {
       const conn = this._tunnelConnections.get(i);
+      const status = new StatusTunnelingSlot();
+      status.authorised = true;
+      status.usable = !!conn;
+      status.free = !conn;
       slots.push({
         address: conn ? conn.knxAddress : this.clientAddrsStartInt + i - 1,
-        status: conn ? 0xfffe : 0xffff
+        status: status
       });
     }
 
@@ -1053,7 +1063,7 @@ export class KNXnetIPServer extends KNXService {
     const now = Date.now();
     if (now - this.lastBusyTime > 10) { this.busyCounter++; this.resetDecrementTimer(); }
     this.lastBusyTime = now;
-    if (busy.controlField === 0x0000) {
+    if (busy.routingBusyControl === 0x0000) {
       this.pauseSending(busy.waitTime + Math.floor(Math.random() * this.busyCounter * 50));
     }
     this.emit("routing_busy", busy);
