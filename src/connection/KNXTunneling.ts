@@ -13,6 +13,8 @@ import { CEMI } from "../core/CEMI";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
 
+import { createKNXLogger } from "../utils/Logger";
+
 /**
  * Handles KNXnet/IP Tunneling connections for point-to-point communication with a KNX gateway.
  * This class manages the connection state, sequence numbering for reliable delivery,
@@ -34,8 +36,10 @@ export class KNXTunneling extends KNXService {
   // Message Queue
   private msgQueue: {
     packet: Buffer;
-    resolve: () => void;
+    serviceType: KNXnetIPServiceType;
+    resolve: (val?: any) => void;
     reject: (e: Error) => void;
+    responseType?: KNXnetIPServiceType;
   }[] = [];
   private isSending: boolean = false;
   private pendingAck: {
@@ -44,6 +48,9 @@ export class KNXTunneling extends KNXService {
     retryCount: number;
     currentMsg: any;
   } | null = null;
+  private activeRequest: any | null = null;
+
+  private readonly MAX_QUEUE_SIZE: number;
 
   // Disconnect
   private disconnectTimeout: NodeJS.Timeout | null = null;
@@ -55,6 +62,8 @@ export class KNXTunneling extends KNXService {
       (this.options as KNXTunnelingOptions).connectionType =
         ConnectionType.TUNNEL_CONNECTION;
     }
+    this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
+    this.logger = createKNXLogger(options.logOptions).child({ module: "TunnelClient" });
   }
 
   async connect(): Promise<void> {
@@ -232,9 +241,20 @@ export class KNXTunneling extends KNXService {
   async send(cemi: ServiceMessage | Buffer): Promise<void> {
     if (!this.isConnected) throw new Error("Not connected");
 
+    if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
+      throw new Error("Outgoing queue full");
+    }
+
     const cemiBuffer = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
+    const isDeviceMgmt =
+      (this.options as KNXTunnelingOptions).connectionType ===
+      ConnectionType.DEVICE_MGMT_CONNECTION;
+    const serviceType = isDeviceMgmt
+      ? KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST
+      : KNXnetIPServiceType.TUNNELLING_REQUEST;
+
     return new Promise((resolve, reject) => {
-      this.msgQueue.push({ packet: cemiBuffer, resolve, reject });
+      this.msgQueue.push({ packet: cemiBuffer, serviceType, resolve, reject });
       this.processQueue();
     });
   }
@@ -244,15 +264,9 @@ export class KNXTunneling extends KNXService {
 
     this.isSending = true;
     const msg = this.msgQueue.shift()!;
+    this.activeRequest = msg;
 
-    const isDeviceMgmt =
-      (this.options as KNXTunnelingOptions).connectionType ===
-      ConnectionType.DEVICE_MGMT_CONNECTION;
-    const serviceType = isDeviceMgmt
-      ? KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST
-      : KNXnetIPServiceType.TUNNELLING_REQUEST;
-
-    const header = new KNXnetIPHeader(serviceType, 0);
+    const header = new KNXnetIPHeader(msg.serviceType, 0);
     const connHeader = Buffer.from([
       0x04,
       this.channelId,
@@ -276,18 +290,11 @@ export class KNXTunneling extends KNXService {
     if (!this.pendingAck) return;
 
     if (this.pendingAck.retryCount < 1) {
-      // 1 retry
+      // 1 retry (Spec 2.6.1)
       this.pendingAck.retryCount++;
       const msg = this.pendingAck.currentMsg;
 
-      const isDeviceMgmt =
-        (this.options as KNXTunnelingOptions).connectionType ===
-        ConnectionType.DEVICE_MGMT_CONNECTION;
-      const serviceType = isDeviceMgmt
-        ? KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST
-        : KNXnetIPServiceType.TUNNELLING_REQUEST;
-
-      const header = new KNXnetIPHeader(serviceType, 0);
+      const header = new KNXnetIPHeader(msg.serviceType, 0);
       const connHeader = Buffer.from([
         0x04,
         this.channelId,
@@ -297,15 +304,17 @@ export class KNXTunneling extends KNXService {
       header.totalLength = 6 + connHeader.length + msg.packet.length;
       const packet = Buffer.concat([header.toBuffer(), connHeader, msg.packet]);
 
+      this.logger.warn(`ACK timeout for seq ${this.pendingAck.seq}, retrying (1/1)...`);
       this.sendRaw(packet);
       this.pendingAck.timer = setTimeout(() => this.handleAckTimeout(), 1000);
     } else {
-      // Fail
+      // Fail (Spec 2.6.1: terminate connection)
       const reject = this.pendingAck.currentMsg.reject;
+      this.logger.error(`ACK timeout failed after retry for seq ${this.pendingAck.seq}. Terminating connection.`);
       this.pendingAck = null;
       this.isSending = false;
       reject(new Error("Tunneling ACK Timeout"));
-      this.closeSocket();
+      this.disconnect();
     }
   }
   // #endregion
@@ -313,59 +322,20 @@ export class KNXTunneling extends KNXService {
   // #region Tunneling Features
   public async getFeature(featureId: number): Promise<Buffer> {
     if (!this.isConnected) throw new Error("Not connected");
+    if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
+      throw new Error("Outgoing queue full");
+    }
+
     return new Promise((resolve, reject) => {
-      const header = new KNXnetIPHeader(
-        KNXnetIPServiceType.TUNNELLING_FEATURE_GET,
-        0,
-      );
-      const connHeader = Buffer.from([
-        0x04,
-        this.channelId,
-        this.sequenceNumber,
-        0x00,
-      ]);
       const body = Buffer.from([featureId, 0x00]); // FeatureID + Reserved
-      header.totalLength = 6 + connHeader.length + body.length;
-
-      const listener = (msg: Buffer) => {
-        try {
-          const hdr = KNXnetIPHeader.fromBuffer(msg);
-          if (
-            hdr.serviceType === KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE
-          ) {
-            const respBody = msg.subarray(6);
-            // ConnHeader(4) + FeatureID(1) + ReturnCode(1) + Value(n)
-            if (
-              respBody[0] === 0x04 &&
-              respBody[1] === this.channelId &&
-              respBody[2] === this.sequenceNumber
-            ) {
-              if (respBody[4] === featureId) {
-                this.removeListener("raw_message", listener);
-                const returnCode = respBody[5];
-                if (returnCode === KNXnetIPErrorCodes.E_NO_ERROR) {
-                  resolve(respBody.subarray(6));
-                } else {
-                  reject(
-                    new Error(`Feature Error: 0x${returnCode.toString(16)}`),
-                  );
-                }
-              }
-            }
-          }
-        } catch (e) {}
-      };
-      this.on("raw_message", listener);
-
-      // Timeout for feature get
-      setTimeout(() => {
-        this.removeListener("raw_message", listener);
-        reject(new Error("Feature GET Timeout"));
-      }, 3000);
-
-      this.sendRaw(Buffer.concat([header.toBuffer(), connHeader, body]));
-      // Increment sequence number for the next request (Feature Get uses the seq number)
-      this.sequenceNumber = (this.sequenceNumber + 1) & 0xff;
+      this.msgQueue.push({
+        packet: body,
+        serviceType: KNXnetIPServiceType.TUNNELLING_FEATURE_GET,
+        resolve,
+        reject,
+        responseType: KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE,
+      });
+      this.processQueue();
     });
   }
   // #endregion
@@ -413,9 +383,7 @@ export class KNXTunneling extends KNXService {
                 this.heartbeatRetryTimer = null;
               }
             } else {
-              console.warn(
-                `[Tunneling] Heartbeat response error from server: 0x${body[1].toString(16)}`,
-              );
+              this.logger.warn(`Heartbeat response error from server: 0x${body[1].toString(16)}`);
               // If it's a connection ID error, we should probably disconnect
               if (body[1] === KNXnetIPErrorCodes.E_CONNECTION_ID) {
                 this.emit(
@@ -453,13 +421,68 @@ export class KNXTunneling extends KNXService {
         case KNXnetIPServiceType.TUNNELLING_ACK:
         case KNXnetIPServiceType.DEVICE_CONFIGURATION_ACK:
           if (this.pendingAck && body[2] === this.pendingAck.seq) {
+            const status = body[3];
+            if (status !== KNXnetIPErrorCodes.E_NO_ERROR) {
+              this.logger.error(
+                `Received ACK with error status: 0x${status.toString(16)}. Terminating.`,
+              );
+              if (this.activeRequest)
+                this.activeRequest.reject(
+                  new Error(`ACK Error: 0x${status.toString(16)}`),
+                );
+              clearTimeout(this.pendingAck.timer);
+              this.pendingAck = null;
+              this.isSending = false;
+              this.activeRequest = null;
+              this.disconnect();
+              return;
+            }
+
             clearTimeout(this.pendingAck.timer);
-            const resolve = this.pendingAck.currentMsg.resolve;
             this.pendingAck = null;
-            this.isSending = false;
-            this.sequenceNumber = (this.sequenceNumber + 1) & 0xff;
-            resolve();
-            this.processQueue();
+
+            if (!this.activeRequest?.responseType) {
+              this.isSending = false;
+              if (this.activeRequest) this.activeRequest.resolve();
+              this.activeRequest = null;
+              this.sequenceNumber = (this.sequenceNumber + 1) & 0xff;
+              this.processQueue();
+            } else {
+              this.logger.debug(
+                `ACK received for seq ${this.sequenceNumber}, waiting for response type 0x${this.activeRequest.responseType.toString(16)}`,
+              );
+            }
+          }
+          break;
+        case KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE:
+          // Body: ConnHeader(4) + FeatureID(1) + ReturnCode(1) + Value(n)
+          if (
+            this.isSending &&
+            this.activeRequest?.responseType ===
+              KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE
+          ) {
+            if (
+              body[0] === 0x04 &&
+              body[1] === this.channelId &&
+              body[2] === this.sequenceNumber
+            ) {
+              const returnCode = body[5];
+              const val = body.subarray(6);
+
+              const resolve = this.activeRequest.resolve;
+              const reject = this.activeRequest.reject;
+
+              this.isSending = false;
+              this.activeRequest = null;
+              this.sequenceNumber = (this.sequenceNumber + 1) & 0xff;
+
+              if (returnCode === KNXnetIPErrorCodes.E_NO_ERROR) {
+                resolve(val);
+              } else {
+                reject(new Error(`Feature Error: 0x${returnCode.toString(16)}`));
+              }
+              this.processQueue();
+            }
           }
           break;
         case KNXnetIPServiceType.DISCONNECT_REQUEST:
@@ -575,7 +598,7 @@ export class KNXTunneling extends KNXService {
 
   private handleHeartbeatTimeout() {
     this.heartbeatFailures++;
-    console.warn(`[Tunneling] Heartbeat timeout (${this.heartbeatFailures}/3)`);
+    this.logger.warn(`Heartbeat timeout (${this.heartbeatFailures}/3)`);
     if (this.heartbeatFailures >= 3) {
       this.emit("error", new Error("Heartbeat failed 3 times"));
       this.disconnect();

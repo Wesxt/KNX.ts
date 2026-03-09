@@ -26,6 +26,12 @@ import {
   TPUARTOptions,
 } from "../@types/interfaces/connection";
 
+import { Logger } from "pino";
+import { knxLogger, createKNXLogger } from "../utils/Logger";
+import { KNXnetIPServer } from "./KNXnetIPServer";
+import { KNXHelper } from "../utils/KNXHelper";
+import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
+
 export abstract class KNXService extends EventEmitter {
   protected socket: dgram.Socket | net.Socket | null = null;
   public readonly options:
@@ -34,6 +40,7 @@ export abstract class KNXService extends EventEmitter {
     | KNXTunnelingOptions
     | TPUARTOptions;
   protected _transport: "UDP" | "TCP" = "UDP";
+  protected logger: Logger;
 
   constructor(
     options:
@@ -50,6 +57,9 @@ export abstract class KNXService extends EventEmitter {
       localPort: 0,
       ...options,
     };
+    this.logger = this.options.logOptions
+      ? createKNXLogger(this.options.logOptions)
+      : knxLogger;
   }
 
   abstract connect(): Promise<void>;
@@ -84,6 +94,7 @@ export abstract class KNXService extends EventEmitter {
   >(destination: string, dpt: T, value: AllDpts<T>): Promise<void> {
     let data: Buffer;
     let isShort = false;
+    // data validation
     if (dpt !== undefined) {
       data = KnxDataEncoder.encodeThis(dpt, value);
       isShort = KnxDataEncoder.isShortDpt(dpt);
@@ -102,8 +113,18 @@ export abstract class KNXService extends EventEmitter {
       );
     }
 
+    let cf2Value = 0;
+
+    if (KNXHelper.isValidGroupAddress(destination)) {
+      cf2Value = 0xe0;
+    } else if (KNXHelper.isValidIndividualAddress(destination)) {
+      cf2Value = 0x60;
+    } else {
+      throw new InvalidKnxAddressException(`This address ${destination} is not valid`);
+    }
+
     const cf1 = new ControlField(0xbc);
-    const cf2 = new ExtendedControlField(0xe0);
+    const cf2 = new ExtendedControlField(cf2Value);
     const tpdu = new TPDU(
       new TPCI(TPCIType.T_DATA_GROUP_PDU),
       new APDU(
@@ -119,11 +140,11 @@ export abstract class KNXService extends EventEmitter {
       null,
       cf1,
       cf2,
-      "0.0.0",
+      this instanceof KNXnetIPServer ? this.individualAddress : "0.0.0",
       destination,
       tpdu,
     );
-    console.log("SEND", cemi.constructor.name, cemi.toBuffer());
+    this.logger.debug({ service: cemi.constructor.name }, "Sending GroupValue_Write");
 
     return this.send(cemi) as Promise<void>;
   }

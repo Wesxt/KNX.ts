@@ -22,10 +22,11 @@ async function testRouting() {
     port: PORT,
     localIp: localIp,
     friendlyName: "Arnold",
-    routingDelay: 0,
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
-    MAX_PENDING_REQUESTS_PER_CLIENT: 50
+    logOptions: {
+      level: "debug"
+    }
   });
 
   routing = client;

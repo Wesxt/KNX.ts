@@ -1,10 +1,8 @@
-export * from "./connection/KNXnetIPServer";
-export * from "./connection/KNXTunneling";
-export * from "./connection/TPUART";
-export * from "./connection/Router";
-export * from "./core/CEMI";
-export * from "./core/KNXnetIPHeader";
-export * from "./core/KNXnetIPStructures";
-export * from "./core/enum/KNXnetIPEnum";
+export { KnxDataDecode } from "./core/data/KNXDataDecode";
+export { KnxDataEncoder } from "./core/data/KNXDataEncode";
+export { KNXnetIPServer } from "./connection/KNXnetIPServer";
+export { KNXTunneling } from "./connection/KNXTunneling";
+export { CEMI } from "./core/CEMI";
+export { EMI } from './core/EMI';
 export * from "./utils/KNXHelper";
 export * from "./utils/localIp";

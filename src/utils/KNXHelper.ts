@@ -37,35 +37,8 @@ import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
  * @see https://github.com/estbeetoo/knx.js
  */
 export class KNXHelper {
-  static Idexp(mantissa: number, exponent: number) {
-    return exponent > 1023 // avoid multiplying by infinity
-      ? mantissa * Math.pow(2, 1023) * Math.pow(2, exponent - 1023)
-      : exponent < -1074 // avoid multiplying by zero
-        ? mantissa * Math.pow(2, -1074) * Math.pow(2, exponent + 1074)
-        : mantissa * Math.pow(2, exponent);
-  }
-  static frexp(value: number) {
-    if (value === 0) return [value, 0];
-    let data = new DataView(new ArrayBuffer(8));
-    data.setFloat64(0, value);
-    let bits = (data.getUint32(0) >>> 20) & 0x7ff;
-    if (bits === 0) {
-      data.setFloat64(0, value * Math.pow(2, 64));
-      bits = ((data.getUint32(0) >>> 20) & 0x7ff) - 64;
-    }
-    let exponent = bits - 1022,
-      mantissa = this.Idexp(value, -exponent);
-    return [mantissa, exponent];
-  }
-  static IsAddressIndividual(address: string) {
-    return address.indexOf(".") !== -1;
-  }
-  static GetIndividualAddress(addr: Buffer) {
-    return this.GetAddress(addr, ".", false);
-  }
-
-  static GetGroupAddress(addr: Buffer, threeLevelAddressing: boolean) {
-    return this.GetAddress(addr, "/", threeLevelAddressing);
+  constructor() {
+    throw new Error("This class is static");
   }
   /**
    * Parsea un Buffer KNX (2 bytes) a su representación en string según el formato especificado.
@@ -75,18 +48,26 @@ export class KNXHelper {
    * @param threeLevelAddressing Si es true, fuerza formato de grupo 3 niveles (x/y/z). Si es false y es grupo, usa 2 niveles (x/y).
    */
   static GetAddress(addr: string, separator?: "." | "/", threeLevelAddressing?: boolean): Buffer;
+  static GetAddress(addr: number, separator?: "." | "/", threeLevelAddressing?: boolean): string;
   static GetAddress(addr: Buffer, separator?: "." | "/", threeLevelAddressing?: boolean): string;
   static GetAddress(
-    addr: Buffer | string,
+    addr: Buffer | string | number,
     separator: "." | "/" = "/",
     threeLevelAddressing: boolean = true,
   ): Buffer | string {
-    // 1. Caso String: Delegar a GetAddress_ (Asumo que esta función ya existe y funciona)
+    // 1. Caso String: Delegar a GetAddress_
     if (typeof addr === "string") {
       return this.GetAddress_(addr);
     }
 
-    // 2. Caso Buffer
+    // 2. Caso Number: llamar recursivamente
+    if (typeof addr === "number") {
+      const buffer = Buffer.alloc(2);
+      buffer.writeUint16BE(addr & 0xFFFF);
+      return this.GetAddress(buffer, separator, threeLevelAddressing) as string;
+    }
+
+    // 3. Caso Buffer
     if (Buffer.isBuffer(addr)) {
       if (addr.length < 2) {
         throw new Error("KNX Address buffer must be at least 2 bytes");
@@ -216,125 +197,7 @@ export class KNXHelper {
       throw new InvalidKnxAddressException(address);
     }
   }
-  // Bit order
-  // +---+---+---+---+---+---+---+---+
-  // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
-  // +---+---+---+---+---+---+---+---+
 
-  //  Control Field 1
-
-  //   Bit  |
-  //  ------+---------------------------------------------------------------
-  //    7   | Frame Type  - 0x0 for extended frame
-  //        |               0x1 for standard frame
-  //  ------+---------------------------------------------------------------
-  //    6   | Reserved
-  //        |
-  //  ------+---------------------------------------------------------------
-  //    5   | Repeat Flag - 0x0 repeat frame on medium in case of an error
-  //        |               0x1 do not repeat
-  //  ------+---------------------------------------------------------------
-  //    4   | System Broadcast - 0x0 system broadcast
-  //        |                    0x1 broadcast
-  //  ------+---------------------------------------------------------------
-  //    3   | Priority    - 0x0 system
-  //        |               0x1 normal (also called alarm priority)
-  //  ------+               0x2 urgent (also called high priority)
-  //    2   |               0x3 low
-  //        |
-  //  ------+---------------------------------------------------------------
-  //    1   | Acknowledge Request - 0x0 no ACK requested
-  //        | (L_Data.req)          0x1 ACK requested
-  //  ------+---------------------------------------------------------------
-  //    0   | Confirm      - 0x0 no error
-  //        | (L_Data.con) - 0x1 error
-  //  ------+---------------------------------------------------------------
-
-  //  Control Field 2
-
-  //   Bit  |
-  //  ------+---------------------------------------------------------------
-  //    7   | Destination Address Type - 0x0 individual address
-  //        |                          - 0x1 group address
-  //  ------+---------------------------------------------------------------
-  //   6-4  | Hop Count (0-7)
-  //  ------+---------------------------------------------------------------
-  //   3-0  | Extended Frame Format - 0x0 standard frame
-  //  ------+---------------------------------------------------------------
-  static KnxDestinationAddressType = {
-    INDIVIDUAL: 0,
-    GROUP: 1,
-  };
-  static GetKnxDestinationAddressType(control_field_2: number) {
-    return (0x80 & control_field_2) != 0
-      ? this.KnxDestinationAddressType.GROUP
-      : this.KnxDestinationAddressType.INDIVIDUAL;
-  }
-  // In the Common EMI frame, the APDU payload is defined as follows:
-
-  // +--------+--------+--------+--------+--------+
-  // | TPCI + | APCI + |  Data  |  Data  |  Data  |
-  // |  APCI  |  Data  |        |        |        |
-  // +--------+--------+--------+--------+--------+
-  //   byte 1   byte 2  byte 3     ...     byte 16
-
-  // For data that is 6 bits or less in length, only the first two bytes are used in a Common EMI
-  // frame. Common EMI frame also carries the information of the expected length of the Protocol
-  // Data Unit (PDU). Data payload can be at most 14 bytes long.  <p>
-
-  // The first byte is a combination of transport layer control information (TPCI) and application
-  // layer control information (APCI). First 6 bits are dedicated for TPCI while the two least
-  // significant bits of first byte hold the two most significant bits of APCI field, as follows:
-
-  //   Bit 1    Bit 2    Bit 3    Bit 4    Bit 5    Bit 6    Bit 7    Bit 8      Bit 1   Bit 2
-  // +--------+--------+--------+--------+--------+--------+--------+--------++--------+----....
-  // |        |        |        |        |        |        |        |        ||        |
-  // |  TPCI  |  TPCI  |  TPCI  |  TPCI  |  TPCI  |  TPCI  | APCI   |  APCI  ||  APCI  |
-  // |        |        |        |        |        |        |(bit 1) |(bit 2) ||(bit 3) |
-  // +--------+--------+--------+--------+--------+--------+--------+--------++--------+----....
-  // +                            B  Y  T  E    1                            ||       B Y T E  2
-  // +-----------------------------------------------------------------------++-------------....
-
-  //Total number of APCI control bits can be either 4 or 10. The second byte bit structure is as follows:
-
-  //   Bit 1    Bit 2    Bit 3    Bit 4    Bit 5    Bit 6    Bit 7    Bit 8      Bit 1   Bit 2
-  // +--------+--------+--------+--------+--------+--------+--------+--------++--------+----....
-  // |        |        |        |        |        |        |        |        ||        |
-  // |  APCI  |  APCI  | APCI/  |  APCI/ |  APCI/ |  APCI/ | APCI/  |  APCI/ ||  Data  |  Data
-  // |(bit 3) |(bit 4) | Data   |  Data  |  Data  |  Data  | Data   |  Data  ||        |
-  // +--------+--------+--------+--------+--------+--------+--------+--------++--------+----....
-  // +                            B  Y  T  E    2                            ||       B Y T E  3
-  // +-----------------------------------------------------------------------++-------------....
-  static GetData(dataLength: number, apdu: Buffer) {
-    switch (dataLength) {
-      case 0:
-        return "0";
-      case 1:
-        //TODO: originally, here is utf code to char convert (String.fromCharCode).
-        // return parseInt(0x3F & apdu[1], 10).toString();
-        // Interpreta el segundo byte con la máscara 0x3F.
-        // Devuelve el valor del byte con la máscara 0x3F como una cadena.
-        return (0x3f & apdu[1]).toString();
-      case 2:
-        //TODO: originally, here is utf code to char convert (String.fromCharCode).
-        // Interpreta el tercer byte como un carácter Unicode.
-        return apdu[2].toString();
-      // return String.fromCharCode(apdu[2]);
-      case 3:
-        let sign = apdu[2] >> 7;
-        let exponent = (apdu[2] & 0b01111000) >> 3;
-        let mantissa = 256 * (apdu[2] & 0b00000111) + apdu[3];
-        mantissa = sign == 1 ? ~(mantissa ^ 2047) : mantissa;
-
-        //TODO: originally, here is utf code to char convert (String.fromCharCode).
-        return this.Idexp(0.01 * mantissa, exponent).toString();
-      default:
-        let data = Buffer.alloc(apdu.length);
-        //TODO: originally, here is utf code to char convert (String.fromCharCode).
-        apdu.copy(data);
-        return data;
-    }
-  }
   static GetDataLength(data: Buffer, isShort: boolean = false) {
     if (data.length <= 0) return 0;
     if (isShort) return 1;
@@ -431,108 +294,6 @@ export class KNXHelper {
     for (var i = 0; i < data.length; i++) {
       datagram[dataStart + 1 + i] = data[i];
     }
-  }
-
-  static SERVICE_TYPE = {
-    /**
-     * 0x0201
-     */
-    SEARCH_REQUEST: 0x0201,
-    /**
-     * 0x0202
-     */
-    SEARCH_RESPONSE: 0x0202,
-    /**
-     * 0x0203
-     */
-    DESCRIPTION_REQUEST: 0x0203,
-    /**
-     * 0x0204
-     */
-    DESCRIPTION_RESPONSE: 0x0204,
-    /**
-     * 0x0205
-     */
-    CONNECT_REQUEST: 0x0205,
-    /**
-     * 0x0206
-     */
-    CONNECT_RESPONSE: 0x0206,
-    /**
-     * 0x0207
-     */
-    CONNECTIONSTATE_REQUEST: 0x0207,
-    /**
-     * 0x0208
-     */
-    CONNECTIONSTATE_RESPONSE: 0x0208,
-    /**
-     * 0x0209
-     */
-    DISCONNECT_REQUEST: 0x0209,
-    /**
-     * 0x020A
-     */
-    DISCONNECT_RESPONSE: 0x020a,
-    /**
-     * 0x0310
-     */
-    DEVICE_CONFIGURATION_REQUEST: 0x0310,
-    /**
-     * 0x0311
-     */
-    DEVICE_CONFIGURATION_ACK: 0x0311,
-    /**
-     * 0x0420
-     */
-    TUNNELLING_REQUEST: 0x0420,
-    /**
-     * 0x0421
-     */
-    TUNNELLING_ACK: 0x0421,
-    /**
-     * 0x0530
-     */
-    ROUTING_INDICATION: 0x0530,
-    /**
-     * 0x0531
-     */
-    ROUTING_LOST_MESSAGE: 0x0531,
-    /**
-     * UNKNOWN = -1
-     */
-    UNKNOWN: -1,
-  };
-  static GetServiceType(datagram: Buffer) {
-    switch (datagram[2]) {
-      case 0x02:
-        {
-          switch (datagram[3]) {
-            case 0x06:
-              return this.SERVICE_TYPE.CONNECT_RESPONSE;
-            case 0x09:
-              return this.SERVICE_TYPE.DISCONNECT_REQUEST;
-            case 0x08:
-              return this.SERVICE_TYPE.CONNECTIONSTATE_RESPONSE;
-          }
-        }
-        break;
-      case 0x04:
-        {
-          switch (datagram[3]) {
-            case 0x20:
-              return this.SERVICE_TYPE.TUNNELLING_REQUEST;
-            case 0x21:
-              return this.SERVICE_TYPE.TUNNELLING_ACK;
-          }
-        }
-        break;
-    }
-    return this.SERVICE_TYPE.UNKNOWN;
-  }
-  static GetChannelID(datagram: Buffer) {
-    if (datagram.length > 6) return datagram[6];
-    return -1;
   }
 
   /**

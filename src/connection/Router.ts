@@ -5,6 +5,9 @@ import { TPUARTConnection } from "./TPUART";
 import { KNXTunneling } from "./KNXTunneling";
 import { ExternalManagerOptions } from "../@types/interfaces/connection";
 
+import { Logger } from "pino";
+import { createKNXLogger } from "../utils/Logger";
+
 /**
  * Router: A high-performance, robust Learning Bridge.
  * Architecture strictly follows knxd/src/libserver/router.cpp patterns:
@@ -20,6 +23,7 @@ export class Router extends EventEmitter {
   // knxd 'ignore' list: prevents infinite loops across different physical paths
   // Only ignores frames if they are marked as repeated in the KNX Control Field.
   private recentSignatures: Map<string, number> = new Map();
+  private readonly MAX_SIGNATURES_SIZE = 10000;
 
   private routerAddress: string = "15.15.0"; // Default, should be configurable
 
@@ -28,6 +32,8 @@ export class Router extends EventEmitter {
   private clientAddrsCount: number = 0;
   private clientAddrsUsed: boolean[] = [];
 
+  private logger: Logger;
+
   constructor(
     options: ExternalManagerOptions & {
       routerAddress?: string;
@@ -35,6 +41,8 @@ export class Router extends EventEmitter {
     },
   ) {
     super();
+    this.logger = createKNXLogger(options.logOptions).child({ module: "Router" });
+
     if (options.routerAddress) this.routerAddress = options.routerAddress;
 
     // Parse client addrs e.g. "15.15.10:10"
@@ -50,6 +58,8 @@ export class Router extends EventEmitter {
     if (options.tpuart) this.registerLink(new TPUARTConnection(options.tpuart));
     if (options.tunneling)
       options.tunneling.forEach((c) => this.registerLink(new KNXTunneling(c)));
+
+    this.logger.info(`Router initialized at ${this.routerAddress}`);
 
     // Periodically clean the signature cache (knxd pattern)
     setInterval(() => this.gcSignatures(), 1000);
@@ -99,15 +109,20 @@ export class Router extends EventEmitter {
   public registerLink(link: KNXService) {
     if (this.links.has(link)) return;
     this.links.add(link);
+    this.logger.info(`Link registered: ${link.constructor.name}`);
 
     link.on("indication", (cemi: ServiceMessage) => {
       this.processIncoming(cemi, link);
     });
 
-    link.on("error", (err) => this.emit("error", { link, error: err }));
+    link.on("error", (err) => {
+      this.logger.error({ link: link.constructor.name, err: err.message }, "Link error");
+      this.emit("error", { link, error: err });
+    });
 
     // knxd pattern: cleanup when link goes down
     link.on("disconnected", () => {
+      this.logger.info(`Link disconnected: ${link.constructor.name}`);
       this.unregisterLink(link);
     });
   }
@@ -173,6 +188,7 @@ export class Router extends EventEmitter {
 
     if (isRepeated) {
       if (this.recentSignatures.has(signature)) {
+        this.logger.debug({ signature, src }, "Loop prevented: duplicated repeated frame dropped");
         return; // Drop repeated packet we've recently seen on the bus
       }
     }
@@ -180,6 +196,10 @@ export class Router extends EventEmitter {
     // Always record the signature. If a loop occurs, the echoed packet will have
     // the repeat flag set to 0 (since it failed to ACK or was physically echoed),
     // and we will drop it next time.
+    if (this.recentSignatures.size >= this.MAX_SIGNATURES_SIZE) {
+      const firstKey = this.recentSignatures.keys().next().value;
+      if (firstKey !== undefined) this.recentSignatures.delete(firstKey);
+    }
     this.recentSignatures.set(signature, Date.now());
 
     // 5. Route
@@ -191,6 +211,7 @@ export class Router extends EventEmitter {
     if (src !== "0.0.0" && src !== "15.15.255") {
       if (this.addressTable.get(src) !== source) {
         this.addressTable.set(src, source);
+        this.logger.debug(`Learned IA ${src} on link ${source.constructor.name}`);
       }
     }
   }
@@ -204,7 +225,10 @@ export class Router extends EventEmitter {
       typeof cemiAny.controlField2.hopCount === "number"
     ) {
       const hops = cemiAny.controlField2.hopCount;
-      if (hops === 0) return; // Drop packet
+      if (hops === 0) {
+        this.logger.debug({ src: cemiAny.sourceAddress, dst: cemiAny.destinationAddress }, "Packet dropped: hop count reached 0");
+        return; // Drop packet
+      }
       if (hops < 7) cemiAny.controlField2.hopCount = hops - 1;
     }
 
@@ -213,6 +237,7 @@ export class Router extends EventEmitter {
 
     // If packet is destined for the router itself, consume it and don't route
     if (!isGroup && dest === this.routerAddress) {
+      this.logger.debug({ src: cemiAny.sourceAddress }, "Packet consumed by router local address");
       this.emit("indication", cemi);
       return;
     }
@@ -222,7 +247,9 @@ export class Router extends EventEmitter {
       const target = this.addressTable.get(dest);
       if (target) {
         if (target !== source) {
-          target.send(cemi).catch(() => {});
+          target.send(cemi).catch((err: any) => {
+            this.logger.debug({ target: target.constructor.name, err: err.message }, "Selective routing failed");
+          });
         }
         // Send to upper layers (KNXnet/IP server core)
         this.emit("indication", cemi);
@@ -245,7 +272,9 @@ export class Router extends EventEmitter {
         if (link.shouldFilterIA && !link.shouldFilterIA(dest)) continue;
       }
 
-      link.send(cemi).catch(() => {});
+      link.send(cemi).catch((err: any) => {
+        this.logger.debug({ link: link.constructor.name, err: err.message }, "Flooding routing failed for link");
+      });
     }
 
     // Notify upper layers

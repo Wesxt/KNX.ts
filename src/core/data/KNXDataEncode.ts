@@ -29,22 +29,13 @@ import {
   DPT250600,
 } from "../../@types/interfaces/DPTs";
 import { AllDpts } from "../../@types/types/AllDpts";
+import { DPTNotFound, InvalidParametersForDpt } from "../../errors/DPTNotFound";
+import { KNXData } from "./KNXData";
 
-class InvalidParametersForDpt extends TypeError {
-  constructor() {
-    super("The object does not contain valid parameters to encode the dpt");
-  }
-}
-
-class DPTNotFound extends Error {
-  constructor() {
-    super("This DPT is not available for coding or does not exist");
-  }
-}
-
-export class KnxDataEncoder {
+export class KnxDataEncoder extends KNXData {
 
   private constructor() {
+    super();
     throw new Error("This class is static and cannot be instantiated.");
   }
 
@@ -55,21 +46,6 @@ export class KnxDataEncoder {
     if (typeof data !== "object")
       throw new TypeError("The parameter is not object");
     return Object.values(data).every((item) => typeof item === type);
-  }
-
-  /**
-   * Normaliza el formato del DPT (número o string tipo "1.001") a su valor numérico interno.
-   */
-  private static getDptNumber(dpt: any): number | null {
-    if (typeof dpt === "number") return dpt;
-    if (typeof dpt === "string") {
-      if (dpt.includes(".")) {
-        const parts = dpt.split(".");
-        return parseInt(parts[0], 10) * 1000 + parseInt(parts[1], 10);
-      }
-      return parseInt(dpt, 10);
-    }
-    return null;
   }
 
   /**
@@ -85,16 +61,11 @@ export class KnxDataEncoder {
 
   // #region Method for encoding dpts
   static encodeThis<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(dpt: T, data: AllDpts<T>): Buffer {
-    let dptNum = this.getDptNumber(dpt);
+    let dptNum = this.getDptNumber<T>(dpt);
     if (dptNum === null) throw new DPTNotFound();
 
     // Si el DPT específico no existe, intentamos usar el principal (ej: 5.003 -> 5)
-    if (!(this.dptEnum as any).includes(dptNum)) {
-      const fallback = Math.floor(dptNum / 1000);
-      if ((this.dptEnum as any).includes(fallback)) {
-        dptNum = fallback;
-      }
-    }
+    dptNum = this.fallbackDPT(dptNum);
 
     switch (dptNum) {
       case 1:
@@ -385,6 +356,7 @@ export class KnxDataEncoder {
     }
     throw new InvalidParametersForDpt();
   }
+
   // #endregion
 
   static encodeThisOnlyVerify<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(
@@ -394,12 +366,7 @@ export class KnxDataEncoder {
     let dptNum = this.getDptNumber(dpt);
     if (dptNum === null) throw new DPTNotFound();
 
-    if (!(this.dptEnum as any).includes(dptNum)) {
-      const fallback = Math.floor(dptNum / 1000);
-      if ((this.dptEnum as any).includes(fallback)) {
-        dptNum = fallback;
-      }
-    }
+    dptNum = this.fallbackDPT(dptNum) as typeof dptNum;
 
     switch (dptNum) {
       case 1:
@@ -682,6 +649,10 @@ export class KnxDataEncoder {
   }
 
   // #region DPTEnum
+
+  /**
+   * List of all available DPTs
+   */
   static get dptEnum() {
     return [
       1, 2, 3007, 3008, 4001, 5, 5001, 5002, 6, 6001, 6010, 6020, 7, 7001, 7002, 7003, 7004, 7005, 7006, 7007, 7011,
@@ -689,6 +660,15 @@ export class KnxDataEncoder {
       13015, 13016, 13100, 14, 15, 16, 16002, 20, 20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20011, 20012,
       20013, 20014, 20017, 20020, 20021, 20022, 27001, 28001, 29, 238600, 245600, 250600, 251600,
     ] as const;
+  }
+
+  /**
+   * Returns a DPT as a number, given a string
+   * @param value DPT in "1.001" format for example
+   * @returns Returns a DPT as a number, given a string
+   */
+  static dptEnumStr(value: string) {
+    return this.getDptNumber(value);
   }
   // #endregion
 

@@ -1,13 +1,21 @@
+import { DPTNotFound } from "../../errors/DPTNotFound";
+import { DecodedDPTType } from "../../@types/types/DecodedDPTType";
+import { KNXData } from "./KNXData";
+
 /**
  * Represents KNX DPTs (Data Point Types), decodes them according to their specification
  */
-export class KnxDataDecode {
+export class KnxDataDecode extends KNXData {
   private constructor() {
+    super();
     throw new Error("This class is static and cannot be instantiated.");
   }
-
-  static decodeThis(dpt: typeof KnxDataDecode.dptEnum[number], buffer: Buffer) {
-    switch (dpt) {
+  static decodeThis<T extends typeof KnxDataDecode.dptEnum[number] | string>(dpt: T, buffer: Buffer): DecodedDPTType<T>;
+  static decodeThis<T extends typeof KnxDataDecode.dptEnum[number] | string>(dpt: T, buffer: Buffer): any {
+    let dptNum = this.getDptNumber(dpt);
+    if (dptNum === null) throw new DPTNotFound();
+    dptNum = this.fallbackDPT(dptNum) as typeof dptNum;
+    switch (dptNum) {
       case 1:
         return this.asDpt1(buffer);
         break;
@@ -226,7 +234,7 @@ export class KnxDataDecode {
         return this.asDpt251600(buffer);
         break;
       default:
-        throw new Error("The indicated dpt is not listed for decoding or the data provided is invalid");
+        throw new DPTNotFound();
     }
   }
   static get dptEnum() {

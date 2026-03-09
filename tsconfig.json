@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ES2024",
-    "module": "CommonJS",
+    "target": "es2024",
+    "module": "nodenext",
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -12,6 +12,7 @@
     "lib": [
       "ES2024"
     ],
+    "declaration": true,
     "incremental": true,
   },
   "include": [
