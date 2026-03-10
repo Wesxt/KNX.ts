@@ -6,7 +6,7 @@ import { KNXTunneling } from "./KNXTunneling";
 import { ExternalManagerOptions } from "../@types/interfaces/connection";
 
 import { Logger } from "pino";
-import { createKNXLogger } from "../utils/Logger";
+import { knxLogger, setupLogger } from "../utils/Logger";
 
 /**
  * Router: A high-performance, robust Learning Bridge.
@@ -41,7 +41,10 @@ export class Router extends EventEmitter {
     },
   ) {
     super();
-    this.logger = createKNXLogger(options.logOptions).child({ module: "Router" });
+    if (options.logOptions) {
+      setupLogger(options.logOptions);
+    }
+    this.logger = knxLogger.child({ module: "Router" });
 
     if (options.routerAddress) this.routerAddress = options.routerAddress;
 

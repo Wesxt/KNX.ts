@@ -35,7 +35,6 @@ import { Router } from "./Router";
 import os from "node:os";
 import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
 import { TunnelConnection } from "./TunnelConnection";
-import { createKNXLogger } from "../utils/Logger";
 import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
 
 /**
@@ -87,7 +86,7 @@ export class KNXnetIPServer extends KNXService {
     }
 
     // Setup Logger
-    this.logger = createKNXLogger(options.logOptions).child({ module: this.constructor.name });
+    this.logger = this.logger.child({ module: this.constructor.name });
 
     // Serial must be deterministic and unique per instance (MAC + Port), similar to knxd
     if (!options.serialNumber) {
@@ -154,35 +153,41 @@ export class KNXnetIPServer extends KNXService {
           socket.setMulticastTTL(128);
           socket.setMulticastLoopback(true);
 
-          // [MEJORA] Multi-homing: Unirse al multicast en todas las interfaces válidas
+          // [MEJORA] Multi-homing: Unirse al multicast en todas las interfaces válidas (si está habilitado)
           const interfaces = os.networkInterfaces();
           const joinedInterfaces = new Set<string>();
+          const useAllInterfaces = (this.options as KNXnetIPServerOptions).useAllInterfaces ?? true;
 
           // Siempre intenta unirse primero a la localIp especificada
           if (this.options.localIp && this.options.localIp !== "0.0.0.0") {
             try {
               socket.addMembership(this.options.ip!, this.options.localIp);
               joinedInterfaces.add(this.options.localIp);
+              this.logger.info(`Joined multicast on primary interface (${this.options.localIp})`);
             } catch (e) {
-              this.logger.debug(`Failed to join multicast on ${this.options.localIp}`);
+              this.logger.debug(`Failed to join multicast on primary interface ${this.options.localIp}`);
             }
           }
 
-          // Itera sobre todas las demás interfaces de red del host
-          for (const name of Object.keys(interfaces)) {
-            for (const net of interfaces[name]!) {
-              if (net.family === "IPv4" && !net.internal) {
-                if (!joinedInterfaces.has(net.address)) {
-                  try {
-                    socket.addMembership(this.options.ip!, net.address);
-                    joinedInterfaces.add(net.address);
-                    this.logger.info(`Joined multicast on interface ${name} (${net.address})`);
-                  } catch (err) {
-                    // Ignora interfaces virtuales que no soportan IGMP
+          if (useAllInterfaces) {
+            // Itera sobre todas las demás interfaces de red del host
+            for (const name of Object.keys(interfaces)) {
+              for (const net of interfaces[name]!) {
+                if (net.family === "IPv4" && !net.internal) {
+                  if (!joinedInterfaces.has(net.address)) {
+                    try {
+                      socket.addMembership(this.options.ip!, net.address);
+                      joinedInterfaces.add(net.address);
+                      this.logger.info(`Joined multicast on interface ${name} (${net.address})`);
+                    } catch (err) {
+                      // Ignora interfaces virtuales que no soportan IGMP
+                    }
                   }
                 }
               }
             }
+          } else {
+            this.logger.info("Multi-homing disabled. Only primary interface used for multicast.");
           }
 
           // Central listener for all KNX indications (from IP Multicast, TP, or Tunnels)

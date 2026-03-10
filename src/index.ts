@@ -4,5 +4,4 @@ export { KNXnetIPServer } from "./connection/KNXnetIPServer";
 export { KNXTunneling } from "./connection/KNXTunneling";
 export { CEMI } from "./core/CEMI";
 export { EMI } from './core/EMI';
-export * from "./utils/KNXHelper";
-export * from "./utils/localIp";
+export { knxLogger, setupLogger } from "./utils/Logger";

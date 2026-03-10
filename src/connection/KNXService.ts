@@ -27,7 +27,7 @@ import {
 } from "../@types/interfaces/connection";
 
 import { Logger } from "pino";
-import { knxLogger, createKNXLogger } from "../utils/Logger";
+import { knxLogger, setupLogger } from "../utils/Logger";
 import { KNXnetIPServer } from "./KNXnetIPServer";
 import { KNXHelper } from "../utils/KNXHelper";
 import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
@@ -57,9 +57,11 @@ export abstract class KNXService extends EventEmitter {
       localPort: 0,
       ...options,
     };
-    this.logger = this.options.logOptions
-      ? createKNXLogger(this.options.logOptions)
-      : knxLogger;
+
+    if (this.options.logOptions) {
+      setupLogger(this.options.logOptions);
+    }
+    this.logger = knxLogger;
   }
 
   abstract connect(): Promise<void>;

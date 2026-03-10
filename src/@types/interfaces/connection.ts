@@ -1,3 +1,4 @@
+import { LoggerOptions } from "pino";
 import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
 
 /**
@@ -55,6 +56,12 @@ export interface KNXnetIPServerOptions extends KNXnetIPOptions {
    * It abruptly stops a Tunneling client connection if it exceeds this limit of request messages per second; this is done to prevent performance degradation (the default is 100); to disable it, set it to less than 1
    */
   MAX_PENDING_REQUESTS_PER_CLIENT?: number;
+  /**
+   * If true, the server will join the multicast group on all valid host network interfaces (Multi-homing).
+   * This improves discovery in multi-interface systems but can be disabled for specific network isolation.
+   * Defaults to true.
+   */
+  useAllInterfaces?: boolean;
 }
 
 export interface ExternalManagerOptions {
@@ -71,8 +78,40 @@ export interface ExternalManagerOptions {
    */
   logOptions?: LoggerOptions;
 }
-
-import { LoggerOptions } from "pino";
+export interface KNXLoggerOptions extends LoggerOptions {
+  /**
+   * Use pino-pretty but it's slow
+   */
+  pretty?: boolean,
+  /**
+   * Enable or disable logging. Defaults to true.
+   */
+  enabled?: boolean;
+  /**
+   * If true, logs will be written to a file using pino-roll.
+   */
+  logToFile?: boolean;
+  /**
+   * Directory where log files will be stored. Defaults to './logs'.
+   */
+  logDir?: string;
+  /**
+   * Filename for the log file. If not provided, it defaults to YYYY-MM-DD.log.
+   */
+  logFilename?: string;
+  /**
+   * Max size of a single log file before rotation (e.g., '10M', '1G').
+   */
+  logSize?: string;
+  /**
+   * Rotation interval (e.g., '1d', '1h').
+   */
+  logInterval?: string;
+  /**
+   * Number of rotated log files to keep.
+   */
+  logKeepCount?: number;
+}
 
 export interface KNXnetIPOptions {
   ip?: string;
@@ -81,68 +120,8 @@ export interface KNXnetIPOptions {
   localPort?: number;
   /**
    * Pino logger configuration.
-   * Allows setting log levels ('info', 'debug', 'warn', 'error', 'silent')
-   * and other Pino options like transports for files or rotation.
-   * 
-   * ## 1. Silent
-  * - What it does: Completely disables all logging.
-  
-  * - When to use it: In production, when performance is the absolute priority and you don't want anything written to stdout.
-  
-  * ## 2. Error (Maximum Severity)
-  * - What it logs: Critical failures that detected an operation or closed a connection.
-  * 
-  * - Example: Second ACK timeout for sequence 5. Terminating the connection.
-  * 
-  * - Example: UDP socket errors (busy port, etc.).
-  * 
-  * - Ideal for: Monitoring system failures that require intervention.
-  * 
-  * ## 3. Warning
-  * - What it logs: Anomalous situations that don't break the server but indicate potential problems.
-  * 
-  * - Example: Client 192.168.1.50 is being flooded (105 requests/s). (Rate throttling/limiting).
-  * 
-  * - Example: IA 15.15.1 already in use. Channel replacement. (Orphan Connection Management)
-  * 
-  * - Example: First retransmission attempt timeouts.
-  * 
-  * - Ideal for: Identifying misconfigured clients or network congestion.
-  * 
-  * ## 4. info (Default Level)
-  * - What it logs: Important application lifecycle milestones.
-  * 
-  * - Example: Server initialized at 192.168.1.10:3671.
-  * 
-  * - Example: Tunnel connection established! Channel: 1, IA: 15.15.1.
-  * 
-  * - Example: Joining multicast groups on specific interfaces.
-  * 
-  * - Ideal for: Viewing the overall server status without getting bogged down in the technical details of each packet.
-  * 
-  * ## 5. debug
-  * - What it logs: Protocol "noise." Details of each control message.
-  * 
-  * - Example: Tunnel ACK received for channel 1, sequence 5.
-  * 
-  * - Example: Responses to search or description requests. * Example: Details of M_PropRead (object management requests).
-  * 
-  * - Ideal for: Developers who are integrating the library and need to understand why a command isn't being committed.
-  * 
-  * ## 6. Trace (Optional)
-  * - We haven't implemented this extensively yet
-   * 
-   * @example
-   * // Log rotation with pino-roll (included)
-   * logOptions: {
-   *   transport: {
-   *     target: 'pino-roll',
-   *     options: { file: './logs/knx.log', size: '10m', mkdir: true }
-   *   }
-   * }
-   * 
    */
-  logOptions?: LoggerOptions;
+  logOptions?: KNXLoggerOptions;
 }
 
 export interface TPUARTOptions extends KNXnetIPOptions {

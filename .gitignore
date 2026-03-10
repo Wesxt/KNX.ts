@@ -6,6 +6,10 @@ dist/
 
 # Ignore environment files
 .env
+*.env
+env/*.env
+!env/*.template
+
 
 # Ignore system-specific files
 .DS_Store
@@ -14,3 +18,7 @@ Thumbs.db
 tsconfig.tsbuildinfo
 
 GEMINI.md
+
+*.tgz
+
+log/

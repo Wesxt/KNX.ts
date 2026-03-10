@@ -13,7 +13,6 @@ import { CEMI } from "../core/CEMI";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
 
-import { createKNXLogger } from "../utils/Logger";
 
 /**
  * Handles KNXnet/IP Tunneling connections for point-to-point communication with a KNX gateway.
@@ -63,7 +62,7 @@ export class KNXTunneling extends KNXService {
         ConnectionType.TUNNEL_CONNECTION;
     }
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
-    this.logger = createKNXLogger(options.logOptions).child({ module: "TunnelClient" });
+    this.logger = this.logger.child({ module: "TunnelClient" });
   }
 
   async connect(): Promise<void> {
@@ -459,7 +458,7 @@ export class KNXTunneling extends KNXService {
           if (
             this.isSending &&
             this.activeRequest?.responseType ===
-              KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE
+            KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE
           ) {
             if (
               body[0] === 0x04 &&
@@ -522,7 +521,7 @@ export class KNXTunneling extends KNXService {
         const cemi = CEMI.fromBuffer(data);
         this.emit("indication", cemi);
         this.emit("raw_indication", data);
-      } catch (e) {}
+      } catch (e) { }
     } else if (seq === ((this.rxSequenceNumber - 1) & 0xff)) {
       // Duplicate frame, send ACK again but don't process
       this.sendAck(ackType, seq, KNXnetIPErrorCodes.E_NO_ERROR);

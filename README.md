@@ -69,6 +69,26 @@ tunnel.connect().then(() => {
 });
 ```
 
+## 📝 Logging
+
+The library uses a global singleton logger based on [Pino](https://github.com/pinojs/pino). You can configure it at the very beginning of your application using `setupLogger`.
+
+```typescript
+import { setupLogger, knxLogger } from './src/index.ts';
+
+// Configure the global logger
+setupLogger({
+  level: 'debug', // e.g., 'info', 'warn', 'error', 'debug'
+  logToFile: true,
+  logDir: './logs',
+});
+
+// You can also use the global logger in your own application
+knxLogger.info("Application started");
+```
+
+All internal components (`KNXnetIPServer`, `KNXTunneling`, `Router`, etc.) automatically use this shared logger to avoid spawning multiple Pino instances.
+
 ## 📡 Events & Callbacks
 
 The library is event-driven. You can listen for system events or specific KNX Group Addresses.
