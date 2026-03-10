@@ -34,6 +34,7 @@ export class TPUARTConnection extends KNXService {
   private serialPort: SerialPort;
   private receiver: Receiver;
   private connectionState: TPUARTState = TPUARTState.DISCONNECTED;
+  private isOpening: boolean = false;
 
   private initPromise: {
     resolve: () => void;
@@ -126,6 +127,7 @@ export class TPUARTConnection extends KNXService {
   private handleFatalError(err: any) {
     this.stopTimers();
     this.connectionState = TPUARTState.ERROR;
+    this.isOpening = false;
     // Reject all pending messages
     while (this.msgQueue.length > 0) {
       this.msgQueue.shift()?.reject(err);
@@ -159,11 +161,14 @@ export class TPUARTConnection extends KNXService {
       this.connectionState !== TPUARTState.ERROR
     )
       return;
+    if (this.isOpening) return;
+    this.isOpening = true;
     return new Promise((resolve, reject) => {
-      this.initPromise = { resolve, reject };
+      this.initPromise = { resolve: () => { this.isOpening = false; resolve(); }, reject: (e) => { this.isOpening = false; reject(e); } };
       this.serialPort.open(async (err) => {
         if (err) {
           this.initPromise = null;
+          this.isOpening = false;
           reject(err);
           return;
         }
@@ -196,6 +201,7 @@ export class TPUARTConnection extends KNXService {
   async disconnect(): Promise<void> {
     this.stopTimers();
     this.connectionState = TPUARTState.DISCONNECTED;
+    this.isOpening = false;
 
     // Clear queue
     while (this.msgQueue.length > 0) {
