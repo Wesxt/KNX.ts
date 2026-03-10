@@ -26,6 +26,10 @@ As per the `TODO.md`, several features are currently in an **experimental** stat
 git clone https://github.com/Wesxt/KNX.ts.git
 cd KNX.ts
 ```
+### npm
+```bash
+npm install knx.ts
+```
 
 ## 🛠️ Quick Start
 
@@ -150,6 +154,8 @@ server.on('1/1/1', (cemi) => {
 
   // Decode as DPT 9 (2-byte Float, e.g., Temperature)
   const temp = KnxDataDecode.decodeThis(9, cemi.TPDU.apdu.data);
+  // or
+  const temp = KnxDataDecode.decodeThis("9.001", cemi.TPDU.apdu.data);
   console.log('Temperature:', temp, '°C');
 });
 ```
@@ -165,7 +171,7 @@ import { KnxDataEncoder } from './src/core/data/KNXDataEncode';
 const buf1 = KnxDataEncoder.encodeThis(1, { value: true });
 
 // Encode a Percentage (DPT 5.001)
-const buf5 = KnxDataEncoder.encodeThis(5.001, { valueDpt5001: 50 });
+const buf5 = KnxDataEncoder.encodeThis("5.001", { valueDpt5001: 50 });
 
 // Encode a Temperature (DPT 9.001)
 const buf9 = KnxDataEncoder.encodeThis(9, { valueDpt9: 22.5 });
