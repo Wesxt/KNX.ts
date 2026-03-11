@@ -135,6 +135,10 @@ export class KNXnetIPServer extends KNXService {
   }
 
   async connect(): Promise<void> {
+    if (this.socket) {
+      return;
+    }
+
     this.socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
     this.socket.on("message", (msg, rinfo) => {
