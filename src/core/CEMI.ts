@@ -452,7 +452,7 @@ export class CEMI {
         this.controlField1.buffer.copy(buffer, baseOffset);
         this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
-        KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, baseOffset + 4);
+        KNXHelper.GetAddress(this.destinationAddress, this.controlField2.addressType === 1 ? "/" : ".").copy(buffer, baseOffset + 4);
         buffer[baseOffset + 6] = this.length;
         this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
 

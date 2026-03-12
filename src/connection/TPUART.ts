@@ -30,7 +30,7 @@ enum TPUARTState {
   ERROR,
 }
 
-export class TPUARTConnection extends KNXService {
+export class TPUARTConnection extends KNXService<TPUARTOptions> {
   private serialPort: SerialPort;
   private receiver: Receiver;
   private connectionState: TPUARTState = TPUARTState.DISCONNECTED;
@@ -88,7 +88,7 @@ export class TPUARTConnection extends KNXService {
       // 2. Hardware ACK (knxd pattern)
       // Only if NOT in busmonitor mode
       if (!this.isBusmonitorMode) {
-        const options = this.options as TPUARTOptions;
+        const options = this.options;
         let ackByte = 0x10; // Default: No ACK
         
         if (options.ackGroup || options.ackIndividual) {
@@ -341,7 +341,7 @@ export class TPUARTConnection extends KNXService {
       if (this.connectionState === TPUARTState.RESET_WAIT) {
         if (this.initTimer) clearTimeout(this.initTimer);
         this.initRetryCount = 0;
-        const options = this.options as TPUARTOptions;
+        const options = this.options;
         if (options.individualAddress) {
           this.connectionState = TPUARTState.SET_ADDR_WAIT;
           this.writeRaw(

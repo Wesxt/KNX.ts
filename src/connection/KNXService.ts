@@ -19,12 +19,7 @@ import { APDU } from "../core/layers/data/APDU";
 import { APCI } from "../core/layers/interfaces/APCI";
 import { APCIEnum } from "../core/enum/APCIEnum";
 import { AllDpts } from "../@types/types/AllDpts";
-import {
-  KNXnetIPOptions,
-  KNXnetIPServerOptions,
-  KNXTunnelingOptions,
-  TPUARTOptions,
-} from "../@types/interfaces/connection";
+import { KNXnetIPOptions } from "../@types/interfaces/connection";
 
 import { Logger } from "pino";
 import { knxLogger, setupLogger } from "../utils/Logger";
@@ -32,23 +27,13 @@ import { KNXnetIPServer } from "./KNXnetIPServer";
 import { KNXHelper } from "../utils/KNXHelper";
 import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
 
-export abstract class KNXService extends EventEmitter {
+export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOptions> extends EventEmitter {
   protected socket: dgram.Socket | net.Socket | null = null;
-  public readonly options:
-    | KNXnetIPOptions
-    | KNXnetIPServerOptions
-    | KNXTunnelingOptions
-    | TPUARTOptions;
+  public readonly options: TOptions;
   protected _transport: "UDP" | "TCP" = "UDP";
   protected logger: Logger;
 
-  constructor(
-    options:
-      | KNXnetIPOptions
-      | KNXnetIPServerOptions
-      | KNXTunnelingOptions
-      | TPUARTOptions = {},
-  ) {
+  constructor(options: TOptions = {} as TOptions) {
     super();
     this.options = {
       ip: "224.0.23.12",

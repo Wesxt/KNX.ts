@@ -10,12 +10,11 @@ import { KNXLoggerOptions } from "../@types/interfaces/connection";
  * Production mode (JSON) is only active if NOT in a test environment.
  */
 export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
-  const isProduction = process.env.NODE_ENV === "production";
 
   const targets: any[] = [];
 
   // 1. Console Transport
-  if (!isProduction) {
+  if (!options?.pretty) {
     targets.push({
       target: "pino-pretty",
       options: {

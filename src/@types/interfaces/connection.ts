@@ -49,7 +49,7 @@ export interface KNXnetIPServerOptions extends KNXnetIPOptions {
    */
   routingDelay?: number;
   /**
-   * Optional configuration for bridging to external connections (TPUART, Tunneling).
+   * Optional configuration for bridging to external connections (TPUART, Tunneling, USB).
    */
   externals?: ExternalManagerOptions;
   /**
@@ -74,9 +74,13 @@ export interface ExternalManagerOptions {
    */
   tunneling?: KNXTunnelingOptions[];
   /**
+   * Optional configuration for a physical KNX USB connection.
+   */
+  usb?: KNXUSBOptions;
+  /**
    * Pino logger configuration for the Router bridge.
    */
-  logOptions?: LoggerOptions;
+  logOptions?: KNXLoggerOptions;
 }
 export interface KNXLoggerOptions extends LoggerOptions {
   /**
@@ -141,4 +145,15 @@ export interface TPUARTOptions extends KNXnetIPOptions {
    * If true, the TPUART will send an ACK for all individual telegrams.
    */
   ackIndividual?: boolean;
+}
+
+export interface RouterConnOptions extends ExternalManagerOptions {
+  routerAddress?: string;
+  clientAddrs?: string;
+}
+
+export interface KNXUSBOptions extends KNXnetIPOptions {
+  path?: string;
+  vendorId?: number;
+  productId?: number;
 }
