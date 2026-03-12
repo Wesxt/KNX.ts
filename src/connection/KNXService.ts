@@ -23,9 +23,6 @@ import { KNXnetIPOptions } from "../@types/interfaces/connection";
 
 import { Logger } from "pino";
 import { knxLogger, setupLogger } from "../utils/Logger";
-import { KNXnetIPServer } from "./KNXnetIPServer";
-import { KNXHelper } from "../utils/KNXHelper";
-import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
 
 export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOptions> extends EventEmitter {
   protected socket: dgram.Socket | net.Socket | null = null;
@@ -100,18 +97,9 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
       );
     }
 
-    let cf2Value = 0;
-
-    if (KNXHelper.isValidGroupAddress(destination)) {
-      cf2Value = 0xe0;
-    } else if (KNXHelper.isValidIndividualAddress(destination)) {
-      cf2Value = 0x60;
-    } else {
-      throw new InvalidKnxAddressException(`This address ${destination} is not valid`);
-    }
 
     const cf1 = new ControlField(0xbc);
-    const cf2 = new ExtendedControlField(cf2Value);
+    const cf2 = new ExtendedControlField(0xe0);
     const tpdu = new TPDU(
       new TPCI(TPCIType.T_DATA_GROUP_PDU),
       new APDU(
@@ -127,7 +115,7 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
       null,
       cf1,
       cf2,
-      this instanceof KNXnetIPServer ? this.individualAddress : "0.0.0",
+      "individualAddress" in this ? (this as any).individualAddress : "1.0.1",
       destination,
       tpdu,
     );
@@ -148,9 +136,9 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
       new APDU(
         new TPCI(TPCIType.T_DATA_GROUP_PDU),
         new APCI(APCIEnum.A_GroupValue_Read_Protocol_Data_Unit),
-        Buffer.alloc(0),
+        Buffer.alloc(1),
       ),
-      Buffer.alloc(0),
+      Buffer.alloc(1),
     );
 
     const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](

@@ -43,11 +43,11 @@ export class CEMIAdapter {
 
     // --- NPDU Extraction ---
     const npduBuff = emiBuffer.subarray(6);
+    // The implementation of NPDU have NPCI
     const npdu = NPDU.fromBuffer(npduBuff);
     controlField2.hopCount = npdu.hopCount;
     controlField2.addressType = npdu.addressType;
     dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(4, 6), npdu.addressType === 1 ? "/" : ".");
-    console.trace(npdu);
     // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
     const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
     if (cemiCode === null) return null;

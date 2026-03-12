@@ -105,7 +105,7 @@ export class NPDU implements ServiceMessage {
 
     // 2. Extraer el TPDU (Transport Layer PDU)
     // El payload comienza en el índice 1.
-    const tpduBuffer = buffer.subarray(1);
+    const tpduBuffer = buffer.subarray(1, 1 + length);
 
     // Llamada estática recursiva a la siguiente capa
     const tpdu = TPDU.fromBuffer(tpduBuffer);
