@@ -3,7 +3,8 @@ import { KNXService } from "./KNXService";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { TPUARTConnection } from "./TPUART";
 import { KNXTunneling } from "./KNXTunneling";
-import { ExternalManagerOptions } from "../@types/interfaces/connection";
+import { KNXUSBConnection } from "./KNXUSBConnection";
+import { RouterConnOptions } from "../@types/interfaces/connection";
 
 import { Logger } from "pino";
 import { knxLogger, setupLogger } from "../utils/Logger";
@@ -25,7 +26,7 @@ export class Router extends EventEmitter {
   private recentSignatures: Map<string, number> = new Map();
   private readonly MAX_SIGNATURES_SIZE = 10000;
 
-  private routerAddress: string = "15.15.0"; // Default, should be configurable
+  public routerAddress: string = "15.15.0"; // Default, should be configurable
 
   // Dynamic address pool for clients (like KNXnet/IP Tunneling)
   private clientAddrsStart: string | null = null;
@@ -35,10 +36,7 @@ export class Router extends EventEmitter {
   private logger: Logger;
 
   constructor(
-    options: ExternalManagerOptions & {
-      routerAddress?: string;
-      clientAddrs?: string;
-    },
+    options: RouterConnOptions,
   ) {
     super();
     if (options.logOptions) {
@@ -61,6 +59,7 @@ export class Router extends EventEmitter {
     if (options.tpuart) this.registerLink(new TPUARTConnection(options.tpuart));
     if (options.tunneling)
       options.tunneling.forEach((c) => this.registerLink(new KNXTunneling(c)));
+    if (options.usb) this.registerLink(new KNXUSBConnection(options.usb));
 
     this.logger.info(`Router initialized at ${this.routerAddress}`);
 
@@ -170,7 +169,7 @@ export class Router extends EventEmitter {
     if (!src || src === "0.0.0") {
       cemiAny.sourceAddress =
         "individualAddress" in source.options &&
-        source.options.individualAddress
+          source.options.individualAddress
           ? source.options.individualAddress
           : this.routerAddress;
       src = cemiAny.sourceAddress;
@@ -241,12 +240,13 @@ export class Router extends EventEmitter {
     // If packet is destined for the router itself, consume it and don't route
     if (!isGroup && dest === this.routerAddress) {
       this.logger.debug({ src: cemiAny.sourceAddress }, "Packet consumed by router local address");
-      this.emit("indication", cemi);
+      this.emit("indication_link", { src: source.constructor.name, msg: cemi });
       return;
     }
 
     // Selective Routing (IA)
     if (!isGroup && dest && dest !== "0.0.0" && dest !== "15.15.255") {
+
       const target = this.addressTable.get(dest);
       if (target) {
         if (target !== source) {
@@ -255,7 +255,7 @@ export class Router extends EventEmitter {
           });
         }
         // Send to upper layers (KNXnet/IP server core)
-        this.emit("indication", cemi);
+        this.emit("indication_link", { src: source.constructor.name, msg: cemi });
         return; // Do not flood
       }
       // If target is unknown, knxd broadcasts it to all interfaces
@@ -281,7 +281,7 @@ export class Router extends EventEmitter {
     }
 
     // Notify upper layers
-    this.emit("indication", cemi);
+    this.emit("indication_link", { src: source.constructor.name, msg: cemi });
   }
 
   private getSignature(buf: Buffer, addIL: number): string {

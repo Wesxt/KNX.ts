@@ -16,6 +16,7 @@
     "watch": "tsc -w",
     "test:connection": "tsx src/test/knxd_manual.test.ts",
     "test:routing": "tsx src/test/routing_manual.test.ts",
+    "test:usb": "tsx src/test/test_usb_routing.test.ts",
     "test:controlField": "tsx src/test/controlField.test.ts",
     "pack:test": "npm pack",
     "release:patch": "npm version patch && npm publish",

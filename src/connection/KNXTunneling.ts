@@ -19,7 +19,7 @@ import { KNXTunnelingOptions } from "../@types/interfaces/connection";
  * This class manages the connection state, sequence numbering for reliable delivery,
  * heartbeat monitoring (ConnectionState), and message queuing over both UDP and TCP transports.
  */
-export class KNXTunneling extends KNXService {
+export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private channelId: number = 0;
   private sequenceNumber: number = 0;
   private rxSequenceNumber: number = 0;
@@ -57,8 +57,8 @@ export class KNXTunneling extends KNXService {
   constructor(options: KNXTunnelingOptions) {
     super(options);
     this._transport = options.transport || "UDP";
-    if (!(this.options as KNXTunnelingOptions).connectionType) {
-      (this.options as KNXTunnelingOptions).connectionType =
+    if (!this.options.connectionType) {
+      this.options.connectionType =
         ConnectionType.TUNNEL_CONNECTION;
     }
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
@@ -160,7 +160,7 @@ export class KNXTunneling extends KNXService {
         ? (this.socket as dgram.Socket).address().port
         : (this.socket as net.Socket).localPort!;
 
-    const useRouteBack = (this.options as KNXTunnelingOptions).useRouteBack;
+    const useRouteBack = this.options.useRouteBack;
     const hpai = new HPAI(
       this._transport === "TCP"
         ? HostProtocolCode.IPV4_TCP
@@ -190,7 +190,7 @@ export class KNXTunneling extends KNXService {
         this._transport === "UDP"
           ? (this.socket as dgram.Socket).address().port
           : (this.socket as net.Socket).localPort!;
-      const useRouteBack = (this.options as KNXTunnelingOptions).useRouteBack;
+      const useRouteBack = this.options.useRouteBack;
       const hpai = new HPAI(
         this._transport === "TCP"
           ? HostProtocolCode.IPV4_TCP
@@ -246,7 +246,7 @@ export class KNXTunneling extends KNXService {
 
     const cemiBuffer = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
     const isDeviceMgmt =
-      (this.options as KNXTunnelingOptions).connectionType ===
+      this.options.connectionType ===
       ConnectionType.DEVICE_MGMT_CONNECTION;
     const serviceType = isDeviceMgmt
       ? KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST
@@ -567,7 +567,7 @@ export class KNXTunneling extends KNXService {
         ? (this.socket as dgram.Socket).address().port
         : (this.socket as net.Socket).localPort!;
 
-    const useRouteBack = (this.options as KNXTunnelingOptions).useRouteBack;
+    const useRouteBack = this.options.useRouteBack;
     const hpai = new HPAI(
       this._transport === "TCP"
         ? HostProtocolCode.IPV4_TCP
