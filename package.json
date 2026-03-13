@@ -18,6 +18,7 @@
     "test:routing": "tsx src/test/routing_manual.test.ts",
     "test:usb": "tsx src/test/test_usb_routing.test.ts",
     "test:controlField": "tsx src/test/controlField.test.ts",
+    "test:emi": "tsx src/test/test_emi.test.ts",
     "pack:test": "npm pack",
     "release:patch": "npm version patch && npm publish",
     "release:minor": "npm version minor && npm publish",

@@ -88,21 +88,21 @@ export class CEMIAdapter {
     const emiCode = MessageCodeTranslator.translate(cemi.messageCode, "CEMI", "EMI2/IMI2");
     if (emiCode === null) return null;
 
-    // Buffer [MC] [Ctrl] [Src] [Dst] [NPDU_Len] [NPCI] [TPDU]
-    const buffer = Buffer.alloc(7 + 1 + tpduBuffer.length);
+    // Buffer [MC] [Ctrl] [Src] [Dst] [NPCI] [TPDU]
+    const buffer = Buffer.alloc(7 + tpduBuffer.length);
     let offset = 0;
 
     buffer.writeUInt8(emiCode, offset++);
     cemi.controlField1.buffer.copy(buffer, offset++);
 
-    KNXHelper.GetAddress_(cemi.sourceAddress).copy(buffer, offset);
+    KNXHelper.GetAddress(cemi.sourceAddress, ".").copy(buffer, offset);
     offset += 2;
 
-    KNXHelper.GetAddress_(cemi.destinationAddress).copy(buffer, offset);
+    KNXHelper.GetAddress(cemi.destinationAddress, cemi.controlField2.addressType === AddressType.GROUP ? "/" : ".").copy(buffer, offset);
     offset += 2;
 
-    // NPDU Length (NPCI + TPDU)
-    buffer.writeUInt8(tpduBuffer.length + 1, offset++);
+    // // NPDU Length (NPCI + TPDU)
+    // buffer.writeUInt8(tpduBuffer.length + 1, offset++);
 
     // Write NPCI then TPDU
     buffer.writeUInt8(npciByte, offset++);

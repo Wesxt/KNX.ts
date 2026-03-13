@@ -4,12 +4,12 @@ import { ControlField } from "./ControlField";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
 import { APCI } from "./layers/interfaces/APCI";
 import { APCIEnum } from "./enum/APCIEnum";
+import { NPDU } from "./layers/data/NPDU";
 import {
   PEI_Switch_req,
   bits4,
   L_Busmon_ind,
   L_Plain_Data_req,
-  L_Data_req,
   L_Data_con,
   L_Data_ind,
   L_Poll_Data_Req,
@@ -540,48 +540,36 @@ export class EMI {
    */
   static DataLinkLayerEMI = {
     "L_Data.req": class LDataReq implements ServiceMessage {
-      constructor(value: L_Data_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Data.req must be an object with specific properties.",
-          );
-        }
-        this.controlField1 = new ControlField(0);
-        this.controlField1.priority = value.control.priority;
-        this.controlField1.ackRequest = value.control.ackRequest;
+      constructor(
+        controlField: ControlField,
+        destinationAddress: string,
+        npdu: NPDU,
+      ) {
+        this.controlField1 = controlField;
         if (
-          KNXHelper.isValidGroupAddress(value.destinationAddress) ||
-          KNXHelper.isValidIndividualAddress(value.destinationAddress)
+          KNXHelper.isValidGroupAddress(destinationAddress) ||
+          KNXHelper.isValidIndividualAddress(destinationAddress)
         ) {
-          this.destinationAddress = value.destinationAddress;
+          this.destinationAddress = destinationAddress;
         } else {
           throw new Error(
             "The Destination Address is invalid Group Address or Individual Address",
           );
         }
-        this.addressType = value.addressType;
-        this.NPCI = value.NPCI;
-        this.npdu = value.NPDU;
+        this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.req"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
-      addressType: AddressType;
-      NPCI: number;
-      octNumber: number = 0;
-      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+      npdu: NPDU; // Network Protocol Data Unit (NPDU)
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.npdu.length);
+        const npduBuffer = this.npdu.toBuffer();
+        const buffer = Buffer.alloc(6 + npduBuffer.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] =
-          0x00 |
-          ((this.addressType << 7) |
-            (this.NPCI << 4) |
-            (this.npdu.length & 0x0f));
-        this.npdu.copy(buffer, 7);
+        npduBuffer.copy(buffer, 6);
         return buffer;
       }
 
@@ -590,10 +578,7 @@ export class EMI {
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          addressType: `AT: ${AddressType[this.addressType]}`,
-          npci: `NPCI: ${this.NPCI}`,
-          npdu: `NPDU: ${this.npdu.toString("hex")}`,
-          octNumber: this.npdu.length.toString(),
+          npdu: this.npdu.describe(),
           rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
         };
       }
@@ -615,29 +600,21 @@ export class EMI {
         //[cite_start]// Bytes 2 and 3 are unused in Req [cite: 273]
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        // Nota: Asumimos dirección de grupo por defecto si no podemos distinguir, pero el AT nos dirá
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI = (octet6 >> 4) & 0x07;
-        const length = octet6 & 0x0f;
 
         const destinationAddress = KNXHelper.GetAddress(
           destinationAddressBuf,
           addressType === AddressType.GROUP ? "/" : ".",
         );
 
-        const npdu = buffer.subarray(7, 7 + length);
+        const npdu = NPDU.fromBuffer(buffer.subarray(6));
 
-        return new LDataReq({
-          control: {
-            priority: controlField1.priority,
-            ackRequest: controlField1.ackRequest,
-          },
-          destinationAddress: destinationAddress as string,
-          addressType: addressType,
-          NPCI: NPCI as NPCI,
-          NPDU: npdu,
-        });
+        return new LDataReq(
+          controlField1,
+          destinationAddress as string,
+          npdu,
+        );
       }
     },
     "L_Data.con": class LDataCon implements ServiceMessage {

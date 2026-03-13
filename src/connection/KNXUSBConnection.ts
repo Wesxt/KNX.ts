@@ -10,6 +10,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private isConnected: boolean = false;
   private sequenceCounter: number = 0;
   private rxBuffer: Buffer = Buffer.alloc(0);
+  private supportedEmiType: number = 0x03;
 
   constructor(options: KNXUSBOptions) {
     super(options);
@@ -87,28 +88,59 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   }
 
   private async initializeDevice(): Promise<void> {
-    // 1. Send Reset Request (M_RESET_REQ = 0xF1)
-    await this.sendUSBTransfer(0x01, 0x03, Buffer.from([0xF1]));
-    await new Promise(r => setTimeout(r, 100));
+    // 1. Discover supported EMI types FIRST before sending any resets that might lock up older interfaces
+    await this.discoverEmiType();
 
-    // 2. Set active EMI type to cEMI (0x03)
+    // 2. Set active EMI type to the discovered type
     // protocolId: 0x0f (BusAccessServerFeatureService)
-    // emiId: 0x03 (service device feature set), feature: 0x05, value: 0x03
-    await this.sendUSBTransfer(0x0f, 0x03, Buffer.from([0x05, 0x03]));
+    // emiId: 0x03 (service device feature set), feature: 0x05, value: this.supportedEmiType
+    await this.sendUSBTransfer(0x0f, 0x03, Buffer.from([0x05, this.supportedEmiType]));
     await new Promise(r => setTimeout(r, 100));
 
-    // 3. Set Comm Mode (PID_COMM_MODE)
-    // M_PROP_WRITE_REQ (0xF6), ObjType (0x0008), ObjInst (0x01), PropId (0x34), Elements (1) + StartIdx (1) -> 0x1001, Mode: 0x00 (DataLinkLayer)
-    const commModeBuf = Buffer.from([
-      0xF6, // M_PROP_WRITE_REQ
-      0x00, 0x08, // Interface Object
-      0x01, // Object Instance
-      0x34, // Property ID (52)
-      0x10, 0x01, // Elements + Start Index
-      0x00 // Data (DataLinkLayer, 0x00)
-    ]);
-    await this.sendUSBTransfer(0x01, 0x03, commModeBuf);
-    await new Promise(r => setTimeout(r, 100));
+    if (this.supportedEmiType === 0x03) {
+      // 3. cEMI Specific Initialization
+      // Send Reset Request (M_RESET_REQ = 0xF1)
+      await this.sendUSBTransfer(0x01, 0x03, Buffer.from([0xF1]));
+      await new Promise(r => setTimeout(r, 100));
+
+      // Set Comm Mode (PID_COMM_MODE)
+      // M_PROP_WRITE_REQ (0xF6), ObjType (0x0008), ObjInst (0x01), PropId (0x34), Elements (1) + StartIdx (1) -> 0x1001, Mode: 0x00 (DataLinkLayer)
+      const commModeBuf = Buffer.from([
+        0xF6, // M_PROP_WRITE_REQ
+        0x00, 0x08, // Interface Object
+        0x01, // Object Instance
+        0x34, // Property ID (52)
+        0x10, 0x01, // Elements + Start Index
+        0x00 // Data (DataLinkLayer, 0x00)
+      ]);
+      await this.sendUSBTransfer(0x01, 0x03, commModeBuf);
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  private async discoverEmiType(): Promise<void> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.removeListener("emi_discovery", onDiscovery);
+        this.logger.warn("EMI discovery timeout, defaulting to cEMI");
+        this.supportedEmiType = 0x03;
+        resolve();
+      }, 3000);
+
+      const onDiscovery = (version: number) => {
+        clearTimeout(timeout);
+        this.supportedEmiType = version;
+        this.logger.info(`Discovered EMI version: ${version === 0x03 ? 'cEMI' : (version === 0x01 ? 'EMI1' : 'EMI2')}`);
+        resolve();
+      };
+
+      this.once("emi_discovery", onDiscovery);
+
+      // Send Inquiry: protocolId = 0x0f, emiId = 0x01, payload = [0x01] (Feature ID 1)
+      this.sendUSBTransfer(0x0f, 0x01, Buffer.from([0x01])).catch(e => {
+        this.logger.error("Error sending EMI discovery: " + e);
+      });
+    });
   }
 
   private async sendUSBTransfer(protocolId: number, emiId: number, data: Buffer): Promise<void> {
@@ -164,16 +196,39 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     }
 
     try {
-      let frame: Buffer;
+      let frame: Buffer | undefined;
 
-      if (Buffer.isBuffer(data)) {
-        frame = data;
+      if (this.supportedEmiType === 0x03) {
+        if (Buffer.isBuffer(data)) {
+          frame = data;
+        } else {
+          frame = data.toBuffer();
+        }
       } else {
-        frame = data.toBuffer();
+        // EMI1 / EMI2 mode
+        let emiMsg: any;
+        if (Buffer.isBuffer(data)) {
+           try {
+             const cemiMsg = CEMI.fromBuffer(data);
+             emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
+           } catch(e) {
+             // If we can't parse it as cEMI, assume it's already an EMI buffer
+             frame = data;
+           }
+        } else {
+           emiMsg = CEMIAdapter.cemiToEmi(data);
+        }
+
+        if (emiMsg) {
+          frame = emiMsg.toBuffer();
+        } else if (!frame) {
+          throw new Error("Could not convert cEMI to EMI");
+        }
       }
 
-      // Send as cEMI
-      await this.sendUSBTransfer(0x01, 0x03, frame);
+      if (frame) {
+        await this.sendUSBTransfer(0x01, this.supportedEmiType, frame);
+      }
 
     } catch (err) {
       this.logger.error("Error sending to USB:" + err);
@@ -219,21 +274,45 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     const bodyStart = headerLength;
     const payload = buffer.subarray(bodyStart, bodyStart + bodyLength);
 
-    if (protocolId === 0x01 && emiId === 0x03) {
-      // cEMI
+    if (protocolId === 0x0f && emiId === 0x02 && payload.length >= 3 && payload[0] === 0x01) {
+      // EMI Discovery response
+      const bitmask = payload[2];
+      let version = 0x03; // fallback to cEMI
+      if (bitmask & 0x04) version = 0x03;
+      else if (bitmask & 0x02) version = 0x02;
+      else if (bitmask & 0x01) version = 0x01;
+      this.emit("emi_discovery", version);
+      return;
+    }
+
+    if (protocolId === 0x01 && emiId === this.supportedEmiType) {
       if (payload.length > 0) {
-        try {
-          const cemiMsg = CEMI.fromBuffer(payload);
-          if (cemiMsg) {
-            this.emit("indication", cemiMsg);
-            this.emit("raw_indication", payload);
-            try {
-               const emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
-               if (emiMsg) this.emit("indication_emi", emiMsg);
-            } catch(e) {}
+        if (this.supportedEmiType === 0x03) {
+          // cEMI
+          try {
+            const cemiMsg = CEMI.fromBuffer(payload);
+            if (cemiMsg) {
+              this.emit("indication", cemiMsg);
+              this.emit("raw_indication", payload);
+              try {
+                 const emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
+                 if (emiMsg) this.emit("indication_emi", emiMsg);
+              } catch(e) {}
+            }
+          } catch (e: any) {
+            this.logger.debug(`Error parsing incoming USB cEMI data: ${e.message}`);
           }
-        } catch (e: any) {
-          this.logger.debug(`Error parsing incoming USB cEMI data: ${e.message}`);
+        } else {
+          // EMI1 / EMI2
+          try {
+            const cemiMsg = CEMIAdapter.emiToCemi(payload);
+            if (cemiMsg) {
+              this.emit("indication", cemiMsg);
+              this.emit("raw_indication", payload);
+            }
+          } catch (e: any) {
+            this.logger.debug(`Error parsing incoming USB EMI data: ${e.message}`);
+          }
         }
       }
     }
