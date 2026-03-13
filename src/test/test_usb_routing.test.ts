@@ -87,6 +87,7 @@ async function testRouting() {
     // usb.read("1.1.1");
     // usb.read("1/0/1");
     usb.write("0/0/1", "1", { value: bol }).then((value) => { console.log("Enviado", bol, num); });
+    usb.write("0/0/2", "1", { value: bol }).then((value) => { console.log("Enviado", bol, num); });
     // let cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](
     //   null,
     //   controlField,

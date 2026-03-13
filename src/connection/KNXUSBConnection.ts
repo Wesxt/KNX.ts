@@ -8,8 +8,7 @@ import { KNXUSBOptions } from '../@types/interfaces/connection';
 export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private device: hid.HID | null = null;
   private isConnected: boolean = false;
-  private sequenceCounter: number = 0;
-  private rxBuffer: Buffer = Buffer.alloc(0);
+  private busConnected: boolean = false;
   private supportedEmiType: number = 0x03;
 
   constructor(options: KNXUSBOptions) {
@@ -54,8 +53,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
         this.device.on("error", (err: any) => this.handleError(err));
 
         this.isConnected = true;
-        this.sequenceCounter = 0;
-        this.rxBuffer = Buffer.alloc(0);
+        this.busConnected = false;
 
         this.initializeDevice().then(() => {
           this.emit("connected");
@@ -83,12 +81,14 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     } finally {
       this.device = null;
       this.isConnected = false;
+      this.busConnected = false;
       this.emit("disconnected");
     }
   }
 
   private async initializeDevice(): Promise<void> {
     // 1. Discover supported EMI types FIRST before sending any resets that might lock up older interfaces
+    // knxd implementation uses up to 5 retries for EMI discovery
     await this.discoverEmiType();
 
     // 2. Set active EMI type to the discovered type
@@ -120,12 +120,26 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
 
   private async discoverEmiType(): Promise<void> {
     return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        this.removeListener("emi_discovery", onDiscovery);
-        this.logger.warn("EMI discovery timeout, defaulting to cEMI");
-        this.supportedEmiType = 0x03;
-        resolve();
-      }, 3000);
+      let attempts = 0;
+      let timeout: NodeJS.Timeout;
+
+      const attemptDiscovery = () => {
+        attempts++;
+        this.sendUSBTransfer(0x0f, 0x01, Buffer.from([0x01])).catch(e => {
+          this.logger.error("Error sending EMI discovery: " + e);
+        });
+
+        timeout = setTimeout(() => {
+          if (attempts < 5) {
+            attemptDiscovery();
+          } else {
+            this.removeListener("emi_discovery", onDiscovery);
+            this.logger.warn("EMI discovery timeout, defaulting to cEMI");
+            this.supportedEmiType = 0x03;
+            resolve();
+          }
+        }, 1000); // 1 second timeout for each retry like knxd
+      };
 
       const onDiscovery = (version: number) => {
         clearTimeout(timeout);
@@ -135,11 +149,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
       };
 
       this.once("emi_discovery", onDiscovery);
-
-      // Send Inquiry: protocolId = 0x0f, emiId = 0x01, payload = [0x01] (Feature ID 1)
-      this.sendUSBTransfer(0x0f, 0x01, Buffer.from([0x01])).catch(e => {
-        this.logger.error("Error sending EMI discovery: " + e);
-      });
+      attemptDiscovery();
     });
   }
 
@@ -161,32 +171,23 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private sendHIDReport(data: Buffer): void {
     if (!this.device) return;
 
-    const reportSize = 64;
-    const maxBodyLength = 61;
+    if (data.length > 61) {
+      this.logger.error("KNX USB: Frame too long for single packet, and knxd logic does not support fragmentation");
+      return;
+    }
 
-    let offset = 0;
-    while (offset < data.length) {
-      const isStart = offset === 0;
-      const chunk = data.subarray(offset, offset + maxBodyLength);
-      offset += chunk.length;
-      const isEnd = offset >= data.length;
+    // knxd perfectly sizes each USB send to exactly 64 bytes padded with 0
+    const report = Buffer.alloc(64);
+    report[0] = 0x01; // Report ID
+    report[1] = 0x13; // Sequence=1, Type=3 (single-frame packet)
+    report[2] = data.length;
+    data.copy(report, 3);
 
-      let packageType = 0;
-      if (isStart && isEnd) packageType = 3;
-      else if (isStart) packageType = 1;
-      else if (isEnd) packageType = 2;
-      else packageType = 0;
-
-      this.sequenceCounter = (this.sequenceCounter + 1) & 0x0f;
-      if (this.sequenceCounter === 0) this.sequenceCounter = 1;
-
-      const report = Buffer.alloc(reportSize);
-      report[0] = 0x01; // Report ID
-      report[1] = (this.sequenceCounter << 4) | packageType;
-      report[2] = chunk.length;
-      chunk.copy(report, 3);
-
+    try {
       this.device.write(report);
+    } catch (e) {
+      this.logger.error("Failed to write to KNX USB device: " + e);
+      this.handleError(e);
     }
   }
 
@@ -239,26 +240,34 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private handleData(data: Buffer) {
     if (data.length < 3 || data[0] !== 0x01) return;
 
-    const sequenceAndType = data[1];
-    const packageType = sequenceAndType & 0x0f;
-    const bodyLength = data[2];
+    // knxd strictly processes single-frame packets
+    if ((data[1] & 0x0f) !== 0x03) return;
 
-    if (data.length < 3 + bodyLength) return;
+    // Connection State Check based on knxd USBLowLevelDriver logic
+    const wanted = Buffer.from([0x01, 0x13, 0x0A, 0x00, 0x08, 0x00, 0x02, 0x0F, 0x04, 0x00, 0x00, 0x03]);
+    if (data.length >= 12 && data.subarray(0, 12).equals(wanted)) {
+      const isConnectedToBus = (data[12] & 0x01) === 1;
+      if (isConnectedToBus) {
+        if (!this.busConnected) {
+          this.busConnected = true;
+          this.logger.info("KNX Bus Connected");
+          this.emit("bus_connected");
+        }
+      } else {
+        if (this.busConnected) {
+          this.busConnected = false;
+          this.logger.error("KNX Bus Disconnected");
+          this.emit("bus_disconnected");
+        }
+      }
+      return;
+    }
+
+    const bodyLength = data[2];
+    if (3 + bodyLength > data.length) return;
 
     const body = data.subarray(3, 3 + bodyLength);
-
-    if (packageType & 0x01) {
-      // Start of packet
-      this.rxBuffer = Buffer.from(body);
-    } else {
-      // Continuation
-      this.rxBuffer = Buffer.concat([this.rxBuffer, body]);
-    }
-
-    if (packageType & 0x02) {
-      // End of packet, process frame
-      this.processTransferFrame(this.rxBuffer);
-    }
+    this.processTransferFrame(body);
   }
 
   private processTransferFrame(buffer: Buffer) {
@@ -275,12 +284,16 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     const payload = buffer.subarray(bodyStart, bodyStart + bodyLength);
 
     if (protocolId === 0x0f && emiId === 0x02 && payload.length >= 3 && payload[0] === 0x01) {
-      // EMI Discovery response
+      // EMI Discovery response, implementing exact knxd fallback logic
       const bitmask = payload[2];
       let version = 0x03; // fallback to cEMI
-      if (bitmask & 0x04) version = 0x03;
-      else if (bitmask & 0x02) version = 0x02;
-      else if (bitmask & 0x01) version = 0x01;
+      if (bitmask & 0x02) version = 0x02;      // vEMI2
+      else if (bitmask & 0x01) version = 0x01; // vEMI1
+      else if (bitmask & 0x04) version = 0x03; // vCEMI
+      else {
+        this.logger.warn(`EMI version bitmask 0x${bitmask.toString(16)} not recognized, defaulting to cEMI`);
+        version = 0x03;
+      }
       this.emit("emi_discovery", version);
       return;
     }
@@ -321,6 +334,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private handleError(err: any) {
     this.logger.error("KNX USB Error:", err);
     this.isConnected = false;
+    this.busConnected = false;
     this.emit("error", err);
   }
 }
