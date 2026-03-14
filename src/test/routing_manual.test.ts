@@ -25,13 +25,9 @@ async function testRouting() {
     friendlyName: "Arnold",
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
-    logOptions: {
-      logDir: "./log",
-      logToFile: true
-    },
     externals: {
       tpuart: {
-        path: '/dev/ttyACM0',
+        path: '/dev/ttyS0',
       }
     },
     useAllInterfaces: false

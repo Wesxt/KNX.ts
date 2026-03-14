@@ -43,11 +43,11 @@ export class CEMIAdapter {
 
     // --- NPDU Extraction ---
     const npduBuff = emiBuffer.subarray(6);
+    // The implementation of NPDU have NPCI
     const npdu = NPDU.fromBuffer(npduBuff);
     controlField2.hopCount = npdu.hopCount;
     controlField2.addressType = npdu.addressType;
     dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(4, 6), npdu.addressType === 1 ? "/" : ".");
-    console.trace(npdu);
     // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
     const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
     if (cemiCode === null) return null;
@@ -88,21 +88,21 @@ export class CEMIAdapter {
     const emiCode = MessageCodeTranslator.translate(cemi.messageCode, "CEMI", "EMI2/IMI2");
     if (emiCode === null) return null;
 
-    // Buffer [MC] [Ctrl] [Src] [Dst] [NPDU_Len] [NPCI] [TPDU]
-    const buffer = Buffer.alloc(7 + 1 + tpduBuffer.length);
+    // Buffer [MC] [Ctrl] [Src] [Dst] [NPCI] [TPDU]
+    const buffer = Buffer.alloc(7 + tpduBuffer.length);
     let offset = 0;
 
     buffer.writeUInt8(emiCode, offset++);
     cemi.controlField1.buffer.copy(buffer, offset++);
 
-    KNXHelper.GetAddress_(cemi.sourceAddress).copy(buffer, offset);
+    KNXHelper.GetAddress(cemi.sourceAddress, ".").copy(buffer, offset);
     offset += 2;
 
-    KNXHelper.GetAddress_(cemi.destinationAddress).copy(buffer, offset);
+    KNXHelper.GetAddress(cemi.destinationAddress, cemi.controlField2.addressType === AddressType.GROUP ? "/" : ".").copy(buffer, offset);
     offset += 2;
 
-    // NPDU Length (NPCI + TPDU)
-    buffer.writeUInt8(tpduBuffer.length + 1, offset++);
+    // // NPDU Length (NPCI + TPDU)
+    // buffer.writeUInt8(tpduBuffer.length + 1, offset++);
 
     // Write NPCI then TPDU
     buffer.writeUInt8(npciByte, offset++);

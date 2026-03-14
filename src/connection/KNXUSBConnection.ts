@@ -4,12 +4,12 @@ import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { CEMIAdapter } from "../utils/CEMIAdapter";
 import { CEMI } from "../core/CEMI";
 import { KNXUSBOptions } from '../@types/interfaces/connection';
-import { EMI } from '../core/EMI';
-import { inspect } from 'util';
 
 export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private device: hid.HID | null = null;
   private isConnected: boolean = false;
+  private busConnected: boolean = false;
+  private supportedEmiType: number = 0x03;
 
   constructor(options: KNXUSBOptions) {
     super(options);
@@ -32,8 +32,10 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
             (d.vendorId === 0x145c) || // ABB/Busch-Jaeger
             (d.vendorId === 0x10a6) || // MDT
             (d.vendorId === 0x135e) || // Siemens
-            (d.vendorId === 0x0e77) || // Weinzierl
-            (d.product && d.product.includes('KNX'))
+            (d.vendorId === 0x0e77) || // Weinzierl/Siemens
+            (d.vendorId === 0x147b) || // Weinzierl
+            (d.vendorId === 0x16d0) || // MCS
+            (d.product && d.product.toLowerCase().includes('knx'))
           );
 
           if (!knxDevice || !knxDevice.path) {
@@ -46,16 +48,22 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
         this.device = new hid.HID(devicePath);
 
         this.device.on("data", (data: Buffer) => {
-          console.log(inspect(data, {
-            depth: Infinity
-          }));
           this.handleData(data);
         });
         this.device.on("error", (err: any) => this.handleError(err));
 
         this.isConnected = true;
-        this.emit("connected");
-        resolve();
+        this.busConnected = false;
+
+        this.initializeDevice().then(() => {
+          this.emit("connected");
+          resolve();
+        }).catch((err) => {
+          this.logger.error("Failed to initialize KNX USB: " + err);
+          this.disconnect();
+          reject(err);
+        });
+
       } catch (err) {
         this.logger.error("Failed to connect to KNX USB: " + err);
         reject(err);
@@ -73,7 +81,113 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     } finally {
       this.device = null;
       this.isConnected = false;
+      this.busConnected = false;
       this.emit("disconnected");
+    }
+  }
+
+  private async initializeDevice(): Promise<void> {
+    // 1. Discover supported EMI types FIRST before sending any resets that might lock up older interfaces
+    // knxd implementation uses up to 5 retries for EMI discovery
+    await this.discoverEmiType();
+
+    // 2. Set active EMI type to the discovered type
+    // protocolId: 0x0f (BusAccessServerFeatureService)
+    // emiId: 0x03 (service device feature set), feature: 0x05, value: this.supportedEmiType
+    await this.sendUSBTransfer(0x0f, 0x03, Buffer.from([0x05, this.supportedEmiType]));
+    await new Promise(r => setTimeout(r, 100));
+
+    if (this.supportedEmiType === 0x03) {
+      // 3. cEMI Specific Initialization
+      // Send Reset Request (M_RESET_REQ = 0xF1)
+      await this.sendUSBTransfer(0x01, 0x03, Buffer.from([0xF1]));
+      await new Promise(r => setTimeout(r, 100));
+
+      // Set Comm Mode (PID_COMM_MODE)
+      // M_PROP_WRITE_REQ (0xF6), ObjType (0x0008), ObjInst (0x01), PropId (0x34), Elements (1) + StartIdx (1) -> 0x1001, Mode: 0x00 (DataLinkLayer)
+      const commModeBuf = Buffer.from([
+        0xF6, // M_PROP_WRITE_REQ
+        0x00, 0x08, // Interface Object
+        0x01, // Object Instance
+        0x34, // Property ID (52)
+        0x10, 0x01, // Elements + Start Index
+        0x00 // Data (DataLinkLayer, 0x00)
+      ]);
+      await this.sendUSBTransfer(0x01, 0x03, commModeBuf);
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
+
+  private async discoverEmiType(): Promise<void> {
+    return new Promise((resolve) => {
+      let attempts = 0;
+      let timeout: NodeJS.Timeout;
+
+      const attemptDiscovery = () => {
+        attempts++;
+        this.sendUSBTransfer(0x0f, 0x01, Buffer.from([0x01])).catch(e => {
+          this.logger.error("Error sending EMI discovery: " + e);
+        });
+
+        timeout = setTimeout(() => {
+          if (attempts < 5) {
+            attemptDiscovery();
+          } else {
+            this.removeListener("emi_discovery", onDiscovery);
+            this.logger.warn("EMI discovery timeout, defaulting to cEMI");
+            this.supportedEmiType = 0x03;
+            resolve();
+          }
+        }, 1000); // 1 second timeout for each retry like knxd
+      };
+
+      const onDiscovery = (version: number) => {
+        clearTimeout(timeout);
+        this.supportedEmiType = version;
+        this.logger.info(`Discovered EMI version: ${version === 0x03 ? 'cEMI' : (version === 0x01 ? 'EMI1' : 'EMI2')}`);
+        resolve();
+      };
+
+      this.once("emi_discovery", onDiscovery);
+      attemptDiscovery();
+    });
+  }
+
+  private async sendUSBTransfer(protocolId: number, emiId: number, data: Buffer): Promise<void> {
+    if (!this.device) throw new Error("Device offline");
+
+    const header = Buffer.alloc(8);
+    header[0] = 0x00; // protocol version
+    header[1] = 0x08; // header length
+    header.writeUInt16BE(data.length, 2); // body length
+    header[4] = protocolId;
+    header[5] = emiId;
+    header.writeUInt16BE(0x0000, 6); // manufacturer code
+
+    const body = Buffer.concat([header, data]);
+    this.sendHIDReport(body);
+  }
+
+  private sendHIDReport(data: Buffer): void {
+    if (!this.device) return;
+
+    if (data.length > 61) {
+      this.logger.error("KNX USB: Frame too long for single packet, and knxd logic does not support fragmentation");
+      return;
+    }
+
+    // knxd perfectly sizes each USB send to exactly 64 bytes padded with 0
+    const report = Buffer.alloc(64);
+    report[0] = 0x01; // Report ID
+    report[1] = 0x13; // Sequence=1, Type=3 (single-frame packet)
+    report[2] = data.length;
+    data.copy(report, 3);
+
+    try {
+      this.device.write(report);
+    } catch (e) {
+      this.logger.error("Failed to write to KNX USB device: " + e);
+      this.handleError(e);
     }
   }
 
@@ -83,32 +197,39 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     }
 
     try {
-      let frame: Buffer;
+      let frame: Buffer | undefined;
 
-      if (Buffer.isBuffer(data)) {
-        try {
-          const cemi = CEMI.fromBuffer(data);
-          const emi = CEMIAdapter.cemiToEmi(cemi);
-          if (!emi) throw new Error("Could not convert CEMI to EMI");
-          frame = emi.toBuffer();
-        } catch (e) {
+      if (this.supportedEmiType === 0x03) {
+        if (Buffer.isBuffer(data)) {
           frame = data;
+        } else {
+          frame = data.toBuffer();
         }
       } else {
-        const emi = CEMIAdapter.cemiToEmi(data);
-        if (!emi) throw new Error("Could not convert CEMI to EMI");
-        frame = emi.toBuffer();
+        // EMI1 / EMI2 mode
+        let emiMsg: any;
+        if (Buffer.isBuffer(data)) {
+           try {
+             const cemiMsg = CEMI.fromBuffer(data);
+             emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
+           } catch(e) {
+             // If we can't parse it as cEMI, assume it's already an EMI buffer
+             frame = data;
+           }
+        } else {
+           emiMsg = CEMIAdapter.cemiToEmi(data);
+        }
+
+        if (emiMsg) {
+          frame = emiMsg.toBuffer();
+        } else if (!frame) {
+          throw new Error("Could not convert cEMI to EMI");
+        }
       }
 
-      // KNX USB requires 64-byte HID reports
-      const report = Buffer.alloc(64);
-      report[0] = 0x01; // Report ID for KNX
-
-      // Some interfaces require the frame length to be specified explicitly
-      // But standard EMI wrapper includes message code.
-      frame.copy(report, 1, 0, Math.min(frame.length, 63));
-
-      this.device.write(report);
+      if (frame) {
+        await this.sendUSBTransfer(0x01, this.supportedEmiType, frame);
+      }
 
     } catch (err) {
       this.logger.error("Error sending to USB:" + err);
@@ -117,69 +238,103 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   }
 
   private handleData(data: Buffer) {
-    let payloadOffset = 0;
-    // let isCemi = false;
-    // Check if the first byte is the Report ID (0x01)
-    if (data[0] === 0x01) {
-      // Check for KNX USB Transfer Protocol Header
-      // Format: 01 [Seq/Type] [TotalLen] [ProtocolVersion] [HeaderLen] [BodyLen MSB] [BodyLen LSB] [ProtocolID] [EMI_ID]
-      if (data.length > 8 && data[3] === 0x00 && data[4] > 0 && data[7] === 0x01) {
-        payloadOffset = 3 + data[4];
-        // if (data[8] === 0x03) {
-        //   isCemi = true; // EMI ID 0x03 indicates cEMI                                                                                                                                       
-        // }
-      } else if (data[1] === 0x29 || data[1] === 0x2b || data[1] === 0x11 || data[1] === 0x8b || data[1] === 0x49) {
-        payloadOffset = 1; // Raw EMI/cEMI without USB Transfer Header
+    if (data.length < 3 || data[0] !== 0x01) return;
+
+    // knxd strictly processes single-frame packets
+    if ((data[1] & 0x0f) !== 0x03) return;
+
+    // Connection State Check based on knxd USBLowLevelDriver logic
+    const wanted = Buffer.from([0x01, 0x13, 0x0A, 0x00, 0x08, 0x00, 0x02, 0x0F, 0x04, 0x00, 0x00, 0x03]);
+    if (data.length >= 12 && data.subarray(0, 12).equals(wanted)) {
+      const isConnectedToBus = (data[12] & 0x01) === 1;
+      if (isConnectedToBus) {
+        if (!this.busConnected) {
+          this.busConnected = true;
+          this.logger.info("KNX Bus Connected");
+          this.emit("bus_connected");
+        }
+      } else {
+        if (this.busConnected) {
+          this.busConnected = false;
+          this.logger.error("KNX Bus Disconnected");
+          this.emit("bus_disconnected");
+        }
       }
+      return;
     }
 
-    if (payloadOffset === 0 || payloadOffset >= data.length) return;
+    const bodyLength = data[2];
+    if (3 + bodyLength > data.length) return;
 
-    const messageCode = data[payloadOffset];
+    const body = data.subarray(3, 3 + bodyLength);
+    this.processTransferFrame(body);
+  }
 
-    // Valid EMI/cEMI message codes (e.g., L_Data.ind, L_Data.con)
-    if (messageCode === 0x29 || messageCode === 0x2B || messageCode === 0x11 || messageCode === 0x8B || messageCode === 0x49) {
+  private processTransferFrame(buffer: Buffer) {
+    if (buffer.length < 8) return;
 
-      let endIdx = data.length;
-      while (endIdx > payloadOffset && data[endIdx - 1] === 0) {
-        endIdx--;
+    const headerLength = buffer[1];
+    const bodyLength = buffer.readUInt16BE(2);
+    const protocolId = buffer[4];
+    const emiId = buffer[5];
+
+    if (headerLength !== 0x08 || buffer.length < headerLength + bodyLength) return;
+
+    const bodyStart = headerLength;
+    const payload = buffer.subarray(bodyStart, bodyStart + bodyLength);
+
+    if (protocolId === 0x0f && emiId === 0x02 && payload.length >= 3 && payload[0] === 0x01) {
+      // EMI Discovery response, implementing exact knxd fallback logic
+      const bitmask = payload[2];
+      let version = 0x03; // fallback to cEMI
+      if (bitmask & 0x02) version = 0x02;      // vEMI2
+      else if (bitmask & 0x01) version = 0x01; // vEMI1
+      else if (bitmask & 0x04) version = 0x03; // vCEMI
+      else {
+        this.logger.warn(`EMI version bitmask 0x${bitmask.toString(16)} not recognized, defaulting to cEMI`);
+        version = 0x03;
       }
+      this.emit("emi_discovery", version);
+      return;
+    }
 
-      // If we know it's not cEMI, we can approximate the length using NPDU len
-      // if (!isCemi && endIdx - payloadOffset > 7) {
-      if (endIdx - payloadOffset > 7) {
-        const npduLen = data[payloadOffset + 6];
-        const expectedLen = 7 + npduLen;
-        if (expectedLen > 0 && expectedLen <= (data.length - payloadOffset)) {
-          endIdx = payloadOffset + expectedLen;
+    if (protocolId === 0x01 && emiId === this.supportedEmiType) {
+      if (payload.length > 0) {
+        if (this.supportedEmiType === 0x03) {
+          // cEMI
+          try {
+            const cemiMsg = CEMI.fromBuffer(payload);
+            if (cemiMsg) {
+              this.emit("indication", cemiMsg);
+              this.emit("raw_indication", payload);
+              try {
+                 const emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
+                 if (emiMsg) this.emit("indication_emi", emiMsg);
+              } catch(e) {}
+            }
+          } catch (e: any) {
+            this.logger.debug(`Error parsing incoming USB cEMI data: ${e.message}`);
+          }
+        } else {
+          // EMI1 / EMI2
+          try {
+            const cemiMsg = CEMIAdapter.emiToCemi(payload);
+            if (cemiMsg) {
+              this.emit("indication", cemiMsg);
+              this.emit("raw_indication", payload);
+            }
+          } catch (e: any) {
+            this.logger.debug(`Error parsing incoming USB EMI data: ${e.message}`);
+          }
         }
-      }
-      const payloadBuffer = data.subarray(payloadOffset, endIdx);
-
-      try {
-        let emimsg: ServiceMessage | null = null;
-        let cemiMsg: ServiceMessage | null = null;
-
-        emimsg = EMI.fromBuffer(payloadBuffer);
-        console.log("EMI_USB", emimsg);
-        cemiMsg = CEMIAdapter.emiToCemi(payloadBuffer);
-        console.log("EMI_TO_CEMI_USB", cemiMsg);
-        console.log("Direct_CEMI", CEMI.fromBuffer(payloadBuffer));
-
-        if (emimsg) {
-          this.emit("indication", cemiMsg);
-          // ** Falta ver como lo recibe el RouterLinks
-          this.emit("indication_emi", emimsg);
-          this.emit("raw_indication", payloadBuffer);
-        }
-      } catch (e: any) {
-        this.logger.debug(`Error parsing incoming USB data: ${e.message}`);
       }
     }
   }
+
   private handleError(err: any) {
     this.logger.error("KNX USB Error:", err);
     this.isConnected = false;
+    this.busConnected = false;
     this.emit("error", err);
   }
 }
