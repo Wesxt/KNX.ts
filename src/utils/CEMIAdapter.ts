@@ -1,12 +1,12 @@
 import { CEMI } from "../core/CEMI";
 import { ControlField } from "../core/ControlField";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
-import { TPDU } from "../core/layers/data/TPDU";
 import { KNXHelper } from "./KNXHelper";
 import { AddressType } from "../core/enum/EnumControlFieldExtended";
 import { MessageCodeTranslator } from "./MessageCodeTranslator";
 import { EMI } from "../core/EMI";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { NPDU } from "../core/layers/data/NPDU";
 
 /**
  * Adapter utility to convert between EMI (External Message Interface) and cEMI (Common External Message Interface).
@@ -20,18 +20,17 @@ export class CEMIAdapter {
   static emiToCemi(emiBuffer: Buffer): ServiceMessage | null {
     if (emiBuffer.length < 7) throw new Error("EMI buffer too short");
 
-    let offset = 0;
-    const messageCode = emiBuffer.readUInt8(offset++);
-    const ctrlByte = emiBuffer.readUInt8(offset++);
+    const messageCode = emiBuffer.readUInt8(0);
+    const ctrlByte = emiBuffer.readUInt8(1);
 
     // Addresses (2 bytes each)
-    const srcAddr = KNXHelper.GetAddress(emiBuffer.subarray(offset, offset + 2), ".") as string;
-    offset += 2;
-    const dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(offset, offset + 2), "/") as string;
-    offset += 2;
+    const srcAddr = KNXHelper.GetAddress(emiBuffer.subarray(2, 4), ".") as string;
+    let dstAddr = "";
 
-    const dataLength = emiBuffer.readUInt8(offset++); // NPDU Length
-    const npciByte = emiBuffer.readUInt8(offset++); // NPCI
+    // const oct6 = emiBuffer.readUInt8(6); // AT,NPCI,LG
+    // const addressType = (oct6 >> 7) & 0x01;
+    // const hopCount = (oct6 >> 4) & 0x07;
+    // const octNum = oct6 & 0x0f; // NPDU Length
 
     // --- Control Fields Transformation ---
     // 1. cEMI Control Field 1 is identical to EMI Control
@@ -39,19 +38,16 @@ export class CEMIAdapter {
 
     // 2. cEMI Control Field 2 (Extended) is extracted from EMI NPCI
     // NPCI: [Res/AddrType] [Hop3] [Hop2] [Hop1] [Len3] [Len2] [Len1] [Len0]
-    const hopCount = (npciByte >> 4) & 0x07;
-    const addressType = npciByte & 0x80 ? AddressType.GROUP : AddressType.INDIVIDUAL;
 
     const controlField2 = new ExtendedControlField();
-    controlField2.hopCount = hopCount;
-    controlField2.addressType = addressType;
 
-    // --- TPDU Extraction ---
-    // In cEMI, the payload is pure TPDU (without NPCI byte)
-    // dataLength in EMI includes NPCI byte, so TPDU length is dataLength - 1
-    const tpduBuffer = emiBuffer.subarray(offset, offset + dataLength - 1);
-    const tpdu = TPDU.fromBuffer(tpduBuffer);
-
+    // --- NPDU Extraction ---
+    const npduBuff = emiBuffer.subarray(6);
+    const npdu = NPDU.fromBuffer(npduBuff);
+    controlField2.hopCount = npdu.hopCount;
+    controlField2.addressType = npdu.addressType;
+    dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(4, 6), npdu.addressType === 1 ? "/" : ".");
+    console.trace(npdu);
     // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
     const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
     if (cemiCode === null) return null;
@@ -63,16 +59,16 @@ export class CEMIAdapter {
     // Given the structure of CEMI.ts, it's better to use the constructors if possible or fromBuffer with a temporary buffer.
 
     const tempCemi = new (CEMI.DataLinkLayerCEMI["L_Data.ind"] as any)(
-        null,
-        controlField1,
-        controlField2,
-        srcAddr,
-        dstAddr,
-        tpdu
+      null,
+      controlField1,
+      controlField2,
+      srcAddr,
+      dstAddr,
+      npdu.TPDU
     );
     // Adjust message code if it's not L_Data.ind
     tempCemi.messageCode = cemiCode;
-    
+
     return tempCemi;
   }
 

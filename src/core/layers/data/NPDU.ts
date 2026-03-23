@@ -18,10 +18,12 @@ export class NPDU implements ServiceMessage {
   private _hopCount: number = 6; // Valor por defecto estándar en KNX
   public TPDU: TPDU; // Datos puros (payload del usuario)
   private _addressType: AddressType;
-  constructor(InstanceOfTPDU: TPDU = new TPDU(), addressType: AddressType = AddressType.GROUP, hopCount: number = 6) {
+  public length: number = 0;
+  constructor(InstanceOfTPDU: TPDU = new TPDU(), addressType: AddressType = AddressType.GROUP, hopCount: number = 6, length?: number) {
     this._addressType = addressType;
     this.hopCount = hopCount; // Usa el setter para validar
     this.TPDU = InstanceOfTPDU;
+    if (length) this.length = length;
   }
 
   /**
@@ -58,7 +60,7 @@ export class NPDU implements ServiceMessage {
     // Bits 7: Reservado (0) -> parece ser el AddressType
     // Bits 6-4: Hop Count
     // Bits 3-0: Length (Longitud del TPDU)
-    const npciByte = (this.addressType << 7) | (this._hopCount << 4) | (length & 0x0f);
+    const npciByte = (this.addressType << 7) | (this._hopCount << 4) | (this.length & 0x0f);
 
     const buffer = Buffer.alloc(1 + length);
     buffer.writeUInt8(npciByte, 0);
@@ -103,13 +105,13 @@ export class NPDU implements ServiceMessage {
 
     // 2. Extraer el TPDU (Transport Layer PDU)
     // El payload comienza en el índice 1.
-    const tpduBuffer = buffer.subarray(1, 1 + length);
+    const tpduBuffer = buffer.subarray(1);
 
     // Llamada estática recursiva a la siguiente capa
     const tpdu = TPDU.fromBuffer(tpduBuffer);
 
     // 3. Retornar nueva instancia
     // Nota: AddressType no viene en el NPDU, viene del cEMI. Asumimos GROUP por defecto.
-    return new NPDU(tpdu, AddressType.GROUP, hopCount);
+    return new NPDU(tpdu, AddressType.GROUP, hopCount, length);
   }
 }

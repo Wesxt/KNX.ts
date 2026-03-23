@@ -30,10 +30,11 @@ enum TPUARTState {
   ERROR,
 }
 
-export class TPUARTConnection extends KNXService {
+export class TPUARTConnection extends KNXService<TPUARTOptions> {
   private serialPort: SerialPort;
   private receiver: Receiver;
   private connectionState: TPUARTState = TPUARTState.DISCONNECTED;
+  private isOpening: boolean = false;
 
   private initPromise: {
     resolve: () => void;
@@ -87,7 +88,7 @@ export class TPUARTConnection extends KNXService {
       // 2. Hardware ACK (knxd pattern)
       // Only if NOT in busmonitor mode
       if (!this.isBusmonitorMode) {
-        const options = this.options as TPUARTOptions;
+        const options = this.options;
         let ackByte = 0x10; // Default: No ACK
         
         if (options.ackGroup || options.ackIndividual) {
@@ -126,6 +127,7 @@ export class TPUARTConnection extends KNXService {
   private handleFatalError(err: any) {
     this.stopTimers();
     this.connectionState = TPUARTState.ERROR;
+    this.isOpening = false;
     // Reject all pending messages
     while (this.msgQueue.length > 0) {
       this.msgQueue.shift()?.reject(err);
@@ -159,11 +161,14 @@ export class TPUARTConnection extends KNXService {
       this.connectionState !== TPUARTState.ERROR
     )
       return;
+    if (this.isOpening) return;
+    this.isOpening = true;
     return new Promise((resolve, reject) => {
-      this.initPromise = { resolve, reject };
+      this.initPromise = { resolve: () => { this.isOpening = false; resolve(); }, reject: (e) => { this.isOpening = false; reject(e); } };
       this.serialPort.open(async (err) => {
         if (err) {
           this.initPromise = null;
+          this.isOpening = false;
           reject(err);
           return;
         }
@@ -196,6 +201,7 @@ export class TPUARTConnection extends KNXService {
   async disconnect(): Promise<void> {
     this.stopTimers();
     this.connectionState = TPUARTState.DISCONNECTED;
+    this.isOpening = false;
 
     // Clear queue
     while (this.msgQueue.length > 0) {
@@ -335,7 +341,7 @@ export class TPUARTConnection extends KNXService {
       if (this.connectionState === TPUARTState.RESET_WAIT) {
         if (this.initTimer) clearTimeout(this.initTimer);
         this.initRetryCount = 0;
-        const options = this.options as TPUARTOptions;
+        const options = this.options;
         if (options.individualAddress) {
           this.connectionState = TPUARTState.SET_ADDR_WAIT;
           this.writeRaw(

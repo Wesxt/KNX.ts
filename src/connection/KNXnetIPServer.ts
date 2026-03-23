@@ -44,7 +44,7 @@ import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
   * point-to-point (Tunneling) clients. It includes implementation for flow control
   * (RoutingBusy), rate limiting, and echo cancellation.
   */
-export class KNXnetIPServer extends KNXService {
+export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   private isRoutingBusy: boolean = false;
   private routingBusyTimer: NodeJS.Timeout | null = null;
   private msgQueue: Buffer[] = [];
@@ -70,13 +70,13 @@ export class KNXnetIPServer extends KNXService {
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
 
-  private externalManager: Router | null = null;
+  public readonly externalManager: Router | null = null;
 
   constructor(options: KNXnetIPServerOptions) {
     super(options);
     this._transport = "UDP";
     // Set defaults for discovery if not provided
-    const routingOptions = this.options as KNXnetIPServerOptions;
+    const routingOptions = this.options;
     const netInfo = getNetworkInfo();
 
     this.options.localIp = options.localIp || netInfo.address;
@@ -126,7 +126,11 @@ export class KNXnetIPServer extends KNXService {
     }
 
     if (options.externals) {
-      this.externalManager = new Router(options.externals);
+      const opts = {
+        routerAddress: options.individualAddress,
+        ...options.externals
+      };
+      this.externalManager = new Router(opts);
     }
   }
 
@@ -135,6 +139,10 @@ export class KNXnetIPServer extends KNXService {
   }
 
   async connect(): Promise<void> {
+    if (this.socket) {
+      return;
+    }
+
     this.socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
     this.socket.on("message", (msg, rinfo) => {
@@ -156,7 +164,7 @@ export class KNXnetIPServer extends KNXService {
           // [MEJORA] Multi-homing: Unirse al multicast en todas las interfaces válidas (si está habilitado)
           const interfaces = os.networkInterfaces();
           const joinedInterfaces = new Set<string>();
-          const useAllInterfaces = (this.options as KNXnetIPServerOptions).useAllInterfaces ?? true;
+          const useAllInterfaces = this.options.useAllInterfaces ?? true;
 
           // Siempre intenta unirse primero a la localIp especificada
           if (this.options.localIp && this.options.localIp !== "0.0.0.0") {
@@ -330,7 +338,7 @@ export class KNXnetIPServer extends KNXService {
     this.msgQueue.push(packet);
 
     if (this.msgQueue.length >= this.BUSY_THRESHOLD && !this.isRoutingBusy) {
-      const routingOptions = this.options as KNXnetIPServerOptions;
+      const routingOptions = this.options;
       const waitTime = (routingOptions.routingDelay ?? 20) * this.msgQueue.length;
       this.sendRoutingBusy(Math.min(100, waitTime));
     }
@@ -371,7 +379,7 @@ export class KNXnetIPServer extends KNXService {
     if (this.isProcessingQueue || this.isRoutingBusy || this.msgQueue.length === 0) return;
 
     this.isProcessingQueue = true;
-    const routingOptions = this.options as KNXnetIPServerOptions;
+    const routingOptions = this.options;
     const delay = routingOptions.routingDelay ?? 20;
 
     const executeSend = () => {
@@ -884,7 +892,7 @@ export class KNXnetIPServer extends KNXService {
         this.logger.debug(`Management PropRead: Obj=${req.interfaceObjectType}, Prop=${req.propertyId} on channel ${channelId}`);
 
         let data = Buffer.alloc(0);
-        const routingOptions = this.options as KNXnetIPServerOptions;
+        const routingOptions = this.options;
 
         // Respond to Individual Address (Prop 1) of Device Object (Obj 0)
         if (req.interfaceObjectType === 0 && req.propertyId === 1) {
@@ -929,7 +937,7 @@ export class KNXnetIPServer extends KNXService {
   }
 
   private getIdentificationDIBs(serviceType?: KNXnetIPServiceType, requestLocalIp?: string) {
-    const routingOptions = this.options as KNXnetIPServerOptions;
+    const routingOptions = this.options;
     const netInfo = getNetworkInfo();
     const effectiveLocalIp = requestLocalIp || netInfo.address;
     let effectiveNetmask = netInfo.netmask;
