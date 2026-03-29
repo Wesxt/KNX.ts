@@ -123,14 +123,14 @@ export enum APCIEnum {
    * responder a una solicitud de lectura del estado extendido de una propiedad de función en KNX.
    */
   A_FunctionPropertyExtState_Response_Protocol_Data_Unit = 0x1D6,
-    /**
-   * A_MemoryExtended_Write_Protocol_Data_Unit es el comando utilizado para escribir datos extendidos en la memoria de un dispositivo KNX.
-   * 
-   * Este comando forma parte de la especificación avanzada del Application Layer y permite la transferencia de bloques de datos a la memoria interna de dispositivos KNX,
-   * facilitando operaciones como la programación, actualización o configuración avanzada de dispositivos desde la capa de aplicación.
-   * 
-   * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Application Layer of the KNX System"
-   */
+  /**
+ * A_MemoryExtended_Write_Protocol_Data_Unit es el comando utilizado para escribir datos extendidos en la memoria de un dispositivo KNX.
+ * 
+ * Este comando forma parte de la especificación avanzada del Application Layer y permite la transferencia de bloques de datos a la memoria interna de dispositivos KNX,
+ * facilitando operaciones como la programación, actualización o configuración avanzada de dispositivos desde la capa de aplicación.
+ * 
+ * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Application Layer of the KNX System"
+ */
   A_MemoryExtended_Write_Protocol_Data_Unit = 0x1FB,
   /**
    * A_MemoryExtended_Read_Protocol_Data_Unit es el comando utilizado para leer datos extendidos de la memoria de un dispositivo KNX.

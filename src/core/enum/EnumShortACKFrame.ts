@@ -1,4 +1,4 @@
-export enum ShortAckCode {
+export const enum ShortAckCode {
   ACK = 0xCC,
   NAK = 0x0C,
   BUSY = 0xC0,
