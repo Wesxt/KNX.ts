@@ -202,33 +202,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             this.logger.info("Multi-homing disabled. Only primary interface used for multicast.");
           }
 
-          // Central listener for all KNX indications (from IP Multicast, TP, or Tunnels)
-          this.on("indication", (cemi: any) => {
-            const body = cemi.toBuffer();
-            const srcIAStr = cemi.sourceAddress;
-            let busmonBody: Buffer | null = null;
-
-            // Optional: Re-emit by Group Address for specific listening (e.g., server.on("1/1/1", (cemi) => ...))
-            if (cemi.controlField2 && cemi.controlField2.addressType === 1) {
-              this.emit(cemi.destinationAddress, cemi);
-            }
-
-            this._tunnelConnections.forEach((conn) => {
-              // Echo cancellation: Don't forward back to the client that originated this message
-              if (srcIAStr === conn.knxAddressStr) {
-                return;
-              }
-
-              if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
-                if (!busmonBody) busmonBody = this.convertDataIndToBusmonInd(body);
-                conn.enqueue(busmonBody, KNXnetIPServiceType.TUNNELLING_REQUEST);
-              } else {
-                // Link Layer or Raw Layer
-                conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
-              }
-            });
-          });
-
           this.emit("connected");
           resolve();
         } catch (err) {
@@ -315,6 +288,24 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
     if (cemi) {
       this.emit("indication", cemi);
+      this.emit(cemi.destinationAddress, cemi);
+      const body = cemi.toBuffer();
+      const srcIAStr = cemi.sourceAddress;
+      let busmonBody: Buffer | null = null;
+      this._tunnelConnections.forEach((conn) => {
+        // Echo cancellation: Don't forward back to the client that originated this message
+        if (srcIAStr === conn.knxAddressStr) {
+          return;
+        }
+
+        if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
+          if (!busmonBody) busmonBody = this.convertDataIndToBusmonInd(body);
+          conn.enqueue(busmonBody, KNXnetIPServiceType.TUNNELLING_REQUEST);
+        } else {
+          // Link Layer or Raw Layer
+          conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
+        }
+      });
     }
 
     await this.enqueuePacket(cemiBuffer);
@@ -324,6 +315,24 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     try {
       const cemi = CEMI.fromBuffer(cemiBuffer);
       this.emit("indication", cemi);
+      this.emit((cemi as any).destinationAddress, cemi);
+      const body = cemiBuffer;
+      const srcIAStr = (cemi as any).sourceAddress;
+      let busmonBody: Buffer | null = null;
+      this._tunnelConnections.forEach((conn) => {
+        // Echo cancellation: Don't forward back to the client that originated this message
+        if (srcIAStr === conn.knxAddressStr) {
+          return;
+        }
+
+        if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
+          if (!busmonBody) busmonBody = this.convertDataIndToBusmonInd(body);
+          conn.enqueue(busmonBody, KNXnetIPServiceType.TUNNELLING_REQUEST);
+        } else {
+          // Link Layer or Raw Layer
+          conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
+        }
+      });
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       /* empty */
@@ -443,6 +452,23 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           try {
             const cemi = CEMI.fromBuffer(body);
             this.emit("indication", cemi);
+            this.emit((cemi as any).destinationAddress, cemi);
+            const srcIAStr = (cemi as any).sourceAddress;
+            let busmonBody: Buffer | null = null;
+            this._tunnelConnections.forEach((conn) => {
+              // Echo cancellation: Don't forward back to the client that originated this message
+              if (srcIAStr === conn.knxAddressStr) {
+                return;
+              }
+
+              if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
+                if (!busmonBody) busmonBody = this.convertDataIndToBusmonInd(body);
+                conn.enqueue(busmonBody, KNXnetIPServiceType.TUNNELLING_REQUEST);
+              } else {
+                // Link Layer or Raw Layer
+                conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
+              }
+            });
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (e) {
             /* empty */

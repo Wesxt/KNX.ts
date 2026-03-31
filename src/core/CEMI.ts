@@ -295,7 +295,7 @@ export class CEMI {
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
-          TPDU: this.TPDU.describe()
+          TPDU: this.TPDU.describe(),
         };
       }
     },
@@ -404,7 +404,7 @@ export class CEMI {
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
-          TPDU: this.TPDU.describe()
+          TPDU: this.TPDU.describe(),
         };
       }
     },
@@ -452,7 +452,10 @@ export class CEMI {
         this.controlField1.buffer.copy(buffer, baseOffset);
         this.controlField2.getBuffer().copy(buffer, baseOffset + 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, baseOffset + 2);
-        KNXHelper.GetAddress(this.destinationAddress, this.controlField2.addressType === 1 ? "/" : ".").copy(buffer, baseOffset + 4);
+        KNXHelper.GetAddress(this.destinationAddress, this.controlField2.addressType === 1 ? "/" : ".").copy(
+          buffer,
+          baseOffset + 4,
+        );
         buffer[baseOffset + 6] = this.length;
         this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
 
@@ -513,7 +516,7 @@ export class CEMI {
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
-          TPDU: this.TPDU.describe()
+          TPDU: this.TPDU.describe(),
         };
       }
     },
@@ -871,14 +874,10 @@ export class CEMI {
     "L_Busmon.ind": class L_Busmon_ind implements ServiceMessage {
       constructor(additionalInfo: AddInfoBase[] | null, data: Buffer) {
         this.data = data;
-        if (additionalInfo)
-          this.additionalInfo = new AdditionalInformationField(additionalInfo);
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
       }
       messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"].CEMI.value;
-      additionalInfo = new AdditionalInformationField([
-        new BusmonitorStatusInfo(),
-        new TimestampRelative(),
-      ]);
+      additionalInfo = new AdditionalInformationField([new BusmonitorStatusInfo(), new TimestampRelative()]);
       data: Buffer = Buffer.alloc(1);
 
       toBuffer(): Buffer {
@@ -908,18 +907,12 @@ export class CEMI {
       static fromBuffer(buffer: Buffer) {
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["L_Busmon.ind"].CEMI.value)
-          throw new Error(
-            `Invalid Message Code for L_Busmon.ind: expected 0x2B, got 0x${messageCode.toString(
-              16,
-            )}`,
-          );
+          throw new Error(`Invalid Message Code for L_Busmon.ind: expected 0x2B, got 0x${messageCode.toString(16)}`);
         const addInfoLength = buffer.readUint8(1);
         const baseOffset = 2 + addInfoLength;
         let addInfo: AdditionalInformationField | null = null;
         if (addInfoLength > 0) {
-          addInfo = AdditionalInformationField.fromBuffer(
-            buffer.subarray(2, baseOffset),
-          );
+          addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
         }
         const data = buffer.subarray(baseOffset);
         const addInfoData = addInfo?.items ?? null;
@@ -1593,20 +1586,20 @@ type KeysOfCEMI = "DataLinkLayerCEMI" | "TransportLayerCEMI";
 
 type ExcludedServices = never;
 
-type CEMIServiceConstructor<T> = T extends { new(...args: any[]): infer I; }
+type CEMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
   ? {
-    new(...args: any[]): I;
-    fromBuffer(buffer: Buffer): I;
-  }
+      new (...args: any[]): I;
+      fromBuffer(buffer: Buffer): I;
+    }
   : never;
 
 type CEMIValidator = {
   [K in KeysOfCEMI]: {
     [S in keyof (typeof CEMI)[K]]: S extends ExcludedServices
-    ? any
-    : (typeof CEMI)[K][S] extends { new(...args: any[]): any; }
-    ? CEMIServiceConstructor<(typeof CEMI)[K][S]>
-    : any;
+      ? any
+      : (typeof CEMI)[K][S] extends { new (...args: any[]): any }
+        ? CEMIServiceConstructor<(typeof CEMI)[K][S]>
+        : any;
   };
 };
 

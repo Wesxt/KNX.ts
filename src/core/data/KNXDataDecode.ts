@@ -881,12 +881,12 @@ export class KnxDataDecode extends KNXData {
    * (No oficial en la especificacion del DataPointType de Knx en la version 02.02.01)
    */
   static asDpt16002(buffer: Buffer) {
-    if (buffer.length < 14) {
-      throw new Error("Datos insuficientes para DPT 16.002 (Se esperan 14 bytes).");
+    if (buffer.length > 14) {
+      throw new Error("Datos muy grandes para DPT 16.002 (Se esperan 14 bytes).");
     }
     let hexString = "";
     let decimalValue = BigInt(0);
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < buffer.length; i++) {
       if (buffer.readUInt8(i) === 0x00) break; // Ignorar caracteres NULL
       hexString += buffer.readUInt8(i).toString(16).padStart(2, "0").toUpperCase();
     }
