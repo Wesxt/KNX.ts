@@ -865,9 +865,9 @@ export class KnxDataDecode extends KNXData {
    * Decodifica una cadena de 14 bytes en ASCII o ISO-8859-1.
    */
   static asDpt16(buffer: Buffer) {
-    // if (buffer.length < 14) {
-    //   throw new Error("Datos insuficientes para DPT 16 (String).");
-    // }
+    if (buffer.length > 14) {
+      throw new Error("Datos muy grandes para DPT 16 (String).");
+    }
     let str = "";
     for (let i = 0; i < buffer.length; i++) {
       const charCode = buffer.readUInt8(i);
