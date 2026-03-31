@@ -5,9 +5,8 @@ import { TPUARTConnection } from "./TPUART";
 import { KNXTunneling } from "./KNXTunneling";
 import { KNXUSBConnection } from "./KNXUSBConnection";
 import { RouterConnOptions } from "../@types/interfaces/connection";
-
 import { Logger } from "pino";
-import { knxLogger, setupLogger } from "../utils/Logger";
+import { knxLogger } from "../utils/Logger";
 
 /**
  * Router: A high-performance, robust Learning Bridge.
@@ -18,8 +17,8 @@ import { knxLogger, setupLogger } from "../utils/Logger";
  * 4. Client Address Pool Management (KNXnet/IP Tunneling).
  */
 export class Router extends EventEmitter {
-  private links: Set<KNXService> = new Set();
-  private addressTable: Map<string, KNXService> = new Map();
+  public readonly links: Set<KNXService> = new Set();
+  public readonly addressTable: Map<string, KNXService> = new Map();
 
   // knxd 'ignore' list: prevents infinite loops across different physical paths
   // Only ignores frames if they are marked as repeated in the KNX Control Field.
@@ -34,14 +33,10 @@ export class Router extends EventEmitter {
   private clientAddrsUsed: boolean[] = [];
 
   private logger: Logger;
+  private gcInterval: NodeJS.Timeout;
 
-  constructor(
-    options: RouterConnOptions,
-  ) {
+  constructor(options: RouterConnOptions) {
     super();
-    if (options.logOptions) {
-      setupLogger(options.logOptions);
-    }
     this.logger = knxLogger.child({ module: "Router" });
 
     if (options.routerAddress) this.routerAddress = options.routerAddress;
@@ -57,14 +52,13 @@ export class Router extends EventEmitter {
     }
 
     if (options.tpuart) this.registerLink(new TPUARTConnection(options.tpuart));
-    if (options.tunneling)
-      options.tunneling.forEach((c) => this.registerLink(new KNXTunneling(c)));
+    if (options.tunneling) options.tunneling.forEach((c) => this.registerLink(new KNXTunneling(c)));
     if (options.usb) this.registerLink(new KNXUSBConnection(options.usb));
 
     this.logger.info(`Router initialized at ${this.routerAddress}`);
 
     // Periodically clean the signature cache (knxd pattern)
-    setInterval(() => this.gcSignatures(), 1000);
+    this.gcInterval = setInterval(() => this.gcSignatures(), 1000);
   }
 
   /**
@@ -168,8 +162,7 @@ export class Router extends EventEmitter {
     // If src is 0.0.0, it must be replaced by the router's/client's address
     if (!src || src === "0.0.0") {
       cemiAny.sourceAddress =
-        "individualAddress" in source.options &&
-          source.options.individualAddress
+        "individualAddress" in source.options && source.options.individualAddress
           ? source.options.individualAddress
           : this.routerAddress;
       src = cemiAny.sourceAddress;
@@ -222,13 +215,13 @@ export class Router extends EventEmitter {
     const cemiAny = cemi as any;
 
     // Hop Count Management (Protect the whole network)
-    if (
-      cemiAny.controlField2 &&
-      typeof cemiAny.controlField2.hopCount === "number"
-    ) {
+    if (cemiAny.controlField2 && typeof cemiAny.controlField2.hopCount === "number") {
       const hops = cemiAny.controlField2.hopCount;
       if (hops === 0) {
-        this.logger.debug({ src: cemiAny.sourceAddress, dst: cemiAny.destinationAddress }, "Packet dropped: hop count reached 0");
+        this.logger.debug(
+          { src: cemiAny.sourceAddress, dst: cemiAny.destinationAddress },
+          "Packet dropped: hop count reached 0",
+        );
         return; // Drop packet
       }
       if (hops < 7) cemiAny.controlField2.hopCount = hops - 1;
@@ -246,7 +239,6 @@ export class Router extends EventEmitter {
 
     // Selective Routing (IA)
     if (!isGroup && dest && dest !== "0.0.0" && dest !== "15.15.255") {
-
       const target = this.addressTable.get(dest);
       if (target) {
         if (target !== source) {
@@ -307,6 +299,7 @@ export class Router extends EventEmitter {
   }
 
   disconnect(): void {
+    clearInterval(this.gcInterval);
     this.links.forEach((l) => l.disconnect());
   }
 }

@@ -2,8 +2,6 @@ import { inspect } from "util";
 import { ControlField } from "../core/ControlField";
 import { KnxDataEncoder } from "../core/data/KNXDataEncode";
 import { EMI } from "../core/EMI";
-import { APCIEnum } from "../core/enum/APCIEnum";
-import { Priority } from "../core/enum/EnumControlField";
 import { APDU } from "../core/layers/data/APDU";
 import { NPDU } from "../core/layers/data/NPDU";
 import { TPDU } from "../core/layers/data/TPDU";
@@ -17,18 +15,7 @@ const value = KnxDataEncoder.encodeThis("5", { valueDpt5: 100 });
 const emi = new EMI.DataLinkLayerEMI["L_Data.req"](
   controlField,
   "0/0/1",
-  new NPDU(
-    new TPDU(
-      new TPCI(),
-      new APDU(
-        undefined,
-        new APCI(),
-        value,
-      ),
-      value,
-
-    ),
-  ),
+  new NPDU(new TPDU(new TPCI(), new APDU(undefined, new APCI(), value), value)),
 );
 
 console.log("EMI", inspect(emi, { depth: Infinity, colors: true }));
@@ -42,15 +29,7 @@ const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](
   new ExtendedControlField(),
   "0.0.0",
   "0/0/1",
-  new TPDU(
-    new TPCI(),
-    new APDU(
-      undefined,
-      new APCI(),
-      value,
-    ),
-    value,
-  )
+  new TPDU(new TPCI(), new APDU(undefined, new APCI(), value), value),
 );
 
 console.log("CEMI", inspect(cemi, { depth: Infinity, colors: true }));

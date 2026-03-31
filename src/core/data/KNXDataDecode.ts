@@ -10,8 +10,11 @@ export class KnxDataDecode extends KNXData {
     super();
     throw new Error("This class is static and cannot be instantiated.");
   }
-  static decodeThis<T extends typeof KnxDataDecode.dptEnum[number] | string>(dpt: T, buffer: Buffer): DecodedDPTType<T>;
-  static decodeThis<T extends typeof KnxDataDecode.dptEnum[number] | string>(dpt: T, buffer: Buffer): any {
+  static decodeThis<T extends (typeof KnxDataDecode.dptEnum)[number] | string>(
+    dpt: T,
+    buffer: Buffer,
+  ): DecodedDPTType<T>;
+  static decodeThis<T extends (typeof KnxDataDecode.dptEnum)[number] | string>(dpt: T, buffer: Buffer): any {
     let dptNum = this.getDptNumber(dpt);
     if (dptNum === null) throw new DPTNotFound();
     dptNum = this.fallbackDPT(dptNum) as typeof dptNum;
@@ -238,14 +241,20 @@ export class KnxDataDecode extends KNXData {
     }
   }
   static get dptEnum() {
-    return [1, 2, 3007, 3008, 4001, 4002, 5, 5001, 5002, 6, 6001, 6010, 6020, 7, 7001, 7002, 7003, 7004, 7005, 7006, 7007, 7011, 7012, 7013, 8, 9, 10001, 11001, 12001, 12002, 13, 13001, 13002, 13010, 13011, 13012, 13013, 13014, 13015, 13016, 13100, 14, 15000, 16, 16002, 20, 20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20011, 20012, 20013, 20014, 20017, 20020, 20021, 20022, 27001, 28001, 29, 29010, 29011, 29012, 232600, 238600, 245600, 250600, 251600] as const;
+    return [
+      1, 2, 3007, 3008, 4001, 4002, 5, 5001, 5002, 6, 6001, 6010, 6020, 7, 7001, 7002, 7003, 7004, 7005, 7006, 7007,
+      7011, 7012, 7013, 8, 9, 10001, 11001, 12001, 12002, 13, 13001, 13002, 13010, 13011, 13012, 13013, 13014, 13015,
+      13016, 13100, 14, 15000, 16, 16002, 20, 20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20011, 20012,
+      20013, 20014, 20017, 20020, 20021, 20022, 27001, 28001, 29, 29010, 29011, 29012, 232600, 238600, 245600, 250600,
+      251600,
+    ] as const;
   }
 
   private static toPercentage(value: number) {
-    return (value / 255) * 100 + '%';
+    return (value / 255) * 100 + "%";
   }
   private static toAngle(value: number) {
-    return (value / 255) * 360 + 'ª';
+    return (value / 255) * 360 + "ª";
   }
   /**
    * Interpret the underlying data as boolean value
@@ -270,7 +279,8 @@ export class KnxDataDecode extends KNXData {
     const c = (raw >> 1) & 0x01; // Bit de control
     const v = raw & 0x01; // Bit de valor
 
-    let description = '';
+    // eslint-disable-next-line no-useless-assignment
+    let description = "";
     // Según la combinación de bits, asignamos una descripción:
     // - c = 0: sin control.
     //   - v = 0: DPT_Enable_Control (2.003)
@@ -280,16 +290,16 @@ export class KnxDataDecode extends KNXData {
     //   - v = 1: DPT_BinaryValue_Control (2.006)
     if (c === 0) {
       if (v === 0) {
-        description = 'No control (DPT_Enable_Control)';
+        description = "No control (DPT_Enable_Control)";
       } else {
-        description = 'No control (DPT_Ramp_Control)';
+        description = "No control (DPT_Ramp_Control)";
       }
     } else {
       // c === 1
       if (v === 0) {
-        description = 'Control. Function value 0 (DPT_Alarm_Control)';
+        description = "Control. Function value 0 (DPT_Alarm_Control)";
       } else {
-        description = 'Control. Function value 1 (DPT_BinaryValue_Control)';
+        description = "Control. Function value 1 (DPT_BinaryValue_Control)";
       }
     }
 
@@ -318,13 +328,14 @@ export class KnxDataDecode extends KNXData {
     const control = (rawNibble >> 3) & 0x01; // Extrae el bit c.
     const stepCode = rawNibble & 0x07; // Extrae los 3 bits de StepCode.
     // Determinar la acción según el bit de control.
-    const action = control === 0 ? 'Decrease' : 'Increase';
+    const action = control === 0 ? "Decrease" : "Increase";
     // Descripción basada en el valor de StepCode:
     // - Si StepCode es 0, se interpreta como "Break".
     // - Si StepCode es 1..7, se calcula el número de intervalos como 2^(stepCode - 1)
-    let description = '';
+    // eslint-disable-next-line no-useless-assignment
+    let description = "";
     if (stepCode === 0) {
-      description = 'Break';
+      description = "Break";
     } else {
       const intervals = Math.pow(2, stepCode - 1);
       description = `StepCode ${stepCode} (Intervals: ${intervals})`;
@@ -359,8 +370,8 @@ export class KnxDataDecode extends KNXData {
     const control = (nibble >> 3) & 0x01; // Bit más significativo del nibble
     const stepCode = nibble & 0x07; // Los 3 bits menos significativos
     // Determinar la descripción y el número de intervalos
-    const description = control === 0 ? 'Move Up' : 'Move Down';
-    const intervals = stepCode === 0 ? 'Break indication' : Math.pow(2, stepCode - 1);
+    const description = control === 0 ? "Move Up" : "Move Down";
+    const intervals = stepCode === 0 ? "Break indication" : Math.pow(2, stepCode - 1);
     return {
       control: control,
       stepCode: stepCode,
@@ -413,10 +424,10 @@ export class KnxDataDecode extends KNXData {
     return buffer.readInt8(0);
   }
   static asDpt6001(buffer: Buffer) {
-    return this.asDpt6(buffer) + '%';
+    return this.asDpt6(buffer) + "%";
   }
   static asDpt6010(buffer: Buffer) {
-    return this.asDpt6(buffer) + ' counter pulses';
+    return this.asDpt6(buffer) + " counter pulses";
   }
   static asDpt6020(buffer: Buffer) {
     // Extraer los primeros 5 bits (estado) de la primera posición
@@ -424,23 +435,24 @@ export class KnxDataDecode extends KNXData {
     // Extraer los últimos 3 bits (modo) de la primera posición
     const mode = buffer.readUInt8(0) & 0b111; // Usamos una máscara para obtener los últimos 3 bits
     // Asignar el modo (1: Modo 0, 2: Modo 1, 3: Modo 2)
-    let modeText = '';
+    // eslint-disable-next-line no-useless-assignment
+    let modeText = "";
     switch (mode) {
       case 0b001:
-        modeText = 'Modo 0 activo';
+        modeText = "Modo 0 activo";
         break;
       case 0b010:
-        modeText = 'Modo 1 activo';
+        modeText = "Modo 1 activo";
         break;
       case 0b100:
-        modeText = 'Modo 2 activo';
+        modeText = "Modo 2 activo";
         break;
       default:
-        modeText = 'Modo desconocido';
+        modeText = "Modo desconocido";
     }
     // Devolver los resultados como un objeto con estado y modo
     return {
-      status: status === 1 ? 'Activo' : 'Inactivo', // Si el bit de estado es 1, es activo
+      status: status === 1 ? "Activo" : "Inactivo", // Si el bit de estado es 1, es activo
       mode: modeText,
     };
   }
@@ -453,45 +465,45 @@ export class KnxDataDecode extends KNXData {
   }
   static asDpt7001(buffer: Buffer) {
     const data = this.asDpt7(buffer);
-    return data + 'pulses';
+    return data + "pulses";
   }
   static asDpt7002(buffer: Buffer) {
-    return this.asDpt7(buffer) + 'ms';
+    return this.asDpt7(buffer) + "ms";
   }
   static asDpt7003(buffer: Buffer) {
-    return this.asDpt7(buffer) / 100 + 's';
+    return this.asDpt7(buffer) / 100 + "s";
   }
   static asDpt7004(buffer: Buffer) {
-    return this.asDpt7(buffer) / 10 + 's';
+    return this.asDpt7(buffer) / 10 + "s";
   }
   static asDpt7005(buffer: Buffer) {
-    return this.asDpt7(buffer) + 's';
+    return this.asDpt7(buffer) + "s";
   }
   static asDpt7006(buffer: Buffer) {
-    return this.asDpt7(buffer) + 'min';
+    return this.asDpt7(buffer) + "min";
   }
   static asDpt7007(buffer: Buffer) {
-    return this.asDpt7(buffer) + 'h';
+    return this.asDpt7(buffer) + "h";
   }
   static asDpt7011(buffer: Buffer) {
-    return this.asDpt7(buffer) + 'mm';
+    return this.asDpt7(buffer) + "mm";
   }
   static asDpt7012(buffer: Buffer) {
     const data = this.asDpt7(buffer);
     if (data === 0) {
       return {
         value: data,
-        status: 'No bus power supply functionality available',
+        status: "No bus power supply functionality available",
       };
     } else {
       return {
-        value: data + 'mA',
-        status: '',
+        value: data + "mA",
+        status: "",
       };
     }
   }
   static asDpt7013(buffer: Buffer) {
-    return this.asDpt7(buffer) + 'lux';
+    return this.asDpt7(buffer) + "lux";
   }
   static asDpt8(buffer: Buffer) {
     return buffer.readInt16BE(0);
@@ -511,7 +523,7 @@ export class KnxDataDecode extends KNXData {
 
     // Si el valor es 0x7FFF, se considera dato inválido.
     if (raw === 0x7fff) {
-      throw new Error('DPT9: Invalid data (0x7FFF encountered)');
+      throw new Error("DPT9: Invalid data (0x7FFF encountered)");
     }
 
     const s = raw >> 15;
@@ -544,7 +556,7 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt10001(buffer: Buffer) {
     if (buffer.length < 3) {
-      throw new Error('No hay suficientes datos para DPT10001');
+      throw new Error("No hay suficientes datos para DPT10001");
     }
     // Octeto 1: Día y Hora
     const byte0 = buffer.readUInt8(0);
@@ -557,19 +569,19 @@ export class KnxDataDecode extends KNXData {
     const byte2 = buffer.readUInt8(2);
     const seconds = byte2 & 0x3f; // Máscara 0011 1111
     // Opcional: conversión del número del día a nombre
-    const days: { [key: number]: string; } = {
-      0: 'No day',
-      1: 'Monday',
-      2: 'Tuesday',
-      3: 'Wednesday',
-      4: 'Thursday',
-      5: 'Friday',
-      6: 'Saturday',
-      7: 'Sunday',
+    const days: { [key: number]: string } = {
+      0: "No day",
+      1: "Monday",
+      2: "Tuesday",
+      3: "Wednesday",
+      4: "Thursday",
+      5: "Friday",
+      6: "Saturday",
+      7: "Sunday",
     };
     return {
       day: day,
-      dayName: days[day] || 'Unknown',
+      dayName: days[day] || "Unknown",
       hour: hour,
       minutes: minutes,
       seconds: seconds,
@@ -591,7 +603,7 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt11001(buffer: Buffer) {
     if (buffer.length < 3) {
-      throw new Error('No hay suficientes datos para DPT11001');
+      throw new Error("No hay suficientes datos para DPT11001");
     }
     // Octeto 1: Extraer el día (los 5 bits menos significativos)
     const byte0 = buffer.readUInt8(0);
@@ -612,7 +624,7 @@ export class KnxDataDecode extends KNXData {
       month,
       year,
       // Formateamos la fecha en formato DD/MM/YYYY
-      dateString: `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`,
+      dateString: `${day.toString().padStart(2, "0")}/${month.toString().padStart(2, "0")}/${year}`,
     };
   }
   /**
@@ -623,12 +635,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt12001(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 12.001');
+      throw new Error("No hay suficientes datos para DPT 12.001");
     }
     const value = buffer.readUInt32BE(0);
     return {
       value,
-      unit: 'pulses',
+      unit: "pulses",
     };
   }
   /**
@@ -643,21 +655,21 @@ export class KnxDataDecode extends KNXData {
    *
    * @returns Un objeto con el valor sin signo y la unidad seleccionada.
    */
-  static asDpt12002(buffer: Buffer, variant: 'sec' | 'min' | 'hrs' = 'sec') {
+  static asDpt12002(buffer: Buffer, variant: "sec" | "min" | "hrs" = "sec") {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para el DPT LongTimePeriod');
+      throw new Error("No hay suficientes datos para el DPT LongTimePeriod");
     }
     const value = buffer.readUInt32BE(0);
     let unit: string;
     switch (variant) {
-      case 'sec':
-        unit = 's';
+      case "sec":
+        unit = "s";
         break;
-      case 'min':
-        unit = 'min';
+      case "min":
+        unit = "min";
         break;
-      case 'hrs':
-        unit = 'h';
+      case "hrs":
+        unit = "h";
         break;
     }
     return {
@@ -678,12 +690,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13001(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.001');
+      throw new Error("No hay suficientes datos para DPT 13.001");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'pulses',
+      unit: "pulses",
     };
   }
   /**
@@ -692,13 +704,13 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13002(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.002');
+      throw new Error("No hay suficientes datos para DPT 13.002");
     }
     const rawValue = buffer.readInt32BE(0);
     const value = rawValue * 0.0001;
     return {
       value,
-      unit: 'm³/h',
+      unit: "m³/h",
     };
   }
   /**
@@ -707,12 +719,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13010(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.010');
+      throw new Error("No hay suficientes datos para DPT 13.010");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'Wh',
+      unit: "Wh",
     };
   }
   /**
@@ -721,12 +733,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13011(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.011');
+      throw new Error("No hay suficientes datos para DPT 13.011");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'VAh',
+      unit: "VAh",
     };
   }
   /**
@@ -735,12 +747,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13012(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.012');
+      throw new Error("No hay suficientes datos para DPT 13.012");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'VARh',
+      unit: "VARh",
     };
   }
   /**
@@ -749,12 +761,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13013(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.013');
+      throw new Error("No hay suficientes datos para DPT 13.013");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'kWh',
+      unit: "kWh",
     };
   }
   /**
@@ -763,12 +775,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13014(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.014');
+      throw new Error("No hay suficientes datos para DPT 13.014");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'kVAh',
+      unit: "kVAh",
     };
   }
   /**
@@ -777,12 +789,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13015(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.015');
+      throw new Error("No hay suficientes datos para DPT 13.015");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'kVARh',
+      unit: "kVARh",
     };
   }
   /**
@@ -791,12 +803,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13016(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.016');
+      throw new Error("No hay suficientes datos para DPT 13.016");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 'MWh',
+      unit: "MWh",
     };
   }
   /**
@@ -805,12 +817,12 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt13100(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 13.100');
+      throw new Error("No hay suficientes datos para DPT 13.100");
     }
     const value = buffer.readInt32BE(0);
     return {
       value,
-      unit: 's',
+      unit: "s",
     };
   }
 
@@ -826,7 +838,7 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt15000(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error('No hay suficientes datos para DPT 15.000 (Access Data).');
+      throw new Error("No hay suficientes datos para DPT 15.000 (Access Data).");
     }
     const d6 = buffer.readUInt8(0); // Octeto 4
     const d5 = (buffer.readUInt8(1) & 0b11110000) >> 4;
@@ -853,11 +865,11 @@ export class KnxDataDecode extends KNXData {
    * Decodifica una cadena de 14 bytes en ASCII o ISO-8859-1.
    */
   static asDpt16(buffer: Buffer) {
-    if (buffer.length < 14) {
-      throw new Error('Datos insuficientes para DPT 16 (String).');
-    }
-    let str = '';
-    for (let i = 0; i < 14; i++) {
+    // if (buffer.length < 14) {
+    //   throw new Error("Datos insuficientes para DPT 16 (String).");
+    // }
+    let str = "";
+    for (let i = 0; i < buffer.length; i++) {
       const charCode = buffer.readUInt8(i);
       if (charCode === 0x00) break; // Ignorar caracteres NULL
       str += String.fromCharCode(charCode);
@@ -870,16 +882,16 @@ export class KnxDataDecode extends KNXData {
    */
   static asDpt16002(buffer: Buffer) {
     if (buffer.length < 14) {
-      throw new Error('Datos insuficientes para DPT 16.002 (Se esperan 14 bytes).');
+      throw new Error("Datos insuficientes para DPT 16.002 (Se esperan 14 bytes).");
     }
-    let hexString = '';
+    let hexString = "";
     let decimalValue = BigInt(0);
     for (let i = 0; i < 14; i++) {
       if (buffer.readUInt8(i) === 0x00) break; // Ignorar caracteres NULL
-      hexString += buffer.readUInt8(i).toString(16).padStart(2, '0').toUpperCase();
+      hexString += buffer.readUInt8(i).toString(16).padStart(2, "0").toUpperCase();
     }
     if (hexString) {
-      decimalValue = BigInt('0x' + hexString); // Convertir de Hex a Decimal
+      decimalValue = BigInt("0x" + hexString); // Convertir de Hex a Decimal
     }
     return { hex: hexString, decimal: decimalValue.toString() };
   }
@@ -888,162 +900,170 @@ export class KnxDataDecode extends KNXData {
   }
   static asDpt20001(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['autonomous', 'slave', 'master'][value] || 'reserved';
+    return ["autonomous", "slave", "master"][value] || "reserved";
   }
   static asDpt20002(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['Building in use', 'Building not used', 'Building protection'][value] || 'reserved';
+    return ["Building in use", "Building not used", "Building protection"][value] || "reserved";
   }
   static asDpt20003(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['occupied', 'standby', 'not occupied'][value] || 'reserved';
+    return ["occupied", "standby", "not occupied"][value] || "reserved";
   }
   static asDpt20004(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['High', 'Medium', 'Low', 'void'][value] || 'reserved';
+    return ["High", "Medium", "Low", "void"][value] || "reserved";
   }
   static asDpt20005(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['normal', 'presence simulation', 'night round'][value] || 'manufacturer specific';
+    return ["normal", "presence simulation", "night round"][value] || "manufacturer specific";
   }
   static asDpt20006(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    const mapping: { [key: number]: string; } = {
-      0: 'no fault',
-      1: 'system and functions of common interest',
-      10: 'HVAC general FBs',
-      11: 'HVAC Hot Water Heating',
-      12: 'HVAC Direct Electrical Heating',
-      13: 'HVAC Terminal Units',
-      14: 'HVAC VAC',
-      20: 'Lighting',
-      30: 'Security',
-      40: 'Load Management',
-      50: 'Shutters and blinds',
+    const mapping: { [key: number]: string } = {
+      0: "no fault",
+      1: "system and functions of common interest",
+      10: "HVAC general FBs",
+      11: "HVAC Hot Water Heating",
+      12: "HVAC Direct Electrical Heating",
+      13: "HVAC Terminal Units",
+      14: "HVAC VAC",
+      20: "Lighting",
+      30: "Security",
+      40: "Load Management",
+      50: "Shutters and blinds",
     };
-    return mapping[value] || 'reserved';
+    return mapping[value] || "reserved";
   }
   static asDpt20007(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['reserved', 'simple alarm', 'basic alarm', 'extended alarm'][value] || 'reserved';
+    return ["reserved", "simple alarm", "basic alarm", "extended alarm"][value] || "reserved";
   }
   static asDpt20008(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['disabled', 'enabled', 'auto'][value] || 'reserved';
+    return ["disabled", "enabled", "auto"][value] || "reserved";
   }
   static asDpt20011(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
     const mapping = [
-      'no fault',
-      'general device fault',
-      'communication fault',
-      'configuration fault',
-      'hardware fault',
-      'software fault',
-      'insufficient non-volatile memory',
-      'insufficient volatile memory',
-      'memory allocation size 0 received',
-      'CRC-error',
-      'watchdog reset detected',
-      'invalid opcode detected',
-      'general protection fault',
-      'maximal table length exceeded',
-      'undefined load command received',
-      'Group Address Table not sorted',
-      'invalid connection number (TSAP)',
-      'invalid Group Object number (ASAP)',
-      'Group Object Type exceeds limit',
+      "no fault",
+      "general device fault",
+      "communication fault",
+      "configuration fault",
+      "hardware fault",
+      "software fault",
+      "insufficient non-volatile memory",
+      "insufficient volatile memory",
+      "memory allocation size 0 received",
+      "CRC-error",
+      "watchdog reset detected",
+      "invalid opcode detected",
+      "general protection fault",
+      "maximal table length exceeded",
+      "undefined load command received",
+      "Group Address Table not sorted",
+      "invalid connection number (TSAP)",
+      "invalid Group Object number (ASAP)",
+      "Group Object Type exceeds limit",
     ];
-    return mapping[value] || 'reserved';
+    return mapping[value] || "reserved";
   }
   static asDpt20012(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['no fault', 'sensor fault', 'process/controller fault', 'actuator fault', 'other fault'][value] || 'reserved';
+    return (
+      ["no fault", "sensor fault", "process/controller fault", "actuator fault", "other fault"][value] || "reserved"
+    );
   }
   static asDpt20013(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
     const mapping = [
-      'not active',
-      '1 s',
-      '2 s',
-      '3 s',
-      '5 s',
-      '10 s',
-      '15 s',
-      '20 s',
-      '30 s',
-      '45 s',
-      '1 min',
-      '1.25 min',
-      '1.5 min',
-      '2 min',
-      '2.5 min',
-      '3 min',
-      '5 min',
-      '15 min',
-      '20 min',
-      '30 min',
-      '1 h',
-      '2 h',
-      '3 h',
-      '5 h',
-      '12 h',
-      '24 h',
+      "not active",
+      "1 s",
+      "2 s",
+      "3 s",
+      "5 s",
+      "10 s",
+      "15 s",
+      "20 s",
+      "30 s",
+      "45 s",
+      "1 min",
+      "1.25 min",
+      "1.5 min",
+      "2 min",
+      "2.5 min",
+      "3 min",
+      "5 min",
+      "15 min",
+      "20 min",
+      "30 min",
+      "1 h",
+      "2 h",
+      "3 h",
+      "5 h",
+      "12 h",
+      "24 h",
     ];
-    return mapping[value] || 'reserved';
+    return mapping[value] || "reserved";
   }
   static asDpt20014(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
     return (
       [
-        'calm (no wind)',
-        'light air',
-        'light breeze',
-        'gentle breeze',
-        'moderate breeze',
-        'fresh breeze',
-        'strong breeze',
-        'near gale / moderate gale',
-        'fresh gale',
-        'strong gale',
-        'whole gale / storm',
-        'violent storm',
-        'hurricane',
-      ][value] || 'reserved'
+        "calm (no wind)",
+        "light air",
+        "light breeze",
+        "gentle breeze",
+        "moderate breeze",
+        "fresh breeze",
+        "strong breeze",
+        "near gale / moderate gale",
+        "fresh gale",
+        "strong gale",
+        "whole gale / storm",
+        "violent storm",
+        "hurricane",
+      ][value] || "reserved"
     );
   }
   static asDpt20017(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
     return (
-      ['inactive', 'digital input not inverted', 'digital input inverted', 'analog input 0%-100%', 'temperature sensor input'][value] || 'reserved'
+      [
+        "inactive",
+        "digital input not inverted",
+        "digital input inverted",
+        "analog input 0%-100%",
+        "temperature sensor input",
+      ][value] || "reserved"
     );
   }
   static asDpt20020(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['reserved', 'SensorConnection', 'ControllerConnection'][value] || 'reserved';
+    return ["reserved", "SensorConnection", "ControllerConnection"][value] || "reserved";
   }
   static asDpt20021(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
     return (
       [
-        'Cloudless',
-        'Sunny',
-        'Sunshiny',
-        'Lightly cloudy',
-        'Scattered clouds',
-        'Cloudy',
-        'Heavily cloudy',
-        'Almost overcast',
-        'Overcast',
-        'Sky obstructed from view',
-      ][value] || 'reserved'
+        "Cloudless",
+        "Sunny",
+        "Sunshiny",
+        "Lightly cloudy",
+        "Scattered clouds",
+        "Cloudy",
+        "Heavily cloudy",
+        "Almost overcast",
+        "Overcast",
+        "Sky obstructed from view",
+      ][value] || "reserved"
     );
   }
   static asDpt20022(buffer: Buffer): string {
     const value = buffer.readUInt8(0);
-    return ['do not send', 'send always', 'send if value changed during powerdown'][value] || 'reserved';
+    return ["do not send", "send always", "send if value changed during powerdown"][value] || "reserved";
   }
-  static asDpt27001(buffer: Buffer): { outputs: boolean[]; masks: boolean[]; } {
+  static asDpt27001(buffer: Buffer): { outputs: boolean[]; masks: boolean[] } {
     // Leer los 4 octetos (32 bits)
     const binaryValue = buffer.readUInt32BE(0);
     // Decodificar los 16 bits de salidas (outputs)
@@ -1061,7 +1081,7 @@ export class KnxDataDecode extends KNXData {
   static asDpt28001(buffer: Buffer): string {
     const utf8Bytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     // Convertir los bytes a una cadena de texto usando UTF-8
-    const decodedString = new TextDecoder('utf-8').decode(utf8Bytes);
+    const decodedString = new TextDecoder("utf-8").decode(utf8Bytes);
     // Retornar la cadena decodificada
     return decodedString;
   }
@@ -1093,7 +1113,7 @@ export class KnxDataDecode extends KNXData {
     };
     return result;
   }
-  static asDpt238600(buffer: Buffer): { addr: number; lf: boolean; bf: boolean; } {
+  static asDpt238600(buffer: Buffer): { addr: number; lf: boolean; bf: boolean } {
     const byte = buffer.readUInt8(0);
     // Decodificar los campos
     const addr = byte & 0x3f; // Los primeros 6 bits (b0 a b5) para la dirección del dispositivo

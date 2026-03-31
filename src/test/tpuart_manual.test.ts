@@ -5,7 +5,7 @@ async function testTPUART() {
   console.log("--- Testing TPUART ---");
 
   // Reemplaza con la ruta de tu puerto serial si es necesario (ej: COM3 en Windows o /dev/ttyUSB0)
-  const serialPath = "/dev/ttyS0"; 
+  const serialPath = "/dev/ttyS0";
 
   const tpuart = new TPUARTConnection({
     path: serialPath,
@@ -34,8 +34,8 @@ async function testTPUART() {
   });
 
   tpuart.on("warning", (warn: string) => {
-      console.warn(`[TPUART] Warning:`, warn);
-  })
+    console.warn(`[TPUART] Warning:`, warn);
+  });
 
   try {
     console.log(`[TPUART] Connecting to ${serialPath}...`);
@@ -52,5 +52,5 @@ async function testTPUART() {
 }
 
 testTPUART().catch((err) => {
-    console.error("[TPUART] Unhandled test error:", err);
+  console.error("[TPUART] Unhandled test error:", err);
 });

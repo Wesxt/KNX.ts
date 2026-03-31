@@ -86,7 +86,7 @@ export interface KNXLoggerOptions extends LoggerOptions {
   /**
    * Use pino-pretty but it's slow
    */
-  pretty?: boolean,
+  pretty?: boolean;
   /**
    * Enable or disable logging. Defaults to true.
    */

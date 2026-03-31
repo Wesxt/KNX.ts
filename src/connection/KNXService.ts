@@ -3,10 +3,7 @@ import dgram from "dgram";
 import net from "net";
 import { KNXnetIPHeader } from "../core/KNXnetIPHeader";
 import { HPAI, DIB, SRP } from "../core/KNXnetIPStructures";
-import {
-  KNXnetIPServiceType,
-  HostProtocolCode,
-} from "../core/enum/KNXnetIPEnum";
+import { KNXnetIPServiceType, HostProtocolCode } from "../core/enum/KNXnetIPEnum";
 import { getLocalIP } from "../utils/localIp";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KnxDataEncoder } from "../core/data/KNXDataEncode";
@@ -73,10 +70,13 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
    * @param value The value to write.
    * @param dpt Optional Datapoint Type to help with encoding.
    */
-  public async write<
-    T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null,
-  >(destination: string, dpt: T, value: AllDpts<T>): Promise<void> {
+  public async write<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(
+    destination: string,
+    dpt: T,
+    value: AllDpts<T>,
+  ): Promise<void> {
     let data: Buffer;
+    // eslint-disable-next-line no-useless-assignment
     let isShort = false;
     // data validation
     if (dpt !== undefined) {
@@ -92,11 +92,8 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
       data = Buffer.from([value]);
       isShort = value <= 0x3f;
     } else {
-      throw new Error(
-        "Cannot encode value without DPT or basic type (boolean/number/Buffer)",
-      );
+      throw new Error("Cannot encode value without DPT or basic type (boolean/number/Buffer)");
     }
-
 
     const cf1 = new ControlField(0xbc);
     const cf2 = new ExtendedControlField(0xe0);
@@ -141,14 +138,7 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
       Buffer.alloc(1),
     );
 
-    const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](
-      null,
-      cf1,
-      cf2,
-      "0.0.0",
-      destination,
-      tpdu,
-    );
+    const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, "0.0.0", destination, tpdu);
 
     return this.send(cemi) as Promise<void>;
   }
@@ -156,15 +146,14 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
   /**
    * Discovery Process (Search Request)
    */
-  public static async discover(
-    timeout: number = 3000,
-    localIp?: string,
-  ): Promise<any[]> {
+  public static async discover(timeout: number = 3000, localIp?: string): Promise<any[]> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     return new Promise((resolve, reject) => {
       const socket = dgram.createSocket("udp4");
       const devices: any[] = [];
       const _localIp = localIp || getLocalIP();
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       socket.on("message", (msg, rinfo) => {
         try {
           const header = KNXnetIPHeader.fromBuffer(msg);
@@ -189,21 +178,15 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
               dibs,
             });
           }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (e) {
           // Ignore malformed packets
         }
       });
 
       socket.bind(() => {
-        const localHPAI = new HPAI(
-          HostProtocolCode.IPV4_UDP,
-          _localIp,
-          socket.address().port,
-        );
-        const header = new KNXnetIPHeader(
-          KNXnetIPServiceType.SEARCH_REQUEST,
-          0,
-        );
+        const localHPAI = new HPAI(HostProtocolCode.IPV4_UDP, _localIp, socket.address().port);
+        const header = new KNXnetIPHeader(KNXnetIPServiceType.SEARCH_REQUEST, 0);
         const hpaiBuffer = localHPAI.toBuffer();
         header.totalLength = header.toBuffer().length + hpaiBuffer.length;
 
@@ -224,17 +207,13 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
    * Extended Discovery Process (Search Request Extended)
    * Allows searching with filters (SRPs).
    */
-  public static async discoverExtended(
-    srps: SRP[],
-    timeout: number = 3000,
-    localIp?: string,
-  ): Promise<any[]> {
-    return new Promise((resolve, reject) => {
+  public static async discoverExtended(srps: SRP[], timeout: number = 3000, localIp?: string): Promise<any[]> {
+    return new Promise((resolve) => {
       const socket = dgram.createSocket("udp4");
       const devices: any[] = [];
       const _localIp = localIp || getLocalIP();
 
-      socket.on("message", (msg, rinfo) => {
+      socket.on("message", (msg) => {
         try {
           const header = KNXnetIPHeader.fromBuffer(msg);
           if (
@@ -253,29 +232,21 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
             }
             devices.push({ ip: hpai.ipAddress, port: hpai.port, dibs });
           }
-        } catch (e) { }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (e) {
+          /* empty */
+        }
       });
 
       socket.bind(() => {
-        const localHPAI = new HPAI(
-          HostProtocolCode.IPV4_UDP,
-          _localIp,
-          socket.address().port,
-        );
-        const header = new KNXnetIPHeader(
-          KNXnetIPServiceType.SEARCH_REQUEST_EXTENDED,
-          0,
-        );
+        const localHPAI = new HPAI(HostProtocolCode.IPV4_UDP, _localIp, socket.address().port);
+        const header = new KNXnetIPHeader(KNXnetIPServiceType.SEARCH_REQUEST_EXTENDED, 0);
         const hpaiBuf = localHPAI.toBuffer();
         const srpBufs = srps.map((s) => s.toBuffer());
         const body = Buffer.concat([hpaiBuf, ...srpBufs]);
         header.totalLength = 6 + body.length;
 
-        socket.send(
-          Buffer.concat([header.toBuffer(), body]),
-          3671,
-          "224.0.23.12",
-        );
+        socket.send(Buffer.concat([header.toBuffer(), body]), 3671, "224.0.23.12");
         setTimeout(() => {
           socket.close();
           resolve(devices);
@@ -316,19 +287,15 @@ export abstract class KNXService<TOptions extends KNXnetIPOptions = KNXnetIPOpti
             descSocket.close();
             resolve({ dibs });
           }
-        } catch (e) { }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (e) {
+          /* empty */
+        }
       });
 
       descSocket.bind(() => {
-        const localHPAI = new HPAI(
-          HostProtocolCode.IPV4_UDP,
-          this.options.localIp!,
-          descSocket.address().port,
-        );
-        const header = new KNXnetIPHeader(
-          KNXnetIPServiceType.DESCRIPTION_REQUEST,
-          0,
-        );
+        const localHPAI = new HPAI(HostProtocolCode.IPV4_UDP, this.options.localIp!, descSocket.address().port);
+        const header = new KNXnetIPHeader(KNXnetIPServiceType.DESCRIPTION_REQUEST, 0);
         const hpaiBuffer = localHPAI.toBuffer();
         header.totalLength = 6 + hpaiBuffer.length;
         const packet = Buffer.concat([header.toBuffer(), hpaiBuffer]);

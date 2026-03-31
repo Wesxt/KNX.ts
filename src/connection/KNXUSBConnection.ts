@@ -1,9 +1,9 @@
-import * as hid from 'node-hid';
+import * as hid from "node-hid";
 import { KNXService } from "./KNXService";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { CEMIAdapter } from "../utils/CEMIAdapter";
 import { CEMI } from "../core/CEMI";
-import { KNXUSBOptions } from '../@types/interfaces/connection';
+import { KNXUSBOptions } from "../@types/interfaces/connection";
 
 export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private device: hid.HID | null = null;
@@ -13,7 +13,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
 
   constructor(options: KNXUSBOptions) {
     super(options);
-    this.logger = this.logger.child({ module: 'KNXUSBConnection' });
+    this.logger = this.logger.child({ module: "KNXUSBConnection" });
   }
 
   async connect(): Promise<void> {
@@ -26,16 +26,20 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
 
         if (!devicePath) {
           const devices = hid.devices();
-          const knxDevice = devices.find(d =>
-            (options.vendorId && d.vendorId === options.vendorId && options.productId && d.productId === options.productId) ||
-            (d.vendorId === 0x28c2) || // Zennio
-            (d.vendorId === 0x145c) || // ABB/Busch-Jaeger
-            (d.vendorId === 0x10a6) || // MDT
-            (d.vendorId === 0x135e) || // Siemens
-            (d.vendorId === 0x0e77) || // Weinzierl/Siemens
-            (d.vendorId === 0x147b) || // Weinzierl
-            (d.vendorId === 0x16d0) || // MCS
-            (d.product && d.product.toLowerCase().includes('knx'))
+          const knxDevice = devices.find(
+            (d) =>
+              (options.vendorId &&
+                d.vendorId === options.vendorId &&
+                options.productId &&
+                d.productId === options.productId) ||
+              d.vendorId === 0x28c2 || // Zennio
+              d.vendorId === 0x145c || // ABB/Busch-Jaeger
+              d.vendorId === 0x10a6 || // MDT
+              d.vendorId === 0x135e || // Siemens
+              d.vendorId === 0x0e77 || // Weinzierl/Siemens
+              d.vendorId === 0x147b || // Weinzierl
+              d.vendorId === 0x16d0 || // MCS
+              (d.product && d.product.toLowerCase().includes("knx")),
           );
 
           if (!knxDevice || !knxDevice.path) {
@@ -55,15 +59,16 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
         this.isConnected = true;
         this.busConnected = false;
 
-        this.initializeDevice().then(() => {
-          this.emit("connected");
-          resolve();
-        }).catch((err) => {
-          this.logger.error("Failed to initialize KNX USB: " + err);
-          this.disconnect();
-          reject(err);
-        });
-
+        this.initializeDevice()
+          .then(() => {
+            this.emit("connected");
+            resolve();
+          })
+          .catch((err) => {
+            this.logger.error("Failed to initialize KNX USB: " + err);
+            this.disconnect();
+            reject(err);
+          });
       } catch (err) {
         this.logger.error("Failed to connect to KNX USB: " + err);
         reject(err);
@@ -76,6 +81,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
 
     try {
       this.device.close();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       // Ignore close errors
     } finally {
@@ -95,26 +101,28 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     // protocolId: 0x0f (BusAccessServerFeatureService)
     // emiId: 0x03 (service device feature set), feature: 0x05, value: this.supportedEmiType
     await this.sendUSBTransfer(0x0f, 0x03, Buffer.from([0x05, this.supportedEmiType]));
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 100));
 
     if (this.supportedEmiType === 0x03) {
       // 3. cEMI Specific Initialization
       // Send Reset Request (M_RESET_REQ = 0xF1)
-      await this.sendUSBTransfer(0x01, 0x03, Buffer.from([0xF1]));
-      await new Promise(r => setTimeout(r, 100));
+      await this.sendUSBTransfer(0x01, 0x03, Buffer.from([0xf1]));
+      await new Promise((r) => setTimeout(r, 100));
 
       // Set Comm Mode (PID_COMM_MODE)
       // M_PROP_WRITE_REQ (0xF6), ObjType (0x0008), ObjInst (0x01), PropId (0x34), Elements (1) + StartIdx (1) -> 0x1001, Mode: 0x00 (DataLinkLayer)
       const commModeBuf = Buffer.from([
-        0xF6, // M_PROP_WRITE_REQ
-        0x00, 0x08, // Interface Object
+        0xf6, // M_PROP_WRITE_REQ
+        0x00,
+        0x08, // Interface Object
         0x01, // Object Instance
         0x34, // Property ID (52)
-        0x10, 0x01, // Elements + Start Index
-        0x00 // Data (DataLinkLayer, 0x00)
+        0x10,
+        0x01, // Elements + Start Index
+        0x00, // Data (DataLinkLayer, 0x00)
       ]);
       await this.sendUSBTransfer(0x01, 0x03, commModeBuf);
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
     }
   }
 
@@ -125,7 +133,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
 
       const attemptDiscovery = () => {
         attempts++;
-        this.sendUSBTransfer(0x0f, 0x01, Buffer.from([0x01])).catch(e => {
+        this.sendUSBTransfer(0x0f, 0x01, Buffer.from([0x01])).catch((e) => {
           this.logger.error("Error sending EMI discovery: " + e);
         });
 
@@ -144,7 +152,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
       const onDiscovery = (version: number) => {
         clearTimeout(timeout);
         this.supportedEmiType = version;
-        this.logger.info(`Discovered EMI version: ${version === 0x03 ? 'cEMI' : (version === 0x01 ? 'EMI1' : 'EMI2')}`);
+        this.logger.info(`Discovered EMI version: ${version === 0x03 ? "cEMI" : version === 0x01 ? "EMI1" : "EMI2"}`);
         resolve();
       };
 
@@ -209,15 +217,16 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
         // EMI1 / EMI2 mode
         let emiMsg: any;
         if (Buffer.isBuffer(data)) {
-           try {
-             const cemiMsg = CEMI.fromBuffer(data);
-             emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
-           } catch(e) {
-             // If we can't parse it as cEMI, assume it's already an EMI buffer
-             frame = data;
-           }
+          try {
+            const cemiMsg = CEMI.fromBuffer(data);
+            emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          } catch (e) {
+            // If we can't parse it as cEMI, assume it's already an EMI buffer
+            frame = data;
+          }
         } else {
-           emiMsg = CEMIAdapter.cemiToEmi(data);
+          emiMsg = CEMIAdapter.cemiToEmi(data);
         }
 
         if (emiMsg) {
@@ -230,7 +239,6 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
       if (frame) {
         await this.sendUSBTransfer(0x01, this.supportedEmiType, frame);
       }
-
     } catch (err) {
       this.logger.error("Error sending to USB:" + err);
       throw err;
@@ -244,7 +252,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     if ((data[1] & 0x0f) !== 0x03) return;
 
     // Connection State Check based on knxd USBLowLevelDriver logic
-    const wanted = Buffer.from([0x01, 0x13, 0x0A, 0x00, 0x08, 0x00, 0x02, 0x0F, 0x04, 0x00, 0x00, 0x03]);
+    const wanted = Buffer.from([0x01, 0x13, 0x0a, 0x00, 0x08, 0x00, 0x02, 0x0f, 0x04, 0x00, 0x00, 0x03]);
     if (data.length >= 12 && data.subarray(0, 12).equals(wanted)) {
       const isConnectedToBus = (data[12] & 0x01) === 1;
       if (isConnectedToBus) {
@@ -286,10 +294,14 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     if (protocolId === 0x0f && emiId === 0x02 && payload.length >= 3 && payload[0] === 0x01) {
       // EMI Discovery response, implementing exact knxd fallback logic
       const bitmask = payload[2];
+      // eslint-disable-next-line no-useless-assignment
       let version = 0x03; // fallback to cEMI
-      if (bitmask & 0x02) version = 0x02;      // vEMI2
-      else if (bitmask & 0x01) version = 0x01; // vEMI1
-      else if (bitmask & 0x04) version = 0x03; // vCEMI
+      if (bitmask & 0x02)
+        version = 0x02; // vEMI2
+      else if (bitmask & 0x01)
+        version = 0x01; // vEMI1
+      else if (bitmask & 0x04)
+        version = 0x03; // vCEMI
       else {
         this.logger.warn(`EMI version bitmask 0x${bitmask.toString(16)} not recognized, defaulting to cEMI`);
         version = 0x03;
@@ -308,9 +320,12 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
               this.emit("indication", cemiMsg);
               this.emit("raw_indication", payload);
               try {
-                 const emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
-                 if (emiMsg) this.emit("indication_emi", emiMsg);
-              } catch(e) {}
+                const emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
+                if (emiMsg) this.emit("indication_emi", emiMsg);
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              } catch (e) {
+                /* empty */
+              }
             }
           } catch (e: any) {
             this.logger.debug(`Error parsing incoming USB cEMI data: ${e.message}`);
