@@ -289,7 +289,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (cemi) {
       this.emit("indication", cemi);
       this.emit(cemi.destinationAddress, cemi);
-      const body = cemi.toBuffer();
+      const body = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
       const srcIAStr = cemi.sourceAddress;
       let busmonBody: Buffer | null = null;
       this._tunnelConnections.forEach((conn) => {
