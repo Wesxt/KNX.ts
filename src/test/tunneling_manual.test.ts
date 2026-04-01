@@ -24,16 +24,20 @@ async function testTunneling() {
 
   const client = new KNXTunneling(options);
 
-  // const valueTest = 0;
+  let valueTest = 0;
+  let bol = false;
 
   client.on("connected", (info) => {
     console.log("[Tunneling] Connected!");
     console.log(`[Tunneling] Channel ID: ${client["channelId"]}`);
     if (info) console.log("[Tunneling] Info:", info);
-    // setInterval(() => {
-    //   valueTest++;
-    //   client.write("5/5/2", 5, { valueDpt5: valueTest });
-    // }, 3000);
+    setInterval(() => {
+      valueTest++;
+      bol = !bol;
+      client.write("5/5/1", 1, { value: bol });
+      client.write("5/5/2", 9, { valueDpt9: valueTest });
+      client.write("5/5/3", 9, { valueDpt9: valueTest });
+    }, 5000);
   });
 
   client.on("disconnected", () => {

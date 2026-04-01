@@ -31,7 +31,9 @@ export interface KNXTunnelingOptions extends KNXnetIPOptions {
   maxQueueSize?: number;
 }
 
-export interface KNXnetIPServerOptions extends KNXnetIPOptions {
+export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip" | "port"> {
+  ip?: string;
+  port?: number;
   individualAddress?: string;
   serialNumber?: Buffer;
   friendlyName?: string;
@@ -49,10 +51,6 @@ export interface KNXnetIPServerOptions extends KNXnetIPOptions {
    */
   routingDelay?: number;
   /**
-   * Optional configuration for bridging to external connections (TPUART, Tunneling, USB).
-   */
-  externals?: ExternalManagerOptions;
-  /**
    * It abruptly stops a Tunneling client connection if it exceeds this limit of request messages per second; this is done to prevent performance degradation (the default is 100); to disable it, set it to less than 1
    */
   MAX_PENDING_REQUESTS_PER_CLIENT?: number;
@@ -65,6 +63,10 @@ export interface KNXnetIPServerOptions extends KNXnetIPOptions {
 }
 
 export interface ExternalManagerOptions {
+  /**
+   * Optional configuration for a KNXnetIPServer
+   */
+  knxNetIpServer?: KNXnetIPServerOptions;
   /**
    * Optional configuration for a physical TPUART connection.
    */
@@ -118,8 +120,8 @@ export interface KNXLoggerOptions extends LoggerOptions {
 }
 
 export interface KNXnetIPOptions {
-  ip?: string;
-  port?: number;
+  ip: string;
+  port: number;
   localIp?: string;
   localPort?: number;
   /**
@@ -128,15 +130,15 @@ export interface KNXnetIPOptions {
   logOptions?: KNXLoggerOptions;
 }
 
-export interface TPUARTOptions extends KNXnetIPOptions {
+export interface TPUARTOptions {
   /**
    * The serial port path (e.g., "/dev/ttyS0" or "COM3").
    */
   path: string;
   /**
-   * Optional physical address to assign to the TPUART chip (e.g., "1.1.255").
+   * Physical address to assign to the TPUART chip (e.g., "1.1.255").
    */
-  individualAddress?: string;
+  individualAddress: string;
   /**
    * If true, the TPUART will send an ACK for all group telegrams.
    */
@@ -145,15 +147,51 @@ export interface TPUARTOptions extends KNXnetIPOptions {
    * If true, the TPUART will send an ACK for all individual telegrams.
    */
   ackIndividual?: boolean;
+  /**
+   * Pino logger configuration.
+   */
+  logOptions?: KNXLoggerOptions;
 }
 
 export interface RouterConnOptions extends ExternalManagerOptions {
-  routerAddress?: string;
-  clientAddrs?: string;
+  routerAddress: string;
+  /**
+   * Filtering IP addresses from KNXnetIP to other interfaces such as TPUART or USB
+   */
+  toLocalFilter?: {
+    individualAddress?: {
+      addresses: string[];
+      individualAddressToLocalFilterPolicie: "discard all" | "accept only";
+    };
+    groupAddress?: {
+      addresses: string[];
+      groupAddressToLocalFilterPolicie: "discard all" | "accept only";
+    };
+  };
+  /**
+   * Filtering addresses from interfaces such as TP UART or USB to KNXnet IP
+   */
+  toIpFilter?: {
+    individualAddress?: {
+      addresses: string[];
+      individualAddressToIpFilterPolicie: "discard all" | "accept only";
+    };
+    groupAddress?: {
+      addresses: string[];
+      groupAddressToIpFilterPolicie: "discard all" | "accept only";
+    };
+  };
 }
 
-export interface KNXUSBOptions extends KNXnetIPOptions {
+export interface KNXUSBOptions {
   path?: string;
   vendorId?: number;
   productId?: number;
+  individualAddress: string;
+  /**
+   * Pino logger configuration.
+   */
+  logOptions?: KNXLoggerOptions;
 }
+
+export type AllConnectionOptions = TPUARTOptions | KNXUSBOptions | KNXnetIPServerOptions | KNXTunnelingOptions;

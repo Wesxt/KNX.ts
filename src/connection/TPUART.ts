@@ -3,7 +3,6 @@ import { KNXService } from "./KNXService";
 import { TPUARTOptions } from "../@types/interfaces/connection";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { CEMIAdapter } from "../utils/CEMIAdapter";
-import { EMI } from "../core/EMI";
 import { KNXHelper } from "../utils/KNXHelper";
 import { CEMI } from "../core/CEMI";
 
@@ -90,16 +89,13 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
       if (!this.isBusmonitorMode) {
         const options = this.options;
         let ackByte = 0x10; // Default: No ACK
-        
+
         if (options.ackGroup || options.ackIndividual) {
           const isExtended = (frame[0] & 0x80) === 0;
           const controlByte = isExtended ? frame[1] : frame[5];
           const isGroup = (controlByte & 0x80) !== 0;
 
-          if (
-            (isGroup && options.ackGroup) ||
-            (!isGroup && options.ackIndividual)
-          ) {
+          if ((isGroup && options.ackGroup) || (!isGroup && options.ackIndividual)) {
             ackByte = 0x11; // Send ACK
           }
         }
@@ -120,7 +116,10 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
             this.emit("raw_indication", cemi.toBuffer());
           }
         }
-      } catch (e) {}
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (e) {
+        /* empty */
+      }
     });
   }
 
@@ -156,15 +155,20 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
   }
 
   async connect(): Promise<void> {
-    if (
-      this.connectionState !== TPUARTState.DISCONNECTED &&
-      this.connectionState !== TPUARTState.ERROR
-    )
-      return;
+    if (this.connectionState !== TPUARTState.DISCONNECTED && this.connectionState !== TPUARTState.ERROR) return;
     if (this.isOpening) return;
     this.isOpening = true;
     return new Promise((resolve, reject) => {
-      this.initPromise = { resolve: () => { this.isOpening = false; resolve(); }, reject: (e) => { this.isOpening = false; reject(e); } };
+      this.initPromise = {
+        resolve: () => {
+          this.isOpening = false;
+          resolve();
+        },
+        reject: (e) => {
+          this.isOpening = false;
+          reject(e);
+        },
+      };
       this.serialPort.open(async (err) => {
         if (err) {
           this.initPromise = null;
@@ -221,9 +225,12 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     });
   }
 
+  /**
+   * Enable or disable busmonitor mode.
+   * @param enabled
+   */
   public async setBusmonitor(enabled: boolean): Promise<void> {
-    if (this.connectionState < TPUARTState.ONLINE)
-      throw new Error("TPUART offline");
+    if (this.connectionState < TPUARTState.ONLINE) throw new Error("TPUART offline");
     this.isBusmonitorMode = enabled;
     if (enabled) {
       await this.writeRaw([UART_SERVICES.ACTIVATE_BUSMON]);
@@ -235,11 +242,8 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
   }
 
   async send(data: Buffer | ServiceMessage): Promise<void> {
-    if (this.connectionState < TPUARTState.ONLINE)
-      throw new Error("TPUART offline");
-    let frame = Buffer.isBuffer(data)
-      ? tryEmi(data) || data
-      : CEMIAdapter.cemiToEmi(data)?.toBuffer().subarray(1);
+    if (this.connectionState < TPUARTState.ONLINE) throw new Error("TPUART offline");
+    const frame = Buffer.isBuffer(data) ? data : CEMIAdapter.cemiToEmi(data)?.toBuffer();
     if (!frame) throw new Error("Invalid data");
     return this.enqueueFrame(frame);
   }
@@ -301,9 +305,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     const result = Buffer.alloc(telegram.length * 2);
     for (let i = 0; i < telegram.length; i++) {
       const ctrl =
-        i === telegram.length - 1
-          ? UART_SERVICES.LDATA_END | (i & 0x3f)
-          : UART_SERVICES.LDATA_START | (i & 0x3f);
+        i === telegram.length - 1 ? UART_SERVICES.LDATA_END | (i & 0x3f) : UART_SERVICES.LDATA_START | (i & 0x3f);
       result[i * 2] = ctrl;
       result[i * 2 + 1] = telegram[i];
     }
@@ -326,12 +328,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     if ((byte & 0x17) === 0x13) {
       const hasError = (byte & 0x07) !== 0;
       if (hasError) {
-        const error =
-          byte & 0x04
-            ? "Checksum Error"
-            : byte & 0x02
-              ? "Timing Error"
-              : "Bit Error";
+        const error = byte & 0x04 ? "Checksum Error" : byte & 0x02 ? "Timing Error" : "Bit Error";
         this.emit("warning", `TPUART Frame Error: ${error}`);
       }
       return;
@@ -345,10 +342,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
         if (options.individualAddress) {
           this.connectionState = TPUARTState.SET_ADDR_WAIT;
           this.writeRaw(
-            Buffer.concat([
-              Buffer.from([0x28]),
-              KNXHelper.GetAddress(options.individualAddress, "."),
-            ]),
+            Buffer.concat([Buffer.from([0x28]), KNXHelper.GetAddress(options.individualAddress, ".")]),
           ).catch((e) => this.emit("error", e));
           // knxd immediately transitions to get state after setting address
           this.requestState();
@@ -357,10 +351,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
         }
       } else if (this.connectionState >= TPUARTState.ONLINE) {
         // Spurious reset (power glitch?) -> re-initialize
-        this.emit(
-          "warning",
-          "TPUART spurious reset detected, re-initializing...",
-        );
+        this.emit("warning", "TPUART spurious reset detected, re-initializing...");
         this.initRetryCount = 0;
         this.sendResetRequest();
       }
@@ -382,17 +373,14 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
       }
       return;
     }
-    if (
-      byte === UART_SERVICES.LDATA_CON_POS ||
-      byte === UART_SERVICES.LDATA_CON_NEG
-    ) {
+    if (byte === UART_SERVICES.LDATA_CON_POS || byte === UART_SERVICES.LDATA_CON_NEG) {
       if (this.confirmationTimer) clearTimeout(this.confirmationTimer);
       const item = this.msgQueue.shift();
       this.isProcessing = false;
-      if (item) {
-        byte === UART_SERVICES.LDATA_CON_POS
-          ? item.resolve()
-          : item.reject(new Error("NAK"));
+      if (item && byte === UART_SERVICES.LDATA_CON_POS) {
+        item.resolve();
+      } else if (item) {
+        item.reject(new Error("NAK"));
       }
       this.processQueue();
       return;
@@ -400,16 +388,11 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     if ((byte & 0x07) === UART_SERVICES.STATE_IND) {
       if (this.initTimer) clearTimeout(this.initTimer);
       this.initRetryCount = 0;
-      
+
       // Decode error bits (knxd pattern)
       if (byte !== 0x07 && byte !== 0x00) {
-        if (byte & 0x40)
-          this.emit(
-            "warning",
-            "TPUART: Hardware ACK NOT supported by this chip",
-          );
-        if (byte & 0x04)
-          this.emit("warning", "TPUART: Slave collision detected");
+        if (byte & 0x40) this.emit("warning", "TPUART: Hardware ACK NOT supported by this chip");
+        if (byte & 0x04) this.emit("warning", "TPUART: Slave collision detected");
         if (byte & 0x02) this.emit("warning", "TPUART: Receive error");
         if (byte & 0x01) this.emit("warning", "TPUART: Transmit error");
       }
@@ -436,9 +419,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
 
   private requestState() {
     this.connectionState = TPUARTState.GET_STATE_WAIT;
-    this.writeRaw([UART_SERVICES.STATE_REQ]).catch((e) =>
-      this.emit("error", e),
-    );
+    this.writeRaw([UART_SERVICES.STATE_REQ]).catch((e) => this.emit("error", e));
     if (this.initTimer) clearTimeout(this.initTimer);
     this.initTimer = setTimeout(() => {
       if (this.connectionState === TPUARTState.GET_STATE_WAIT) {
@@ -454,14 +435,6 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
         }
       }
     }, 500);
-  }
-}
-
-function tryEmi(data: Buffer): Buffer | null {
-  try {
-    return EMI.fromBuffer(data).toBuffer().subarray(1);
-  } catch {
-    return null;
   }
 }
 
@@ -490,8 +463,7 @@ class Receiver {
 
     const now = Date.now();
     // Inter-byte timeout (1000ms) to reset buffer if sync is lost (matches knxd T_wait_more)
-    if (this.buffer.length > 0 && now - this.lastRead > 1000)
-      this.buffer = Buffer.alloc(0);
+    if (this.buffer.length > 0 && now - this.lastRead > 1000) this.buffer = Buffer.alloc(0);
 
     if (this.buffer.length === 0) {
       if (this.isFrameStart(byte)) {
@@ -527,8 +499,7 @@ class Receiver {
       const totalLen = payloadLen + (this.extFrame ? 9 : 8);
       if (this.buffer.length >= totalLen) {
         const frame = this.buffer.subarray(0, totalLen);
-        if (this.validateChecksum(frame))
-          this.connection.emit("raw_frame", frame);
+        if (this.validateChecksum(frame)) this.connection.emit("raw_frame", frame);
         this.buffer = Buffer.alloc(0);
       }
     }

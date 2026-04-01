@@ -31,7 +31,6 @@ import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "../utils/KNXHelper";
 import { KNXnetIPServerOptions } from "../@types/interfaces/connection";
 import { getNetworkInfo } from "../utils/localIp";
-import { Router } from "./Router";
 import os from "node:os";
 import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
 import { TunnelConnection } from "./TunnelConnection";
@@ -70,8 +69,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
 
-  public readonly externalManager: Router | null = null;
-
   constructor(options: KNXnetIPServerOptions) {
     super(options);
     this._transport = "UDP";
@@ -81,6 +78,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
     this.options.localIp = options.localIp || netInfo.address;
     routingOptions.individualAddress = options.individualAddress || "15.15.0";
+    this.individualAddress = routingOptions.individualAddress;
     if (!KNXHelper.isValidIndividualAddress(routingOptions.individualAddress)) {
       throw new InvalidKnxAddressException(`This ${routingOptions.individualAddress} is not individual address`);
     }
@@ -101,7 +99,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       routingOptions.serialNumber = options.serialNumber;
     }
 
-    routingOptions.friendlyName = options.friendlyName || "KNX.ts Routing Node";
+    routingOptions.friendlyName = options.friendlyName || "KNX.ts";
     routingOptions.macAddress = options.macAddress || netInfo.mac;
     routingOptions.routingDelay = options.routingDelay ?? 20;
     if (routingOptions.MAX_PENDING_REQUESTS_PER_CLIENT)
@@ -126,18 +124,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       this.maxTunnelConnections = 15;
       this.clientAddrsStartInt = serverIA + 1;
     }
-
-    if (options.externals) {
-      const opts = {
-        routerAddress: options.individualAddress,
-        ...options.externals,
-      };
-      this.externalManager = new Router(opts);
-    }
-  }
-
-  get individualAddress() {
-    return KNXHelper.GetAddress(this.serverIAInt, ".", true);
   }
 
   async connect(): Promise<void> {
@@ -212,18 +198,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     });
 
     await connectPromise;
-
-    if (this.externalManager) {
-      this.externalManager.registerLink(this);
-      await this.externalManager.connect();
-    }
   }
 
   disconnect(): void {
-    if (this.externalManager) {
-      this.externalManager.unregisterLink(this);
-      this.externalManager.disconnect();
-    }
     if (this.socket) {
       (this.socket as dgram.Socket).close();
       this.socket = null;

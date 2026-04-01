@@ -7,6 +7,7 @@ import { KNXnetIPServiceType, KNXnetIPErrorCodes, HostProtocolCode, ConnectionTy
 import { CEMI } from "../core/CEMI";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
+import { KNXHelper } from "../utils/KNXHelper";
 
 /**
  * Handles KNXnet/IP Tunneling connections for point-to-point communication with a KNX gateway.
@@ -19,8 +20,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private rxSequenceNumber: number = 0;
   private isConnected: boolean = false;
   private tcpBuffer: Buffer = Buffer.alloc(0);
-  public assignedAddress: number = 0; // Assigned Individual Address
-
+  public individualAddress: string = "1.0.1"; // Assigned Individual Address
   // Heartbeat
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private heartbeatFailures: number = 0;
@@ -313,10 +313,10 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
             // Parse CRD
             if (body.length >= 14) {
               const crd = CRD.fromBuffer(body.subarray(10));
-              this.assignedAddress = crd.knxAddress;
+              this.individualAddress = KNXHelper.GetAddress(crd.knxAddress, ".");
               this.emit("connected", {
                 channelId: this.channelId,
-                assignedAddress: crd.knxAddress,
+                individualAddress: this.individualAddress,
               });
             } else {
               this.emit("connected", { channelId: this.channelId });

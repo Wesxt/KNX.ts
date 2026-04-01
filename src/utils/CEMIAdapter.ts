@@ -55,19 +55,17 @@ export class CEMIAdapter {
     // Construct the appropriate cEMI class using CEMI.fromBuffer or directly
     // Since we already parsed components, we might want to find the class
     // But CEMI.fromBuffer takes a buffer. Let's use it for simplicity if we can re-construct a cEMI buffer
-    // Or just instantiate the specific class. 
+    // Or just instantiate the specific class.
     // Given the structure of CEMI.ts, it's better to use the constructors if possible or fromBuffer with a temporary buffer.
 
-    const tempCemi = new (CEMI.DataLinkLayerCEMI["L_Data.ind"] as any)(
+    const tempCemi = new CEMI.DataLinkLayerCEMI["L_Data.ind"](
       null,
       controlField1,
       controlField2,
       srcAddr,
       dstAddr,
-      npdu.TPDU
+      npdu.TPDU,
     );
-    // Adjust message code if it's not L_Data.ind
-    tempCemi.messageCode = cemiCode;
 
     return tempCemi;
   }
@@ -98,7 +96,10 @@ export class CEMIAdapter {
     KNXHelper.GetAddress(cemi.sourceAddress, ".").copy(buffer, offset);
     offset += 2;
 
-    KNXHelper.GetAddress(cemi.destinationAddress, cemi.controlField2.addressType === AddressType.GROUP ? "/" : ".").copy(buffer, offset);
+    KNXHelper.GetAddress(
+      cemi.destinationAddress,
+      cemi.controlField2.addressType === AddressType.GROUP ? "/" : ".",
+    ).copy(buffer, offset);
     offset += 2;
 
     // // NPDU Length (NPCI + TPDU)

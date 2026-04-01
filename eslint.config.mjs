@@ -17,6 +17,7 @@ export default [
     files: ["**/*.ts", "**/*.mts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
+      "no-useless-assignment": "off",
     },
   },
   {
