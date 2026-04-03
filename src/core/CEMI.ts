@@ -173,7 +173,7 @@ export class CEMI {
     throw new Error("This class is static");
   }
 
-  static fromBuffer(buffer: Buffer): ServiceMessage {
+  static fromBuffer(buffer: Buffer): CEMIInstance {
     const messageCode = buffer.readUInt8(0);
     const groups = [this.DataLinkLayerCEMI, this.TransportLayerCEMI, this.ManagementCEMI];
 
@@ -1582,7 +1582,7 @@ export class CEMI {
 
 // !! Type check in all class
 
-type KeysOfCEMI = "DataLinkLayerCEMI" | "TransportLayerCEMI";
+type KeysOfCEMI = "DataLinkLayerCEMI" | "TransportLayerCEMI" | "ManagementCEMI";
 
 type ExcludedServices = never;
 
@@ -1604,3 +1604,7 @@ type CEMIValidator = {
 };
 
 CEMI satisfies CEMIValidator;
+
+type CEMIClasses = { [K in KeysOfCEMI]: (typeof CEMI)[K][keyof (typeof CEMI)[K]] }[KeysOfCEMI];
+
+export type CEMIInstance = InstanceType<CEMIClasses>;

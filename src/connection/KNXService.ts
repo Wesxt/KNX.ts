@@ -2,9 +2,8 @@ import { EventEmitter } from "events";
 import dgram from "dgram";
 import net from "net";
 import { getLocalIP } from "../utils/localIp";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KnxDataEncoder } from "../core/data/KNXDataEncode";
-import { CEMI } from "../core/CEMI";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import { ControlField } from "../core/ControlField";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { TPDU } from "../core/layers/data/TPDU";
@@ -49,9 +48,9 @@ export abstract class KNXService<TOptions extends AllConnectionOptions = AllConn
   abstract disconnect(): void;
   /**
    * Send a telegram
-   * @param data A data buffer or an instance of a CEMI or EMI message
+   * @param data A data buffer CEMI or EMI or an instance of a CEMI message
    */
-  abstract send(data: Buffer | ServiceMessage): Promise<void>;
+  abstract send(data: Buffer | CEMIInstance): Promise<void>;
 
   /**
    * Send a GroupValue_Write telegram to a group address.

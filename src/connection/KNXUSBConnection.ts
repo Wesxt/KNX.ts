@@ -1,9 +1,9 @@
 import * as hid from "node-hid";
 import { KNXService } from "./KNXService";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { CEMIAdapter } from "../utils/CEMIAdapter";
-import { CEMI } from "../core/CEMI";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXUSBOptions } from "../@types/interfaces/connection";
+import { EMIInstance } from "../core/EMI";
 
 export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
   private device: hid.HID | null = null;
@@ -199,7 +199,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     }
   }
 
-  async send(data: Buffer | ServiceMessage): Promise<void> {
+  async send(data: Buffer | CEMIInstance): Promise<void> {
     if (!this.isConnected || !this.device) {
       throw new Error("KNX USB device offline");
     }
@@ -215,28 +215,21 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
         }
       } else {
         // EMI1 / EMI2 mode
-        let emiMsg: any;
+        let emiMsg: EMIInstance | null = null;
         if (Buffer.isBuffer(data)) {
-          try {
-            const cemiMsg = CEMI.fromBuffer(data);
-            emiMsg = CEMIAdapter.cemiToEmi(cemiMsg);
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          } catch (e) {
-            // If we can't parse it as cEMI, assume it's already an EMI buffer
-            frame = data;
-          }
+          frame = data;
         } else {
+          this.logger.debug("Converting cEMI to EMI");
           emiMsg = CEMIAdapter.cemiToEmi(data);
         }
 
         if (emiMsg) {
           frame = emiMsg.toBuffer();
-        } else if (!frame) {
-          throw new Error("Could not convert cEMI to EMI");
         }
       }
 
       if (frame) {
+        this.emit("send", frame);
         await this.sendUSBTransfer(0x01, this.supportedEmiType, frame);
       }
     } catch (err) {
@@ -294,7 +287,6 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     if (protocolId === 0x0f && emiId === 0x02 && payload.length >= 3 && payload[0] === 0x01) {
       // EMI Discovery response, implementing exact knxd fallback logic
       const bitmask = payload[2];
-      // eslint-disable-next-line no-useless-assignment
       let version = 0x03; // fallback to cEMI
       if (bitmask & 0x02)
         version = 0x02; // vEMI2

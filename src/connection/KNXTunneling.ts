@@ -4,8 +4,7 @@ import { KNXService } from "./KNXService";
 import { KNXnetIPHeader } from "../core/KNXnetIPHeader";
 import { HPAI, CRI, CRD } from "../core/KNXnetIPStructures";
 import { KNXnetIPServiceType, KNXnetIPErrorCodes, HostProtocolCode, ConnectionType } from "../core/enum/KNXnetIPEnum";
-import { CEMI } from "../core/CEMI";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
 import { KNXHelper } from "../utils/KNXHelper";
 
@@ -205,13 +204,13 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   }
 
   // #region Message Queue & Sending
-  async send(cemi: ServiceMessage | Buffer): Promise<void> {
+  async send(cemi: CEMIInstance | Buffer): Promise<void> {
     if (!this.isConnected) throw new Error("Not connected");
 
     if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
       throw new Error("Outgoing queue full");
     }
-
+    this.emit("send", cemi);
     const cemiBuffer = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
     const isDeviceMgmt = this.options.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION;
     const serviceType = isDeviceMgmt
@@ -449,7 +448,8 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         const data = body.subarray(len);
         const cemi = CEMI.fromBuffer(data);
         this.emit("indication", cemi);
-        this.emit((cemi as any).destinationAddress as string, cemi);
+        if (!("destinationAddress" in cemi)) return;
+        this.emit(cemi.destinationAddress, cemi);
         this.emit("raw_indication", data);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
@@ -474,7 +474,11 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private sendRaw(buffer: Buffer) {
     if (!this.socket) return;
     if (this._transport === "UDP") {
-      (this.socket as dgram.Socket).send(buffer, this.options.port!, this.options.ip!);
+      (this.socket as dgram.Socket).send(buffer, this.options.port, this.options.ip, (err) => {
+        if (err) {
+          this.emit("error", err);
+        }
+      });
     } else {
       (this.socket as net.Socket).write(buffer);
     }

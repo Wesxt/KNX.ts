@@ -11,12 +11,12 @@ import {
   KNXLayer,
   KNXTimeoutConstants,
 } from "../core/enum/KNXnetIPEnum";
-import { CEMI } from "../core/CEMI";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import {
   RoutingBusy,
   RoutingLostMessage,
   HPAI,
+  DIB,
   DeviceInformationDIB,
   SupportedServicesDIB,
   ExtendedDeviceInformationDIB,
@@ -29,12 +29,13 @@ import {
 } from "../core/KNXnetIPStructures";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "../utils/KNXHelper";
-import { KNXnetIPServerOptions } from "../@types/interfaces/connection";
+import { KNXDiscoveredDevice, KNXnetIPServerOptions } from "../@types/interfaces/connection";
 import { getNetworkInfo } from "../utils/localIp";
 import os from "node:os";
 import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
 import { TunnelConnection } from "./TunnelConnection";
 import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
+import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 
 /**
  * Implements a KNXnet/IP Server (Gateway) that supports Routing and Tunneling protocols.
@@ -59,6 +60,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   private serverIAInt: number;
 
   private _tunnelConnections = new Map<number, TunnelConnection>();
+
+  public isCacheDelegated: boolean = false;
+  public isEventsDelegated: boolean = false;
 
   private readonly MAX_QUEUE_SIZE = 100;
   private readonly BUSY_THRESHOLD = 15;
@@ -155,9 +159,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           const useAllInterfaces = this.options.useAllInterfaces ?? true;
 
           // Siempre intenta unirse primero a la localIp especificada
-          if (this.options.localIp && this.options.localIp !== "0.0.0.0") {
+          if (this.options.localIp && this.options.localIp !== "0.0.0.0" && this.options.ip) {
             try {
-              socket.addMembership(this.options.ip!, this.options.localIp);
+              socket.addMembership(this.options.ip, this.options.localIp);
               joinedInterfaces.add(this.options.localIp);
               this.logger.info(`Joined multicast on primary interface (${this.options.localIp})`);
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -208,6 +212,131 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     this.clearTimers();
   }
 
+  /**
+   * Discovers KNXnet/IP devices on the network by sending SEARCH_REQUEST and SEARCH_REQUEST_EXTENDED
+   * multicasts to 224.0.23.12:3671. Returns an array of discovered devices with their properties.
+   *
+   * @param timeout Wait time in milliseconds for responses
+   * @param useExtended Whether to send SEARCH_REQUEST_EXTENDED alongside SEARCH_REQUEST
+   * @returns Promise resolving to an array of discovered devices
+   */
+  public static async discover(
+    ipLocal: string = "",
+    ipMulticast: string = "224.0.23.12",
+    port: number = 3671,
+    timeout: number = 3000,
+    useExtended: boolean = true,
+  ): Promise<KNXDiscoveredDevice[]> {
+    return new Promise<KNXDiscoveredDevice[]>((resolve, reject) => {
+      const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
+      const discoveredDevices = new Map<string, KNXDiscoveredDevice>();
+
+      socket.on("message", (msg: Buffer) => {
+        try {
+          const header = KNXnetIPHeader.fromBuffer(msg);
+          if (
+            header.serviceType === KNXnetIPServiceType.SEARCH_RESPONSE ||
+            header.serviceType === KNXnetIPServiceType.SEARCH_RESPONSE_EXTENDED
+          ) {
+            const body = msg.subarray(KNXnetIPHeader.HEADER_SIZE_10);
+            if (body.length < 8) return;
+            const hpai = HPAI.fromBuffer(body);
+            let offset = 8; // Size of HPAI
+
+            let deviceInfo: DeviceInformationDIB | null = null;
+            while (offset < body.length) {
+              const dibLen = body.readUInt8(offset);
+              if (dibLen === 0) break;
+              if (offset + dibLen > body.length) break;
+              const dibBuffer = body.subarray(offset, offset + dibLen);
+              const dib = DIB.fromBuffer(dibBuffer);
+              if (dib instanceof DeviceInformationDIB) {
+                deviceInfo = dib;
+              }
+              offset += dibLen;
+            }
+
+            if (deviceInfo) {
+              const deviceKey = `${hpai.ipAddress}:${hpai.port}`; // Unique by IP/Port
+              if (!discoveredDevices.has(deviceKey)) {
+                let knxMediumStr = `Unknown (${deviceInfo.knxMedium})`;
+                if (deviceInfo.knxMedium === KNXMedium.TP1) knxMediumStr = "TP1";
+                else if (deviceInfo.knxMedium === KNXMedium.PL110) knxMediumStr = "PL110";
+                else if (deviceInfo.knxMedium === KNXMedium.RF) knxMediumStr = "RF";
+                else if (deviceInfo.knxMedium === KNXMedium.KNXIP) knxMediumStr = "KNXIP";
+
+                const deviceStatusStr =
+                  deviceInfo.deviceStatus === 1
+                    ? "Programmed"
+                    : deviceInfo.deviceStatus === 0
+                      ? "Not Programmed"
+                      : `Unknown (${deviceInfo.deviceStatus})`;
+
+                discoveredDevices.set(deviceKey, {
+                  ip: hpai.ipAddress,
+                  port: hpai.port,
+                  knxMediumRaw: deviceInfo.knxMedium,
+                  knxMedium: knxMediumStr,
+                  deviceStatusRaw: deviceInfo.deviceStatus,
+                  deviceStatus: deviceStatusStr,
+                  individualAddress: deviceInfo.individualAddress,
+                  projectInstallationId: deviceInfo.projectInstallationId,
+                  serialNumber: deviceInfo.serialNumber,
+                  routingMulticastAddress: deviceInfo.routingMulticastAddress,
+                  macAddress: deviceInfo.macAddress,
+                  friendlyName: deviceInfo.friendlyName,
+                });
+              }
+            }
+          }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (e) {
+          // Ignore parsing errors for individual packets
+        }
+      });
+
+      const timer: NodeJS.Timeout = setTimeout(() => {
+        socket.close();
+        resolve(Array.from(discoveredDevices.values()));
+      }, timeout);
+
+      socket.on("error", (err) => {
+        clearTimeout(timer);
+        socket.close();
+        reject(err);
+      });
+
+      socket.bind(0, () => {
+        const netInfo = getNetworkInfo();
+        const serverHPAI = new HPAI(
+          HostProtocolCode.IPV4_UDP,
+          ipLocal !== "" ? ipLocal : netInfo.address,
+          socket.address().port,
+        );
+
+        const sendRequest = (serviceType: KNXnetIPServiceType) => {
+          const hpaiBuf = serverHPAI.toBuffer();
+          const header = new KNXnetIPHeader(serviceType, KNXnetIPHeader.HEADER_SIZE_10 + hpaiBuf.length);
+          const packet = Buffer.concat([header.toBuffer(), hpaiBuf]);
+          socket.send(packet, port, ipMulticast);
+        };
+
+        try {
+          socket.setBroadcast(true);
+          socket.setMulticastTTL(128);
+          sendRequest(KNXnetIPServiceType.SEARCH_REQUEST);
+          if (useExtended) {
+            sendRequest(KNXnetIPServiceType.SEARCH_REQUEST_EXTENDED);
+          }
+        } catch (e) {
+          clearTimeout(timer);
+          socket.close();
+          reject(e);
+        }
+      });
+    });
+  }
+
   // [MEJORA] Validación estricta Route Back (NAT Traversal) según Especificación 8.6.2.2
   private resolveRouteBack(hpai: HPAI, rinfo: dgram.RemoteInfo): boolean {
     const isIpZero = hpai.ipAddress === "0.0.0.0";
@@ -238,24 +367,27 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       conn.close();
     });
     this._tunnelConnections.clear();
-    this.removeAllListeners("indication");
+    this.removeAllListeners();
   }
 
-  async send(data: Buffer | ServiceMessage): Promise<void> {
+  /**
+   * Send a CEMI message or buffer CEMI to the bus.
+   * @param data The CEMI message or buffer to send.
+   */
+  async send(data: Buffer | CEMIInstance): Promise<void> {
     let cemiBuffer: Buffer;
-    let cemi: any;
+    let cemi: CEMIInstance | undefined = undefined;
     if (Buffer.isBuffer(data)) {
       cemiBuffer = data;
       try {
         cemi = CEMI.fromBuffer(data);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (e) {
-        /* empty */
+      } catch (e: any) {
+        this.logger.debug("Error parsing CEMI buffer" + e.message);
       }
     } else {
       cemi = data;
-      if ((data as any).controlField2) {
-        const cf2 = (data as any).controlField2 as ExtendedControlField;
+      if ("controlField2" in cemi) {
+        const cf2 = cemi.controlField2 as ExtendedControlField;
         const hopCount = cf2.hopCount;
         if (hopCount === 0) return;
         if (hopCount < 7) cf2.hopCount = hopCount - 1;
@@ -263,9 +395,14 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       cemiBuffer = data.toBuffer();
     }
 
-    if (cemi) {
-      this.emit("indication", cemi);
-      this.emit(cemi.destinationAddress, cemi);
+    if (cemi && "destinationAddress" in cemi && "sourceAddress" in cemi) {
+      this.emit("send", cemi);
+      if (!this.isCacheDelegated) {
+        GroupAddressCache.getInstance().processCEMI(cemi);
+      }
+      if (!this.isEventsDelegated && cemi.destinationAddress) {
+        this.emit(cemi.destinationAddress, cemi);
+      }
       const body = cemiBuffer;
       const srcIAStr = cemi.sourceAddress;
       let busmonBody: Buffer | null = null;
@@ -288,32 +425,39 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     await this.enqueuePacket(cemiBuffer);
   }
 
+  /**
+   * Send a raw CEMI buffer to the bus.
+   * @param cemiBuffer The CEMI buffer to send.
+   */
   async sendRaw(cemiBuffer: Buffer): Promise<void> {
+    let cemi: CEMIInstance | undefined = undefined;
     try {
-      const cemi = CEMI.fromBuffer(cemiBuffer);
-      this.emit("indication", cemi);
-      this.emit((cemi as any).destinationAddress, cemi);
-      const body = cemiBuffer;
-      const srcIAStr = (cemi as any).sourceAddress;
-      let busmonBody: Buffer | null = null;
-      this._tunnelConnections.forEach((conn) => {
-        // Echo cancellation: Don't forward back to the client that originated this message
-        if (srcIAStr === conn.knxAddressStr) {
-          return;
-        }
-
-        if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
-          if (!busmonBody) busmonBody = this.convertDataIndToBusmonInd(body);
-          conn.enqueue(busmonBody, KNXnetIPServiceType.TUNNELLING_REQUEST);
-        } else {
-          // Link Layer or Raw Layer
-          conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
-        }
-      });
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
-      /* empty */
+      cemi = CEMI.fromBuffer(cemiBuffer);
+    } catch (e: any) {
+      this.logger.debug("Error parsing CEMI buffer" + e.message);
     }
+    if (!cemi || !("destinationAddress" in cemi) || !("sourceAddress" in cemi)) return;
+    this.emit("send", cemi);
+    if (!this.isEventsDelegated && cemi.destinationAddress) {
+      this.emit(cemi.destinationAddress, cemi);
+    }
+    const body = cemiBuffer;
+    const srcIAStr = cemi.sourceAddress;
+    let busmonBody: Buffer | null = null;
+    this._tunnelConnections.forEach((conn) => {
+      // Echo cancellation: Don't forward back to the client that originated this message
+      if (srcIAStr === conn.knxAddressStr) {
+        return;
+      }
+
+      if (conn.knxLayer === KNXLayer.BUSMONITOR_LAYER) {
+        if (!busmonBody) busmonBody = this.convertDataIndToBusmonInd(body);
+        conn.enqueue(busmonBody, KNXnetIPServiceType.TUNNELLING_REQUEST);
+      } else {
+        // Link Layer or Raw Layer
+        conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
+      }
+    });
     await this.enqueuePacket(cemiBuffer);
   }
 
@@ -428,9 +572,15 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           this.emit("raw_indication", body);
           try {
             const cemi = CEMI.fromBuffer(body);
+            if (!("destinationAddress" in cemi) || !("sourceAddress" in cemi)) return;
             this.emit("indication", cemi);
-            this.emit((cemi as any).destinationAddress, cemi);
-            const srcIAStr = (cemi as any).sourceAddress;
+            if (!this.isCacheDelegated) {
+              GroupAddressCache.getInstance().processCEMI(
+                cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
+              );
+            }
+            this.emit(cemi.destinationAddress, cemi);
+            const srcIAStr = cemi.sourceAddress;
             let busmonBody: Buffer | null = null;
             this._tunnelConnections.forEach((conn) => {
               // Echo cancellation: Don't forward back to the client that originated this message

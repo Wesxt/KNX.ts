@@ -1,11 +1,10 @@
-import { CEMI } from "../core/CEMI";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import { ControlField } from "../core/ControlField";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "./KNXHelper";
 import { AddressType } from "../core/enum/EnumControlFieldExtended";
 import { MessageCodeTranslator } from "./MessageCodeTranslator";
-import { EMI } from "../core/EMI";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { EMI, EMIInstance } from "../core/EMI";
 import { NPDU } from "../core/layers/data/NPDU";
 
 /**
@@ -17,7 +16,7 @@ export class CEMIAdapter {
    * Adapts a raw EMI2 message (Buffer) to a cEMI instance.
    * Typical EMI structure: [MC] [Ctrl] [Src] [Dst] [Len] [NPDU(NPCI + TPDU)]
    */
-  static emiToCemi(emiBuffer: Buffer): ServiceMessage | null {
+  static emiToCemi(emiBuffer: Buffer): CEMIInstance | null {
     if (emiBuffer.length < 7) throw new Error("EMI buffer too short");
 
     const messageCode = emiBuffer.readUInt8(0);
@@ -73,8 +72,10 @@ export class CEMIAdapter {
   /**
    * Converts a cEMI instance to an EMI2 compatible Buffer or ServiceMessage.
    */
-  static cemiToEmi(cemi: any): ServiceMessage | null {
-    if (!cemi.TPDU || !cemi.controlField1 || !cemi.controlField2) return null;
+  static cemiToEmi(cemi: CEMIInstance): EMIInstance | null {
+    if (!("TPDU" in cemi) || !("controlField1" in cemi) || !("controlField2" in cemi)) {
+      return null;
+    }
 
     const tpduBuffer = cemi.TPDU.toBuffer();
 

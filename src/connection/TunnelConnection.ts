@@ -9,6 +9,8 @@ import { Logger } from "pino";
  * Encapsulates a single KNXnet/IP Tunnelling or Management connection state.
  * Handles sequence numbers, heartbeats, reliable delivery (stop-and-wait),
  * and retransmissions according to KNX Spec Vol 3/8/4.
+ *
+ * ***Don't use this for connect a KNX device. Use KNXTunneling instead.***
  */
 export class TunnelConnection {
   public sno: number = 0;

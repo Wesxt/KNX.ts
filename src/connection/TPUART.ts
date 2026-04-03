@@ -1,10 +1,9 @@
 import { SerialPort } from "serialport";
 import { KNXService } from "./KNXService";
 import { TPUARTOptions } from "../@types/interfaces/connection";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { CEMIAdapter } from "../utils/CEMIAdapter";
 import { KNXHelper } from "../utils/KNXHelper";
-import { CEMI } from "../core/CEMI";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 
 const UART_SERVICES = {
   RESET_REQ: 0x01,
@@ -142,6 +141,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     this.keepaliveTimer = null;
     this.confirmationTimer = null;
     this.initTimer = null;
+    this.removeAllListeners();
   }
 
   private resetKeepalive() {
@@ -241,10 +241,11 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     }
   }
 
-  async send(data: Buffer | ServiceMessage): Promise<void> {
+  async send(data: Buffer | CEMIInstance): Promise<void> {
     if (this.connectionState < TPUARTState.ONLINE) throw new Error("TPUART offline");
     const frame = Buffer.isBuffer(data) ? data : CEMIAdapter.cemiToEmi(data)?.toBuffer();
     if (!frame) throw new Error("Invalid data");
+    this.emit("send", data);
     return this.enqueueFrame(frame);
   }
 
@@ -446,7 +447,9 @@ class Receiver {
   constructor(private connection: TPUARTConnection) {}
 
   handleData(data: Buffer) {
-    for (const byte of data) this.processByte(byte);
+    for (const byte of data) {
+      this.processByte(byte);
+    }
   }
 
   private processByte(byte: number) {

@@ -66,9 +66,7 @@ import { SAP } from "./enum/SAP";
 
 class InvalidInputObject extends Error {
   constructor(className: string) {
-    super(
-      `The input object in the ${className} is must be an object with specific properties`,
-    );
+    super(`The input object in the ${className} is must be an object with specific properties`);
   }
 }
 
@@ -89,7 +87,7 @@ export class EMI {
    * @param buffer Buffer completo del mensaje EMI (incluyendo Message Code)
    * @returns Instancia del servicio correspondiente
    */
-  static fromBuffer(buffer: Buffer): ServiceMessage {
+  static fromBuffer(buffer: Buffer): EMIInstance {
     if (buffer.length === 0) {
       throw new Error("Buffer is empty");
     }
@@ -97,11 +95,10 @@ export class EMI {
     const messageCode = buffer.readUInt8(0);
 
     // Buscar el nombre del servicio en MESSAGE_CODE_FIELD
-    let serviceName: string | undefined;
+    let serviceName: { [K in KeysOfEMI]: keyof (typeof EMI)[K] }[KeysOfEMI] | string | undefined;
 
     // Priorizamos EMI2/IMI2, luego CEMI
     for (const [key, val] of Object.entries(MESSAGE_CODE_FIELD)) {
-      // @ts-ignore
       const codes = val as Record<string, { value: number }>;
       if (codes["EMI2/IMI2"] && codes["EMI2/IMI2"].value === messageCode) {
         serviceName = key;
@@ -114,9 +111,7 @@ export class EMI {
     }
 
     if (!serviceName) {
-      throw new Error(
-        `Unknown message code: 0x${messageCode.toString(16).toUpperCase()}`,
-      );
+      throw new Error(`Unknown message code: 0x${messageCode.toString(16).toUpperCase()}`);
     }
 
     // Buscar la clase en los grupos estáticos
@@ -130,8 +125,7 @@ export class EMI {
     ];
 
     for (const group of groups) {
-      // @ts-ignore
-      const ServiceClass = group[serviceName];
+      const ServiceClass = (group as any)[serviceName];
       if (ServiceClass && typeof ServiceClass.fromBuffer === "function") {
         return ServiceClass.fromBuffer(buffer);
       }
@@ -175,8 +169,7 @@ export class EMI {
       #res: bits4 = 0;
 
       set LL(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'LL' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'LL' must be 4 bits");
         this.#LL = value;
       }
 
@@ -185,8 +178,7 @@ export class EMI {
       }
 
       set NL(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'NL' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'NL' must be 4 bits");
         this.#NL = value;
       }
 
@@ -195,8 +187,7 @@ export class EMI {
       }
 
       set TLG(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'TLG' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'TLG' must be 4 bits");
         this.#TLG = value;
       }
 
@@ -205,8 +196,7 @@ export class EMI {
       }
 
       set TLC(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'TLC' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'TLC' must be 4 bits");
         this.#TLC = value;
       }
 
@@ -215,8 +205,7 @@ export class EMI {
       }
 
       set TLL(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'TLL' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'TLL' must be 4 bits");
         this.#TLL = value;
       }
 
@@ -225,8 +214,7 @@ export class EMI {
       }
 
       set AL(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'AL' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'AL' must be 4 bits");
         this.#AL = value;
       }
 
@@ -235,8 +223,7 @@ export class EMI {
       }
 
       set MAN(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'MAN' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'MAN' must be 4 bits");
         this.#MAN = value;
       }
 
@@ -245,8 +232,7 @@ export class EMI {
       }
 
       set PEI(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'PEI' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'PEI' must be 4 bits");
         this.#PEI = value;
       }
 
@@ -255,8 +241,7 @@ export class EMI {
       }
 
       set USR(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'USR' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'USR' must be 4 bits");
         this.#USR = value;
       }
 
@@ -265,8 +250,7 @@ export class EMI {
       }
 
       set res(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new TypeError("The property 'res' must be 4 bits");
+        if (value < 0 || value > 7) throw new TypeError("The property 'res' must be 4 bits");
         this.#res = value;
       }
 
@@ -330,9 +314,7 @@ export class EMI {
     "L_Busmon.ind": class LBusmonInd implements ServiceMessage {
       constructor(value: L_Busmon_ind) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Busmon.ind must be an object with specific properties.",
-          );
+          throw new Error("L_Busmon.ind must be an object with specific properties.");
         }
         // Initialize properties based on the value provided
         this.status = value.status;
@@ -370,10 +352,7 @@ export class EMI {
         buffer.writeInt16BE(this.timeStamp, 2);
         this.controlField1.buffer.copy(buffer, 4); // Assuming controlField1 is a Buffer
         this.LPDU.copy(buffer, 5);
-        buffer.writeUInt8(
-          checksum(buffer.subarray(0, buffer.length - 1)),
-          buffer.length - 1,
-        ); // Calculate FCS
+        buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -396,20 +375,15 @@ export class EMI {
       static fromBuffer(buffer: Buffer): LBusmonInd {
         // Verificar longitud mínima
         if (buffer.length < 5) {
-          throw new Error(
-            `Buffer too short for L_Busmon.ind: ${buffer.length} bytes`,
-          );
+          throw new Error(`Buffer too short for L_Busmon.ind: ${buffer.length} bytes`);
         }
 
         // Extraer componentes
         const messageCode = buffer.readUInt8(0);
-        const expectedCode =
-          MESSAGE_CODE_FIELD["L_Busmon.ind"]["EMI2/IMI2"].value;
+        const expectedCode = MESSAGE_CODE_FIELD["L_Busmon.ind"]["EMI2/IMI2"].value;
 
         if (messageCode !== expectedCode) {
-          throw new Error(
-            `Invalid message code for L_Busmon.ind: ${messageCode} (expected ${expectedCode})`,
-          );
+          throw new Error(`Invalid message code for L_Busmon.ind: ${messageCode} (expected ${expectedCode})`);
         }
 
         // Status byte
@@ -452,9 +426,7 @@ export class EMI {
     "L_Plain_Data.req": class LPlainDataReq implements ServiceMessage {
       constructor(value: L_Plain_Data_req) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Plain_Data.req must be an object with specific properties.",
-          );
+          throw new Error("L_Plain_Data.req must be an object with specific properties.");
         }
         this.time = value.time;
         this.data = value.data;
@@ -464,10 +436,7 @@ export class EMI {
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(6 + this.data.length);
-        buffer.writeUInt8(
-          MESSAGE_CODE_FIELD["L_Plain_Data.req"]["EMI2/IMI2"].value,
-          0,
-        );
+        buffer.writeUInt8(MESSAGE_CODE_FIELD["L_Plain_Data.req"]["EMI2/IMI2"].value, 0);
         buffer.writeUInt32BE(this.time, 2); // byte 3-6
         this.data.copy(buffer, 6);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
@@ -489,28 +458,21 @@ export class EMI {
       static fromBuffer(buffer: Buffer): LPlainDataReq {
         // Verificar longitud mínima
         if (buffer.length < 6) {
-          throw new Error(
-            `Buffer too short for L_Plain_Data.req: ${buffer.length} bytes`,
-          );
+          throw new Error(`Buffer too short for L_Plain_Data.req: ${buffer.length} bytes`);
         }
 
         // Extraer componentes
         const messageCode = buffer.readUInt8(0);
-        const expectedCode =
-          MESSAGE_CODE_FIELD["L_Plain_Data.req"]["EMI2/IMI2"].value;
+        const expectedCode = MESSAGE_CODE_FIELD["L_Plain_Data.req"]["EMI2/IMI2"].value;
 
         if (messageCode !== expectedCode) {
-          throw new Error(
-            `Invalid message code for L_Plain_Data.req: ${messageCode} (expected ${expectedCode})`,
-          );
+          throw new Error(`Invalid message code for L_Plain_Data.req: ${messageCode} (expected ${expectedCode})`);
         }
 
         // Verificar octeto de control (debe ser 0x00 según especificación)
         const controlByte = buffer.readUInt8(1);
         if (controlByte !== 0x00) {
-          console.warn(
-            `Warning: Control byte in L_Plain_Data.req is ${controlByte.toString(16)}, expected 0x00`,
-          );
+          console.warn(`Warning: Control byte in L_Plain_Data.req is ${controlByte.toString(16)}, expected 0x00`);
         }
 
         // Time (4 bytes, big endian, en posición 2-5)
@@ -521,9 +483,7 @@ export class EMI {
 
         // Verificar longitud máxima (28 octetos según especificación)
         if (data.length > 28) {
-          throw new Error(
-            `Data too long for L_Plain_Data.req: ${data.length} bytes (max 28)`,
-          );
+          throw new Error(`Data too long for L_Plain_Data.req: ${data.length} bytes (max 28)`);
         }
 
         return new LPlainDataReq({
@@ -540,11 +500,7 @@ export class EMI {
    */
   static DataLinkLayerEMI = {
     "L_Data.req": class LDataReq implements ServiceMessage {
-      constructor(
-        controlField: ControlField,
-        destinationAddress: string,
-        npdu: NPDU,
-      ) {
+      constructor(controlField: ControlField, destinationAddress: string, npdu: NPDU) {
         this.controlField1 = controlField;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
@@ -552,9 +508,7 @@ export class EMI {
         ) {
           this.destinationAddress = destinationAddress;
         } else {
-          throw new Error(
-            "The Destination Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.npdu = npdu;
       }
@@ -586,9 +540,7 @@ export class EMI {
       static fromBuffer(buffer: Buffer): LDataReq {
         const messageCode = MESSAGE_CODE_FIELD["L_Data.req"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
-          throw new Error(
-            `Invalid message code for L_Data.req. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
-          );
+          throw new Error(`Invalid message code for L_Data.req. Expected ${messageCode}, got ${buffer.readUInt8(0)}`);
         }
         if (buffer.length < 7) {
           throw new Error("Buffer too short for L_Data.req");
@@ -610,19 +562,13 @@ export class EMI {
 
         const npdu = NPDU.fromBuffer(buffer.subarray(6));
 
-        return new LDataReq(
-          controlField1,
-          destinationAddress as string,
-          npdu,
-        );
+        return new LDataReq(controlField1, destinationAddress as string, npdu);
       }
     },
     "L_Data.con": class LDataCon implements ServiceMessage {
       constructor(value: L_Data_con) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Data.req must be an object with specific properties.",
-          );
+          throw new Error("L_Data.req must be an object with specific properties.");
         }
         this.controlField1 = new ControlField(0);
         this.controlField1.priority = value.control.priority;
@@ -633,9 +579,7 @@ export class EMI {
         ) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error(
-            "The Destination Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.addressType = value.addressType;
         this.NPCI = value.NPCI;
@@ -654,11 +598,7 @@ export class EMI {
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] =
-          0x00 |
-          ((this.addressType << 7) |
-            (this.NPCI << 4) |
-            (this.npdu.length & 0x0f));
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
         this.npdu.copy(buffer, 7);
         return buffer;
       }
@@ -679,9 +619,7 @@ export class EMI {
       static fromBuffer(buffer: Buffer): LDataCon {
         const messageCode = MESSAGE_CODE_FIELD["L_Data.con"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
-          throw new Error(
-            `Invalid message code for L_Data.con. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
-          );
+          throw new Error(`Invalid message code for L_Data.con. Expected ${messageCode}, got ${buffer.readUInt8(0)}`);
         }
         if (buffer.length < 7) {
           throw new Error("Buffer too short for L_Data.con");
@@ -719,9 +657,7 @@ export class EMI {
     "L_Data.ind": class LDataInd implements ServiceMessage {
       constructor(value: L_Data_ind) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Data.ind must be an object with specific properties.",
-          );
+          throw new Error("L_Data.ind must be an object with specific properties.");
         }
         this.controlField1 = new ControlField(0);
         this.controlField1.priority = value.control.priority;
@@ -731,9 +667,7 @@ export class EMI {
         ) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error(
-            "The Destination Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.sourceAddress = value.sourceAddress;
         this.addressType = value.addressType;
@@ -755,11 +689,7 @@ export class EMI {
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] =
-          0x00 |
-          ((this.addressType << 7) |
-            (this.NPCI << 4) |
-            (this.npdu.length & 0x0f));
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
         this.npdu.copy(buffer, 7);
         return buffer;
       }
@@ -781,9 +711,7 @@ export class EMI {
       static fromBuffer(buffer: Buffer): LDataInd {
         const messageCode = MESSAGE_CODE_FIELD["L_Data.ind"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
-          throw new Error(
-            `Invalid message code for L_Data.ind. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
-          );
+          throw new Error(`Invalid message code for L_Data.ind. Expected ${messageCode}, got ${buffer.readUInt8(0)}`);
         }
         if (buffer.length < 7) {
           throw new Error("Buffer too short for L_Data.ind");
@@ -831,8 +759,7 @@ export class EMI {
       #nrOfSlots: bits4 = 0;
 
       set pollingGroup(value: number) {
-        if (value < 0 || value > 65.535)
-          throw new Error("The value must be 16 bits");
+        if (value < 0 || value > 65.535) throw new Error("The value must be 16 bits");
         this.#pollingGroup = value;
       }
 
@@ -873,8 +800,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): LPollDataReq {
-        const messageCode =
-          MESSAGE_CODE_FIELD["L_Poll_Data.req"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["L_Poll_Data.req"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
             `Invalid message code for L_Poll_Data.req. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
@@ -905,8 +831,7 @@ export class EMI {
       #nrOfSlots: bits4 = 0;
 
       set pollingGroup(value: number) {
-        if (value < 0 || value > 65.535)
-          throw new Error("The value must be 16 bits");
+        if (value < 0 || value > 65.535) throw new Error("The value must be 16 bits");
         this.#pollingGroup = value;
       }
 
@@ -927,10 +852,7 @@ export class EMI {
         const buffer = Buffer.alloc(7);
         let octet7 = 0;
         octet7 = octet7 | (this.#nrOfSlots & 0x0f);
-        buffer.writeUInt8(
-          MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value,
-          0,
-        );
+        buffer.writeUInt8(MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value, 0);
         this.control.buffer.copy(buffer, 1);
         buffer.writeUInt8(0, 2);
         buffer.writeUInt8(0, 3);
@@ -950,8 +872,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): LPollDataCon {
-        const messageCode =
-          MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
             `Invalid message code for L_Poll_Data.con. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
@@ -973,31 +894,25 @@ export class EMI {
     "L_SystemBroadcast.req": class LSystemBroadcastReq implements ServiceMessage {
       constructor(value: L_SystemBroadcast_req) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Data.ind must be an object with specific properties.",
-          );
+          throw new Error("L_Data.ind must be an object with specific properties.");
         }
         this.controlField1 = new ControlField(0b10000000);
         this.controlField1.priority = value.control.priority;
         this.controlField1.confirm = value.control.confirm;
-        this.messageCode =
-          MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
+        this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
         if (
           KNXHelper.isValidGroupAddress(value.destinationAddress) ||
           KNXHelper.isValidIndividualAddress(value.destinationAddress)
         ) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error(
-            "The Destination Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.addressType = value.addressType;
         this.NPCI = value.NPCI;
         this.npdu = value.NPDU;
       }
-      messageCode =
-        MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
       addressType: AddressType;
@@ -1010,11 +925,7 @@ export class EMI {
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] =
-          0x00 |
-          ((this.addressType << 7) |
-            (this.NPCI << 4) |
-            (this.npdu.length & 0x0f));
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
         this.npdu.copy(buffer, 7);
         return buffer;
       }
@@ -1033,8 +944,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): LSystemBroadcastReq {
-        const messageCode =
-          MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
             `Invalid message code for L_SystemBroadcast.req. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
@@ -1074,32 +984,26 @@ export class EMI {
     "L_SystemBroadcast.con": class LSystemBroadcastCon implements ServiceMessage {
       constructor(value: L_SystemBroadcast_con) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Data.ind must be an object with specific properties.",
-          );
+          throw new Error("L_Data.ind must be an object with specific properties.");
         }
         this.controlField1 = new ControlField(0);
         this.controlField1.repeat = value.control.notRepeat;
         this.controlField1.priority = value.control.priority;
         this.controlField1.confirm = value.control.confirm;
-        this.messageCode =
-          MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+        this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
         if (
           KNXHelper.isValidGroupAddress(value.destinationAddress) ||
           KNXHelper.isValidIndividualAddress(value.destinationAddress)
         ) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error(
-            "The Destination Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.addressType = value.addressType;
         this.NPCI = value.NPCI;
         this.npdu = value.NPDU;
       }
-      messageCode =
-        MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
       addressType: AddressType;
@@ -1112,11 +1016,7 @@ export class EMI {
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] =
-          0x00 |
-          ((this.addressType << 7) |
-            (this.NPCI << 4) |
-            (this.npdu.length & 0x0f));
+        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
         this.npdu.copy(buffer, 7);
         return buffer;
       }
@@ -1135,8 +1035,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): LSystemBroadcastCon {
-        const messageCode =
-          MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
             `Invalid message code for L_SystemBroadcast.con. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
@@ -1175,9 +1074,7 @@ export class EMI {
     "L_SystemBroadcast.ind": class LSystemBroadcastInd implements ServiceMessage {
       constructor(value: L_SystemBroadcast_ind) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "L_Data.ind must be an object with specific properties.",
-          );
+          throw new Error("L_Data.ind must be an object with specific properties.");
         }
         this.controlField1 = new ControlField(0);
         this.controlField1.priority = value.control.priority;
@@ -1187,9 +1084,7 @@ export class EMI {
         ) {
           this.destinationAddress = value.destinationAddress;
         } else {
-          throw new Error(
-            "The Destination Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         if (
           KNXHelper.isValidGroupAddress(value.sourceAddress) ||
@@ -1197,16 +1092,13 @@ export class EMI {
         ) {
           this.sourceAddress = value.sourceAddress;
         } else {
-          throw new Error(
-            "The Source Address is invalid Group Address or Individual Address",
-          );
+          throw new Error("The Source Address is invalid Group Address or Individual Address");
         }
         this.addressType = value.addressType;
         this.NPCI = value.NPCI;
         this.npdu = value.NPDU;
       }
-      messageCode =
-        MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value;
 
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
@@ -1247,10 +1139,7 @@ export class EMI {
         // I will try to match the code found in the buffer.
 
         // Strict check:
-        if (
-          buffer.readUInt8(0) !==
-          MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value
-        ) {
+        if (buffer.readUInt8(0) !== MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value) {
           throw new Error("This messageCode is not L_SystemBroadcast.ind");
         }
 
@@ -1301,17 +1190,14 @@ export class EMI {
    */
   static NetworkLayerEMI = {
     "N_Data_Individual.req": class NDataIndividualReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
       controlField: ControlField;
       destinationAddress: string; // Individual address
       TPDU: Buffer; // Transport Layer Protocol Data Unit
 
       constructor(value: N_Data_Individual_req_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Individual.req must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Individual.req must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.frameType = value.control.frameType;
@@ -1322,9 +1208,7 @@ export class EMI {
         this.controlField.confirm = value.control.confirm;
 
         if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
-          throw new Error(
-            "The Destination Address must be a valid Individual Address",
-          );
+          throw new Error("The Destination Address must be a valid Individual Address");
         }
         this.destinationAddress = value.destinationAddress;
         this.TPDU = value.TPDU;
@@ -1364,12 +1248,9 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataIndividualReq {
-        const messageCode =
-          MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
         if (buffer.length < 7) {
-          throw new Error(
-            "Buffer too short for N_Data_Individual.req message.",
-          );
+          throw new Error("Buffer too short for N_Data_Individual.req message.");
         }
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
@@ -1383,17 +1264,12 @@ export class EMI {
         // Octets 3-4 (index 2-3) son 0x0000 (unused) en la Request.
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        const destinationAddress = KNXHelper.GetAddress(
-          destinationAddressBuf,
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, ".");
 
         const length = buffer.readUInt8(6) & 0x0f; // Octet 7: LG (lower 4 bits)
 
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`,
-          );
+          throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
         const TPDU = buffer.subarray(7, 7 + length);
@@ -1413,17 +1289,14 @@ export class EMI {
       }
     },
     "N_Data_Individual.con": class NDataIndividualCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["N_Data_Individual.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.con"]["EMI2/IMI2"].value;
       controlField: ControlField;
       destinationAddress: string; // Destination address
       TPDU: Buffer;
 
       constructor(value: N_Data_Individual_con_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Individual.con must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Individual.con must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.confirm = value.control.confirm; // Set confirm bit
@@ -1431,9 +1304,7 @@ export class EMI {
         // Therefore, priority should not be set here.
 
         if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
-          throw new Error(
-            "The Destination Address must be a valid Individual Address",
-          );
+          throw new Error("The Destination Address must be a valid Individual Address");
         }
         this.destinationAddress = value.destinationAddress;
         this.TPDU = value.TPDU;
@@ -1473,12 +1344,9 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataIndividualCon {
-        const messageCode =
-          MESSAGE_CODE_FIELD["N_Data_Individual.con"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.con"]["EMI2/IMI2"].value;
         if (buffer.length < 7) {
-          throw new Error(
-            "Buffer too short for N_Data_Individual.con message.",
-          );
+          throw new Error("Buffer too short for N_Data_Individual.con message.");
         }
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
@@ -1492,17 +1360,12 @@ export class EMI {
         // Octets 3-4 (index 2-3) son 0x0000 (unused).
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        const destinationAddress = KNXHelper.GetAddress(
-          destinationAddressBuf,
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, ".");
 
         const length = buffer.readUInt8(6) & 0x0f; // Octet 7: LG (lower 4 bits)
 
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`,
-          );
+          throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
         const TPDU = buffer.subarray(7, 7 + length);
@@ -1517,8 +1380,7 @@ export class EMI {
       }
     },
     "N_Data_Individual.ind": class NDataIndividualInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["N_Data_Individual.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.ind"]["EMI2/IMI2"].value;
       controlField: ControlField;
       sourceAddress: string; // Individual address
       destinationAddress: string; // Individual address
@@ -1527,24 +1389,18 @@ export class EMI {
 
       constructor(value: N_Data_Individual_ind_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Individual.ind must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Individual.ind must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.priority = value.control.priority;
 
         if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error(
-            "The Source Address must be a valid Individual Address",
-          );
+          throw new Error("The Source Address must be a valid Individual Address");
         }
         this.sourceAddress = value.sourceAddress;
 
         if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
-          throw new Error(
-            "The Destination Address must be a valid Individual Address",
-          );
+          throw new Error("The Destination Address must be a valid Individual Address");
         }
         this.destinationAddress = value.destinationAddress;
         this.hopCount = value.hopCount;
@@ -1564,10 +1420,7 @@ export class EMI {
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         // Octet 7: hop_count_type (bits 6-4) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(
-          ((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f),
-          6,
-        );
+        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f), 6);
         this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
@@ -1591,12 +1444,9 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataIndividualInd {
-        const messageCode =
-          MESSAGE_CODE_FIELD["N_Data_Individual.ind"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.ind"]["EMI2/IMI2"].value;
         if (buffer.length < 7) {
-          throw new Error(
-            "Buffer too short for N_Data_Individual.ind message.",
-          );
+          throw new Error("Buffer too short for N_Data_Individual.ind message.");
         }
         if (buffer.readUInt8(0) !== messageCode) {
           throw new Error(
@@ -1611,19 +1461,14 @@ export class EMI {
         const sourceAddress = KNXHelper.GetAddress(sourceAddressBuf, ".");
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        const destinationAddress = KNXHelper.GetAddress(
-          destinationAddressBuf,
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, ".");
 
         const octet7 = buffer.readUInt8(6);
         const hopCount = (octet7 >> 4) & 0x0f; // Octet 7: Hop Count (upper 4 bits)
         const length = octet7 & 0x0f; // Octet 7: LG (lower 4 bits)
 
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`,
-          );
+          throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
         const TPDU = buffer.subarray(7, 7 + length);
@@ -1647,9 +1492,7 @@ export class EMI {
 
       constructor(value: N_Data_Group_req_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Group.req must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Group.req must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.priority = value.control.priority;
@@ -1657,9 +1500,7 @@ export class EMI {
         // Therefore, ackRequest should not be set here.
 
         if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
-          throw new Error(
-            "The Destination Address must be a valid Group Address",
-          );
+          throw new Error("The Destination Address must be a valid Group Address");
         }
         this.destinationAddress = value.destinationAddress;
         this.APDU = value.APDU;
@@ -1700,8 +1541,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataGroupReq {
-        const messageCode =
-          MESSAGE_CODE_FIELD["N_Data_Group.req"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["N_Data_Group.req"]["EMI2/IMI2"].value;
         if (buffer.length < 7) {
           throw new Error("Buffer too short for N_Data_Group.req message.");
         }
@@ -1717,17 +1557,12 @@ export class EMI {
         // Octets 3-4 (index 2-3) son 0x0000 (unused) en la Request.
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        const destinationAddress = KNXHelper.GetAddress(
-          destinationAddressBuf,
-          "/",
-        ); // Dirección de Grupo
+        const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, "/"); // Dirección de Grupo
 
         const length = buffer.readUInt8(6) & 0x0f; // Octet 7: LG (lower 4 bits), upper 4 bits unused (hop count = 0)
 
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`,
-          );
+          throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
         const APDU = buffer.subarray(7, 7 + length);
@@ -1749,9 +1584,7 @@ export class EMI {
 
       constructor(value: N_Data_Group_con_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Group.con must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Group.con must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.confirm = value.control.confirm;
@@ -1759,9 +1592,7 @@ export class EMI {
         // Therefore, priority should not be set here.
 
         if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
-          throw new Error(
-            "The Destination Address must be a valid Group Address",
-          );
+          throw new Error("The Destination Address must be a valid Group Address");
         }
         this.destinationAddress = value.destinationAddress;
         this.APDU = value.APDU;
@@ -1801,8 +1632,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataGroupCon {
-        const messageCode =
-          MESSAGE_CODE_FIELD["N_Data_Group.con"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["N_Data_Group.con"]["EMI2/IMI2"].value;
         if (buffer.length < 7) {
           throw new Error("Buffer too short for N_Data_Group.con message.");
         }
@@ -1818,17 +1648,12 @@ export class EMI {
         // Octets 3-4 (index 2-3) son 0x0000 (unused) en la Confirmation.
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        const destinationAddress = KNXHelper.GetAddress(
-          destinationAddressBuf,
-          "/",
-        ); // Dirección de Grupo
+        const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, "/"); // Dirección de Grupo
 
         const length = buffer.readUInt8(6) & 0x0f; // Octet 7: LG (lower 4 bits), upper 4 bits unused
 
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`,
-          );
+          throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
         const APDU = buffer.subarray(7, 7 + length);
@@ -1852,24 +1677,18 @@ export class EMI {
 
       constructor(value: N_Data_Group_ind_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Group.ind must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Group.ind must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.priority = value.control.priority;
 
         if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error(
-            "The Source Address must be a valid Individual Address",
-          );
+          throw new Error("The Source Address must be a valid Individual Address");
         }
         this.sourceAddress = value.sourceAddress;
 
         if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
-          throw new Error(
-            "The Destination Address must be a valid Group Address",
-          );
+          throw new Error("The Destination Address must be a valid Group Address");
         }
         this.destinationAddress = value.destinationAddress;
         this.hopCount = value.hopCount;
@@ -1889,10 +1708,7 @@ export class EMI {
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address in diagram, but text implies unused for Group.ind)
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(
-          ((this.hopCount & 0x0f) << 4) | (this.APDU.length & 0x0f),
-          6,
-        );
+        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.APDU.length & 0x0f), 6);
         this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
@@ -1916,8 +1732,7 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataGroupInd {
-        const messageCode =
-          MESSAGE_CODE_FIELD["N_Data_Group.ind"]["EMI2/IMI2"].value;
+        const messageCode = MESSAGE_CODE_FIELD["N_Data_Group.ind"]["EMI2/IMI2"].value;
         if (buffer.length < 7) {
           throw new Error("Buffer too short for N_Data_Group.ind message.");
         }
@@ -1937,19 +1752,14 @@ export class EMI {
         const sourceAddress = KNXHelper.GetAddress(sourceAddressBuf, "."); // Dirección Individual
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        const destinationAddress = KNXHelper.GetAddress(
-          destinationAddressBuf,
-          "/",
-        ); // Dirección de Grupo
+        const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, "/"); // Dirección de Grupo
 
         const octet7 = buffer.readUInt8(6);
         const hopCount = (octet7 >> 4) & 0x0f; // Octet 7: Hop Count (upper 4 bits)
         const length = octet7 & 0x0f; // Octet 7: LG (lower 4 bits)
 
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`,
-          );
+          throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
         const APDU = buffer.subarray(7, 7 + length);
@@ -1966,17 +1776,14 @@ export class EMI {
       }
     },
     "N_Data_Broadcast.req": class NDataBroadcastReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
       controlField: ControlField;
       hopCount: NPCI;
       TPDU: Buffer;
 
       constructor(value: N_Data_Broadcast_req_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Broadcast.req must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Broadcast.req must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.priority = value.control.priority;
@@ -2020,10 +1827,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataBroadcastReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error(`Invalid message code.`);
+        const expectedCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error(`Invalid message code.`);
 
         const controlField = new ControlField(buffer.readUInt8(1));
 
@@ -2045,16 +1850,13 @@ export class EMI {
       }
     },
     "N_Data_Broadcast.con": class NDataBroadcastCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
       controlField: ControlField;
       TPDU: Buffer;
 
       constructor(value: N_Data_Broadcast_con_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Broadcast.con must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Broadcast.con must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.confirm = value.control.confirm;
@@ -2106,8 +1908,7 @@ export class EMI {
        * [7...]: TPDU
        */
       static fromBuffer(buffer: Buffer): NDataBroadcastCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
+        const expectedCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
         const actualCode = buffer.readUInt8(0);
 
         if (actualCode !== expectedCode) {
@@ -2130,9 +1931,7 @@ export class EMI {
 
         // Validación de integridad de datos
         if (buffer.length < 7 + length) {
-          throw new Error(
-            `Buffer mismatch: Expected ${length} bytes of TPDU, available ${buffer.length - 7}`,
-          );
+          throw new Error(`Buffer mismatch: Expected ${length} bytes of TPDU, available ${buffer.length - 7}`);
         }
 
         const TPDU = buffer.subarray(7, 7 + length);
@@ -2146,8 +1945,7 @@ export class EMI {
       }
     },
     "N_Data_Broadcast.ind": class NDataBroadcastInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["N_Data_Broadcast.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.ind"]["EMI2/IMI2"].value;
       controlField: ControlField;
       sourceAddress: string; // Individual address
       hopCount: number; // 4 bits (formerly NPCI)
@@ -2155,17 +1953,13 @@ export class EMI {
 
       constructor(value: N_Data_Broadcast_ind_Ctor) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Data_Broadcast.ind must be an object with specific properties.",
-          );
+          throw new Error("N_Data_Broadcast.ind must be an object with specific properties.");
         }
         this.controlField = new ControlField(0);
         this.controlField.priority = value.control.priority;
 
         if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error(
-            "The Source Address must be a valid Individual Address",
-          );
+          throw new Error("The Source Address must be a valid Individual Address");
         }
         this.sourceAddress = value.sourceAddress;
         this.hopCount = value.hopCount;
@@ -2185,10 +1979,7 @@ export class EMI {
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(
-          ((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f),
-          6,
-        );
+        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f), 6);
         this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
@@ -2211,10 +2002,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NDataBroadcastInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["N_Data_Broadcast.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error(`Invalid message code.`);
+        const expectedCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error(`Invalid message code.`);
 
         const controlField = new ControlField(buffer.readUInt8(1));
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
@@ -2223,9 +2012,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
         const octet6 = buffer.readUInt8(6);
         const hopCount = octet6 & 0x70;
@@ -2248,9 +2035,7 @@ export class EMI {
 
       constructor(value: N_Poll_Data_Req) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Poll_Data.req must be an object with specific properties.",
-          );
+          throw new Error("N_Poll_Data.req must be an object with specific properties.");
         }
         this.nrOfSlots = value.nrOfSlots;
         this.pollingGroup = value.pollingGroup;
@@ -2266,8 +2051,7 @@ export class EMI {
       }
 
       set nrOfSlots(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new Error("The nrOfSlots value must be 4 bits (0-7)");
+        if (value < 0 || value > 7) throw new Error("The nrOfSlots value must be 4 bits (0-7)");
         this.#nrOfSlots = value;
       }
 
@@ -2307,10 +2091,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): NPollDataReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["N_Poll_Data.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error(`Invalid message code.`);
+        const expectedCode = MESSAGE_CODE_FIELD["N_Poll_Data.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error(`Invalid message code.`);
 
         // Estructura: MC (1) | Control (1) | Source (2) | PollingGroup (2) | Count (1) | Data...
         // Nota: Revisa tu especificación exacta, a veces Poll Data tiene estructura propia
@@ -2322,9 +2104,7 @@ export class EMI {
             "The pollingGroup is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof pollingGroup !== "string")
-          throw new Error(
-            "The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         const octet6 = buffer.readUInt8(6);
         const nrOfSlots = octet6 & 0x0f; // Ejemplo, ver spec
 
@@ -2344,9 +2124,7 @@ export class EMI {
 
       constructor(value: N_Poll_Data_Con) {
         if (typeof value !== "object" || value === null) {
-          throw new Error(
-            "N_Poll_Data.con must be an object with specific properties.",
-          );
+          throw new Error("N_Poll_Data.con must be an object with specific properties.");
         }
         this.pollingGroup = value.pollingGroup;
         this.nrOfSlots = value.nrOfSlots;
@@ -2363,8 +2141,7 @@ export class EMI {
       }
 
       set nrOfSlots(value: bits4) {
-        if (value < 0 || value > 7)
-          throw new Error("The nrOfSlots value must be 4 bits (0-7)");
+        if (value < 0 || value > 7) throw new Error("The nrOfSlots value must be 4 bits (0-7)");
         this.#nrOfSlots = value;
       }
 
@@ -2423,8 +2200,7 @@ export class EMI {
        * [7...]: Poll Data
        */
       static fromBuffer(buffer: Buffer): NPollDataCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["N_Poll_Data.con"]["EMI2/IMI2"].value;
+        const expectedCode = MESSAGE_CODE_FIELD["N_Poll_Data.con"]["EMI2/IMI2"].value;
         const actualCode = buffer.readUInt8(0);
 
         if (actualCode !== expectedCode) {
@@ -2442,18 +2218,13 @@ export class EMI {
 
         // Octet 4-5: Polling Group
         // Asumimos que es una dirección de grupo, usamos separador "/"
-        const pollingGroupStr = KNXHelper.GetAddress(
-          buffer.subarray(4, 6),
-          "/",
-        );
+        const pollingGroupStr = KNXHelper.GetAddress(buffer.subarray(4, 6), "/");
         if (!pollingGroupStr)
           throw new Error(
             "The pollingGroupStr is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof pollingGroupStr !== "string")
-          throw new Error(
-            "The pollingGroupStr is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollingGroupStr is not string, this fatal error is from GetAddress, dont be ignore it");
 
         // Octet 6: NrOfSlots (bits 0-3)
         // Nota: El usuario usa los bits bajos. En spec estándar a veces es Length.
@@ -2502,20 +2273,14 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TConnectReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Connect.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Message Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Connect.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Message Code");
 
         // T_Connect.req es de 6 bytes: MC | Ctrl | Unused(2) | Dest(2)
-        if (buffer.length < 6)
-          throw new Error("Buffer too short for T_Connect.req");
+        if (buffer.length < 6) throw new Error("Buffer too short for T_Connect.req");
 
         // Destination está en bytes 4-5
-        const destinationAddress = KNXHelper.GetAddress(
-          buffer.subarray(4, 6),
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(buffer.subarray(4, 6), ".");
 
         if (!destinationAddress)
           throw new Error(
@@ -2560,18 +2325,12 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TConnectCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Connect.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Message Code");
-        if (buffer.length < 6)
-          throw new Error("Buffer too short for T_Connect.con");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Connect.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Message Code");
+        if (buffer.length < 6) throw new Error("Buffer too short for T_Connect.con");
 
         // Según tu toBuffer, escribes la dirección en el offset 2 (posición Source)
-        const destinationAddress = KNXHelper.GetAddress(
-          buffer.subarray(2, 4),
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
         if (!destinationAddress)
           throw new Error(
             "The destinationAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
@@ -2620,10 +2379,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TConnectInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Connect.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Message Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Connect.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Message Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -2634,9 +2391,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
         return new TConnectInd({
           control: {
@@ -2674,10 +2429,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDisconnectReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Disconnect.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Disconnect.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
         // No hay datos adicionales en req
@@ -2714,10 +2467,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDisconnectCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Disconnect.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Disconnect.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -2764,10 +2515,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDisconnectInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Disconnect.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Disconnect.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -2785,8 +2534,7 @@ export class EMI {
       }
     },
     "T_Data_Connected.req": class TDataConnectedReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Connected.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"]["EMI2/IMI2"].value;
       control = new ControlField();
       APDU: Buffer;
       hopCount: number;
@@ -2817,10 +2565,8 @@ export class EMI {
         };
       }
       static fromBuffer(buffer: Buffer): TDataConnectedReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Connected.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         // Requiere al menos 7 bytes (Header 6 + Len 1) + Data
         if (buffer.length < 7) throw new Error("Buffer too short");
 
@@ -2831,8 +2577,7 @@ export class EMI {
         const length = octet6 & 0x0f;
 
         // Validar integridad
-        if (buffer.length < 7 + length)
-          throw new Error("Buffer data incomplete");
+        if (buffer.length < 7 + length) throw new Error("Buffer data incomplete");
 
         const apdu = buffer.subarray(7, 7 + length);
 
@@ -2844,8 +2589,7 @@ export class EMI {
       }
     },
     "T_Data_Connected.con": class TDataConnectedCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
       control = new ControlField();
       APDU: Buffer;
 
@@ -2877,10 +2621,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataConnectedCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -2894,8 +2636,7 @@ export class EMI {
       }
     },
     "T_Data_Connected.ind": class TDataConnectedInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Connected.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
       sourceAddress: string;
       APDU: Buffer;
@@ -2933,10 +2674,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataConnectedInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Connected.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -2947,9 +2686,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
@@ -3001,10 +2738,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataGroupReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Group.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Group.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3053,10 +2788,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataGroupCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Group.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Group.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3102,10 +2835,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataGroupInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Group.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Group.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3121,8 +2852,7 @@ export class EMI {
       }
     },
     "T_Data_Individual.req": class TDataIndividualReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Individual.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.req"]["EMI2/IMI2"].value;
       control = new ControlField();
       destinationAddress: string;
       APDU: Buffer;
@@ -3159,18 +2889,13 @@ export class EMI {
         };
       }
       static fromBuffer(buffer: Buffer): TDataIndividualReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Individual.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Individual.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
         // Tu toBuffer usa offset 4 para Destino
-        const destinationAddress = KNXHelper.GetAddress(
-          buffer.subarray(4, 6),
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(buffer.subarray(4, 6), ".");
         if (!destinationAddress)
           throw new Error(
             "The destinationAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
@@ -3193,8 +2918,7 @@ export class EMI {
       }
     },
     "T_Data_Individual.con": class TDataIndividualCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Individual.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.con"]["EMI2/IMI2"].value;
       control = new ControlField();
       destinationAddress: string;
       APDU: Buffer;
@@ -3228,18 +2952,13 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataIndividualCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Individual.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Individual.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
         // Tu toBuffer usa offset 4 para Destino en .con
-        const destinationAddress = KNXHelper.GetAddress(
-          buffer.subarray(4, 6),
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(buffer.subarray(4, 6), ".");
         if (!destinationAddress)
           throw new Error(
             "The destinationAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
@@ -3259,8 +2978,7 @@ export class EMI {
       }
     },
     "T_Data_Individual.ind": class TDataIndividualInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Individual.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
       sourceAddress: string;
       destinationAddress: string;
@@ -3301,19 +3019,14 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataIndividualInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Individual.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Individual.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
         // Ind: Source en 2, Dest en 4
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
-        const destinationAddress = KNXHelper.GetAddress(
-          buffer.subarray(4, 6),
-          ".",
-        );
+        const destinationAddress = KNXHelper.GetAddress(buffer.subarray(4, 6), ".");
         if (!destinationAddress)
           throw new Error(
             "The destinationAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
@@ -3327,9 +3040,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
@@ -3345,8 +3056,7 @@ export class EMI {
       }
     },
     "T_Data_Broadcast.req": class TDataBroadcastReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Broadcast.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.req"]["EMI2/IMI2"].value;
       control = new ControlField();
       APDU: Buffer;
       hopCount: number;
@@ -3380,10 +3090,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataBroadcastReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Broadcast.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3401,8 +3109,7 @@ export class EMI {
       }
     },
     "T_Data_Broadcast.con": class TDataBroadcastCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Broadcast.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.con"]["EMI2/IMI2"].value;
       control = new ControlField();
       APDU: Buffer;
 
@@ -3431,10 +3138,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TDataBroadcastCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Broadcast.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3449,8 +3154,7 @@ export class EMI {
       }
     },
     "T_Data_Broadcast.ind": class TDataBroadcastInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["T_Data_Broadcast.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
       sourceAddress: string;
       APDU: Buffer;
@@ -3486,10 +3190,8 @@ export class EMI {
         };
       }
       static fromBuffer(buffer: Buffer): TDataBroadcastInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Data_Broadcast.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3499,9 +3201,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
@@ -3551,10 +3251,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TPollDataReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Poll_Data.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Poll_Data.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
 
         // Estructura: MC(0) | Ctrl(1) | Unused(2-3) | PollGroup(4-5) | Slots(6)
@@ -3566,9 +3264,7 @@ export class EMI {
             "The pollingGroup is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof pollingGroup !== "string")
-          throw new Error(
-            "The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         const slots = buffer.readUInt8(6) & 0x0f;
 
         return new TPollDataReq({
@@ -3621,10 +3317,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): TPollDataCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["T_Poll_Data.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["T_Poll_Data.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
         const control = new ControlField(buffer.readUInt8(1));
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
@@ -3634,17 +3328,13 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
         if (!pollingGroup)
           throw new Error(
             "The pollingGroup is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof pollingGroup !== "string")
-          throw new Error(
-            "The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         const slots = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7);
 
@@ -3697,10 +3387,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MConnectInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_Connect.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Message Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_Connect.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Message Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
         // Según tu toBuffer, Source está en offset 2
@@ -3710,9 +3398,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
         return new MConnectInd({
           sourceAddress: sourceAddress,
         });
@@ -3740,17 +3426,14 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MDisconnectInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_Disconnect.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_Disconnect.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         // Sin datos extra
         return new MDisconnectInd();
       }
     },
     "M_User_Data_Connected.req": class MUserDataConnectedReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["M_User_Data_Connected.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.req"]["EMI2/IMI2"].value;
       control = new ControlField();
       APDU: Buffer;
       hopCount: number;
@@ -3786,10 +3469,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MUserDataConnectedReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_User_Data_Connected.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 8) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -3817,8 +3498,7 @@ export class EMI {
       }
     },
     "M_User_Data_Connected.con": class MUserDataConnectedCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["M_User_Data_Connected.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.con"]["EMI2/IMI2"].value;
       control = new ControlField();
       APDU: Buffer;
 
@@ -3851,10 +3531,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MUserDataConnectedCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_User_Data_Connected.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const length = buffer.readUInt8(6) & 0x0f;
@@ -3869,8 +3547,7 @@ export class EMI {
       }
     },
     "M_User_Data_Connected.ind": class MUserDataConnectedInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["M_User_Data_Connected.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
       sourceAddress: string;
       APDU: Buffer;
@@ -3907,10 +3584,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MUserDataConnectedInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_User_Data_Connected.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
@@ -3919,9 +3594,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
         const length = buffer.readUInt8(6) & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
@@ -3979,10 +3652,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): ADataGroupReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["A_Data_Group.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["A_Data_Group.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 8) throw new Error("Buffer too short");
 
         const control = new ControlField(buffer.readUInt8(1));
@@ -4057,10 +3728,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): ADataGroupCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["A_Data_Group.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["A_Data_Group.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const sap = buffer.readUInt8(5);
@@ -4124,10 +3793,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): ADataGroupInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["A_Data_Group.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["A_Data_Group.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const sap = buffer.readUInt8(5);
@@ -4148,8 +3815,7 @@ export class EMI {
       }
     },
     "M_User_Data_Individual.req": class MUserDataIndividualReq implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
       control = new ControlField();
       destinationAddress: string;
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
@@ -4194,21 +3860,15 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MUserDataIndividualReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const destAddr = KNXHelper.GetAddress(buffer.subarray(4, 6), ".");
         if (!destAddr)
-          throw new Error(
-            "The destAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The destAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it");
         if (typeof destAddr !== "string")
-          throw new Error(
-            "The destAddr is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The destAddr is not string, this fatal error is from GetAddress, dont be ignore it");
 
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
@@ -4225,8 +3885,7 @@ export class EMI {
       }
     },
     "M_User_Data_Individual.con": class MUserDataIndividualCon implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
       control = new ControlField();
       destinationAddress: string;
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
@@ -4268,21 +3927,15 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MUserDataIndividualCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const destAddr = KNXHelper.GetAddress(buffer.subarray(4, 6), ".");
         if (!destAddr)
-          throw new Error(
-            "The destAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The destAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it");
         if (typeof destAddr !== "string")
-          throw new Error(
-            "The destAddr is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The destAddr is not string, this fatal error is from GetAddress, dont be ignore it");
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
@@ -4294,8 +3947,7 @@ export class EMI {
       }
     },
     "M_User_Data_Individual.ind": class MUserDataIndividualInd implements ServiceMessage {
-      messageCode =
-        MESSAGE_CODE_FIELD["M_User_Data_Individual.ind"]["EMI2/IMI2"].value;
+      messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
       sourceAddress: string;
       destinationAddress: string;
@@ -4341,10 +3993,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): MUserDataIndividualInd {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["M_User_Data_Individual.ind"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.ind"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         const control = new ControlField(buffer.readUInt8(1));
         const sourceAddr = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
@@ -4354,17 +4004,11 @@ export class EMI {
             "The sourceAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddr !== "string")
-          throw new Error(
-            "The sourceAddr is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddr is not string, this fatal error is from GetAddress, dont be ignore it");
         if (!destAddr)
-          throw new Error(
-            "The destAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The destAddr is undefined or null, this fatal error is from GetAddress, dont be ignore it");
         if (typeof destAddr !== "string")
-          throw new Error(
-            "The destAddr is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The destAddr is not string, this fatal error is from GetAddress, dont be ignore it");
 
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
@@ -4413,21 +4057,15 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): APollDataReq {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["A_Poll_Data.req"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["A_Poll_Data.req"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         // Estructura según tu toBuffer: MC(0), Ctrl(1), Unused(2-3), Group(4-5), Slots(6)
         const pollGroup = KNXHelper.GetAddress(buffer.subarray(4, 6), "/");
         if (!pollGroup)
-          throw new Error(
-            "The pollGroup is undefined or null, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollGroup is undefined or null, this fatal error is from GetAddress, dont be ignore it");
         if (typeof pollGroup !== "string")
-          throw new Error(
-            "The pollGroup is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         const slots = buffer.readUInt8(6) & 0x0f;
 
         return new APollDataReq({
@@ -4479,10 +4117,8 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): APollDataCon {
-        const expectedCode =
-          MESSAGE_CODE_FIELD["A_Poll_Data.con"]["EMI2/IMI2"].value;
-        if (buffer.readUInt8(0) !== expectedCode)
-          throw new Error("Invalid Code");
+        const expectedCode = MESSAGE_CODE_FIELD["A_Poll_Data.con"]["EMI2/IMI2"].value;
+        if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
 
         // Offset 2: Source
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
@@ -4491,9 +4127,7 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error(
-            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
         // Offset 4: Polling Group
         const pollingGroup = KNXHelper.GetAddress(buffer.subarray(4, 6), "/");
         if (!pollingGroup)
@@ -4501,9 +4135,7 @@ export class EMI {
             "The pollingGroup is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof pollingGroup !== "string")
-          throw new Error(
-            "The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it",
-          );
+          throw new Error("The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         // Offset 6: Slots
         const slots = buffer.readUInt8(6) & 0x0f;
         // Offset 7: Data
@@ -4807,3 +4439,8 @@ type EMIValidator = {
 };
 // !! This is for verify all class if have the method fromBuffer
 EMI satisfies EMIValidator;
+
+// Correct way to get all classes from all groups
+type EMIClasses = { [K in KeysOfEMI]: (typeof EMI)[K][keyof (typeof EMI)[K]] }[KeysOfEMI];
+
+export type EMIInstance = InstanceType<EMIClasses>;

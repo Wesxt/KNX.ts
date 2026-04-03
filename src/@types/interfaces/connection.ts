@@ -195,3 +195,21 @@ export interface KNXUSBOptions {
 }
 
 export type AllConnectionOptions = TPUARTOptions | KNXUSBOptions | KNXnetIPServerOptions | KNXTunnelingOptions;
+
+/**
+ * Interface for a discovered KNXnet/IP device.
+ */
+export interface KNXDiscoveredDevice {
+  ip: string;
+  port: number;
+  knxMediumRaw: number;
+  knxMedium: string;
+  deviceStatusRaw: number;
+  deviceStatus: string;
+  individualAddress: number;
+  projectInstallationId: number;
+  serialNumber: Buffer;
+  routingMulticastAddress: string;
+  macAddress: string;
+  friendlyName: string;
+}
