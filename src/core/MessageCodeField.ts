@@ -1,7 +1,7 @@
 /**
  * The default destination is the layer where the system shall direct the message to if no redirection is set.
  */
-enum DefaultDestination {
+const enum DefaultDestination {
   Data_Link_Layer = "DLL",
   Network_Layer = "NL",
   Transport_Layer = "TL",

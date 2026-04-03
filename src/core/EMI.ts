@@ -2,73 +2,16 @@ import { KNXHelper } from "../utils/KNXHelper";
 import { AddressType } from "./enum/EnumControlFieldExtended";
 import { ControlField } from "./ControlField";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
-import { APCI } from "./layers/interfaces/APCI";
-import { APCIEnum } from "./enum/APCIEnum";
-import { NPDU } from "./layers/data/NPDU";
-import {
-  PEI_Switch_req,
-  bits4,
-  L_Busmon_ind,
-  L_Plain_Data_req,
-  L_Data_con,
-  L_Data_ind,
-  L_Poll_Data_Req,
-  L_Poll_Data_Con,
-  L_SystemBroadcast_req,
-  L_SystemBroadcast_con,
-  L_SystemBroadcast_ind,
-  N_Data_Individual_req_Ctor,
-  N_Data_Individual_con_Ctor,
-  N_Data_Individual_ind_Ctor,
-  N_Data_Group_req_Ctor,
-  N_Data_Group_con_Ctor,
-  N_Data_Group_ind_Ctor,
-  NPCI,
-  N_Data_Broadcast_req_Ctor,
-  N_Data_Broadcast_con_Ctor,
-  N_Data_Broadcast_ind_Ctor,
-  N_Poll_Data_Req,
-  N_Poll_Data_Con,
-  T_Connect_req,
-  T_Connect_ind,
-  T_Disconnect_con,
-  T_Data_Connected_req,
-  T_Data_Connected_con,
-  T_Data_Connected_ind,
-  T_Data_Group_req,
-  T_Data_Group_con,
-  T_Data_Group_ind,
-  T_Data_Individual_req,
-  T_Data_Individual_con,
-  T_Data_Individual_ind,
-  T_Data_Broadcast_req,
-  T_Data_Broadcast_con,
-  T_Data_Broadcast_ind,
-  T_Poll_Data_req,
-  T_Poll_Data_con,
-  M_Connect_ind,
-  M_User_Data_Connected_req,
-  M_User_Data_Connected_con,
-  M_User_Data_Connected_ind,
-  A_Data_Group_req,
-  A_Data_Group_con,
-  A_Data_Group_ind,
-  M_User_Data_Individual_req,
-  M_User_Data_Individual_con,
-  M_User_Data_Individual_ind,
-  A_Poll_Data_req,
-  A_Poll_Data_con,
-} from "../@types/interfaces/EMI";
+import { Priority } from "./enum/EnumControlField";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { checksum } from "../utils/checksumFrame";
-import { SystemStatus, Status } from "./SystemStatus";
+import { Status, SystemStatus } from "./SystemStatus";
 import { SAP } from "./enum/SAP";
+import { APCIEnum } from "./enum/APCIEnum";
+import { APCI } from "./layers/interfaces/APCI";
 
-class InvalidInputObject extends Error {
-  constructor(className: string) {
-    super(`The input object in the ${className} is must be an object with specific properties`);
-  }
-}
+export type bits4 = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type NPCI = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 /**
  * @alias External_Message_Interface
@@ -141,139 +84,161 @@ export class EMI {
    */
   static LayerAccess = {
     "PEI_Switch.req": class PEISwitchReq implements ServiceMessage {
-      constructor(value: PEI_Switch_req) {
-        this.systemStatus = value.systemStatus;
-        this.LL = value.LL;
-        this.NL = value.NL;
-        this.TLG = value.TLG;
-        this.TLC = value.TLC;
-        this.TLL = value.TLL;
-        this.AL = value.AL;
-        this.MAN = value.MAN;
-        this.PEI = value.PEI;
-        this.USR = value.USR;
-        this.res = value.res;
+      constructor(
+        systemStatus: SystemStatus,
+        LL: bits4,
+        NL: bits4,
+        TLG: bits4,
+        TLC: bits4,
+        TLL: bits4,
+        AL: bits4,
+        MAN: bits4,
+        PEI: bits4,
+        USR: bits4,
+        res: bits4,
+      ) {
+        this.systemStatus = systemStatus;
+        this.LL = LL;
+        this.NL = NL;
+        this.TLG = TLG;
+        this.TLC = TLC;
+        this.TLL = TLL;
+        this.AL = AL;
+        this.MAN = MAN;
+        this.PEI = PEI;
+        this.USR = USR;
+        this.res = res;
       }
 
       messageCode = MESSAGE_CODE_FIELD["PEI_Switch.req"]["EMI2/IMI2"].value;
       systemStatus: SystemStatus;
-      #LL: bits4 = 0;
-      #NL: bits4 = 0;
-      #TLG: bits4 = 0;
-      #TLC: bits4 = 0;
-      #TLL: bits4 = 0;
-      #AL: bits4 = 0;
-      #MAN: bits4 = 0;
-      #PEI: bits4 = 0;
-      #USR: bits4 = 0;
-      #res: bits4 = 0;
+      _LL: bits4 = 0;
+      _NL: bits4 = 0;
+      _TLG: bits4 = 0;
+      _TLC: bits4 = 0;
+      _TLL: bits4 = 0;
+      _AL: bits4 = 0;
+      _MAN: bits4 = 0;
+      _PEI: bits4 = 0;
+      _USR: bits4 = 0;
+      _res: bits4 = 0;
 
       set LL(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'LL' must be 4 bits");
-        this.#LL = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'LL' must be 4 bits");
+        this._LL = value;
       }
 
       get LL() {
-        return this.#LL;
+        return this._LL;
       }
 
       set NL(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'NL' must be 4 bits");
-        this.#NL = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'NL' must be 4 bits");
+        this._NL = value;
       }
 
       get NL() {
-        return this.#NL;
+        return this._NL;
       }
 
       set TLG(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'TLG' must be 4 bits");
-        this.#TLG = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'TLG' must be 4 bits");
+        this._TLG = value;
       }
 
       get TLG() {
-        return this.#TLG;
+        return this._TLG;
       }
 
       set TLC(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'TLC' must be 4 bits");
-        this.#TLC = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'TLC' must be 4 bits");
+        this._TLC = value;
       }
 
       get TLC() {
-        return this.#TLC;
+        return this._TLC;
       }
 
       set TLL(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'TLL' must be 4 bits");
-        this.#TLL = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'TLL' must be 4 bits");
+        this._TLL = value;
       }
 
       get TLL() {
-        return this.#TLL;
+        return this._TLL;
       }
 
       set AL(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'AL' must be 4 bits");
-        this.#AL = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'AL' must be 4 bits");
+        this._AL = value;
       }
 
       get AL() {
-        return this.#AL;
+        return this._AL;
       }
 
       set MAN(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'MAN' must be 4 bits");
-        this.#MAN = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'MAN' must be 4 bits");
+        this._MAN = value;
       }
 
       get MAN() {
-        return this.#MAN;
+        return this._MAN;
       }
 
       set PEI(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'PEI' must be 4 bits");
-        this.#PEI = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'PEI' must be 4 bits");
+        this._PEI = value;
       }
 
       get PEI() {
-        return this.#PEI;
+        return this._PEI;
       }
 
       set USR(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'USR' must be 4 bits");
-        this.#USR = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'USR' must be 4 bits");
+        this._USR = value;
       }
 
       get USR() {
-        return this.#USR;
+        return this._USR;
       }
 
       set res(value: bits4) {
-        if (value < 0 || value > 7) throw new TypeError("The property 'res' must be 4 bits");
-        this.#res = value;
+        if (value < 0 || value > 7)
+          throw new TypeError("The property 'res' must be 4 bits");
+        this._res = value;
       }
 
       get res() {
-        return this.#res;
+        return this._res;
       }
 
       toBuffer(): Buffer {
         let octet3 = 0;
-        octet3 = octet3 | (this.#LL << 4);
-        octet3 = octet3 | this.#NL;
+        octet3 = octet3 | (this._LL << 4);
+        octet3 = octet3 | this._NL;
         let octet4 = 0;
-        octet4 = octet4 | (this.#TLG << 4);
-        octet4 = octet4 | this.#TLC;
+        octet4 = octet4 | (this._TLG << 4);
+        octet4 = octet4 | this._TLC;
         let octet5 = 0;
-        octet5 = octet5 | (this.#TLL << 4);
-        octet5 = octet5 | this.#AL;
+        octet5 = octet5 | (this._TLL << 4);
+        octet5 = octet5 | this._AL;
         let octet6 = 0;
-        octet6 = octet6 | (this.#MAN << 4);
-        octet6 = octet6 | this.#PEI;
+        octet6 = octet6 | (this._MAN << 4);
+        octet6 = octet6 | this._PEI;
         let octet7 = 0;
-        octet7 = octet7 | (this.#USR << 4);
-        octet7 = octet7 | this.#res;
+        octet7 = octet7 | (this._USR << 4);
+        octet7 = octet7 | this._res;
 
         const buffer = Buffer.alloc(7);
         buffer.writeUInt8(this.messageCode, 0);
@@ -286,19 +251,19 @@ export class EMI {
 
         return buffer;
       }
-      describe(): Record<keyof PEI_Switch_req, string> {
+      describe(): Record<string, string> {
         return {
           systemStatus: `${this.systemStatus.describe()}`,
-          LL: this.#LL.toString(),
-          NL: this.#NL.toString(),
-          TLG: this.#TLG.toString(),
-          TLC: this.#TLC.toString(),
-          TLL: this.#TLL.toString(),
-          AL: this.#AL.toString(),
-          MAN: this.#MAN.toString(),
-          PEI: this.#PEI.toString(),
-          USR: this.#USR.toString(),
-          res: this.#res.toString(),
+          LL: this._LL.toString(),
+          NL: this._NL.toString(),
+          TLG: this._TLG.toString(),
+          TLC: this._TLC.toString(),
+          TLL: this._TLL.toString(),
+          AL: this._AL.toString(),
+          MAN: this._MAN.toString(),
+          PEI: this._PEI.toString(),
+          USR: this._USR.toString(),
+          res: this._res.toString(),
         };
       }
     },
@@ -312,19 +277,16 @@ export class EMI {
    */
   static BusmonitorEMI = {
     "L_Busmon.ind": class LBusmonInd implements ServiceMessage {
-      constructor(value: L_Busmon_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Busmon.ind must be an object with specific properties.");
-        }
-        // Initialize properties based on the value provided
-        this.status = value.status;
-        this.timeStamp = value.timeStamp;
-        this.controlField1 = value.controlField1;
-        this.LPDU = value.LPDU;
+      constructor(status: Status, timeStamp: number, controlField1: ControlField, LPDU: Buffer) {
+        // Initialize properties based on the values provided
+        this.status = status;
+        this.timeStamp = timeStamp;
+        this.controlField1 = controlField1;
+        this.LPDU = LPDU;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Busmon.ind"]["EMI2/IMI2"].value;
       status: Status;
-      #timeStamp: number = 0;
+      _timeStamp: number = 0;
       controlField1: ControlField;
       /**
        * Data Link Protocol Data Unit (LPDU) - This is the actual data payload of the message.
@@ -335,14 +297,14 @@ export class EMI {
       LPDU: Buffer;
 
       get timeStamp(): number {
-        return this.#timeStamp;
+        return this._timeStamp;
       }
 
       set timeStamp(value: number) {
         if (typeof value !== "number" || value < 0 || value > 65535) {
           throw new Error("timeStamp must be a number between 0 and 65535.");
         }
-        this.#timeStamp = value;
+        this._timeStamp = value;
       }
 
       toBuffer(): Buffer {
@@ -408,12 +370,12 @@ export class EMI {
         // LPDU (resto del buffer)
         const LPDU = buffer.subarray(5);
 
-        return new LBusmonInd({
+        return new LBusmonInd(
           status,
           timeStamp,
           controlField1,
           LPDU,
-        });
+        );
       }
     },
     /**
@@ -424,12 +386,9 @@ export class EMI {
      * running system counter of the sending device equals the value given in “time”.
      */
     "L_Plain_Data.req": class LPlainDataReq implements ServiceMessage {
-      constructor(value: L_Plain_Data_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Plain_Data.req must be an object with specific properties.");
-        }
-        this.time = value.time;
-        this.data = value.data;
+      constructor(time: number, data: Buffer) {
+        this.time = time;
+        this.data = data;
       }
       time: number; // Time delay before sending the message
       data: Buffer; // Data to be sent
@@ -486,10 +445,10 @@ export class EMI {
           throw new Error(`Data too long for L_Plain_Data.req: ${data.length} bytes (max 28)`);
         }
 
-        return new LPlainDataReq({
+        return new LPlainDataReq(
           time,
           data,
-        });
+        );
       }
     },
   } as const;
@@ -500,8 +459,10 @@ export class EMI {
    */
   static DataLinkLayerEMI = {
     "L_Data.req": class LDataReq implements ServiceMessage {
-      constructor(controlField: ControlField, destinationAddress: string, npdu: NPDU) {
-        this.controlField1 = controlField;
+      constructor(priority: Priority, ackRequest: boolean, destinationAddress: string, addressType: AddressType, npci: NPCI, npdu: Buffer) {
+        this.controlField1 = new ControlField(0);
+        this.controlField1.priority = priority;
+        this.controlField1.ackRequest = ackRequest;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
           KNXHelper.isValidIndividualAddress(destinationAddress)
@@ -510,6 +471,8 @@ export class EMI {
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
+        this.addressType = addressType;
+        this.NPCI = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.req"]["EMI2/IMI2"].value;
@@ -549,11 +512,11 @@ export class EMI {
         const controlFieldByte = buffer.readUInt8(1);
         const controlField1 = new ControlField(controlFieldByte);
 
-        //[cite_start]// Bytes 2 and 3 are unused in Req [cite: 273]
-
         const destinationAddressBuf = buffer.subarray(4, 6);
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
+        const NPCI_val = (octet6 >> 4) & 0x07;
+        const length = octet6 & 0x0f;
 
         const destinationAddress = KNXHelper.GetAddress(
           destinationAddressBuf,
@@ -562,28 +525,32 @@ export class EMI {
 
         const npdu = NPDU.fromBuffer(buffer.subarray(6));
 
-        return new LDataReq(controlField1, destinationAddress as string, npdu);
+        return new LDataReq(
+          controlField1.priority,
+          controlField1.ackRequest,
+          destinationAddress as string,
+          addressType,
+          NPCI_val as NPCI,
+          npdu,
+        );
       }
     },
     "L_Data.con": class LDataCon implements ServiceMessage {
-      constructor(value: L_Data_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Data.req must be an object with specific properties.");
-        }
+      constructor(priority: Priority, confirm: boolean, destinationAddress: string, addressType: AddressType, npci: NPCI, npdu: Buffer) {
         this.controlField1 = new ControlField(0);
-        this.controlField1.priority = value.control.priority;
-        this.controlField1.confirm = value.control.confirm;
+        this.controlField1.priority = priority;
+        this.controlField1.confirm = confirm;
         if (
-          KNXHelper.isValidGroupAddress(value.destinationAddress) ||
-          KNXHelper.isValidIndividualAddress(value.destinationAddress)
+          KNXHelper.isValidGroupAddress(destinationAddress) ||
+          KNXHelper.isValidIndividualAddress(destinationAddress)
         ) {
-          this.destinationAddress = value.destinationAddress;
+          this.destinationAddress = destinationAddress;
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = value.addressType;
-        this.NPCI = value.NPCI;
-        this.npdu = value.NPDU;
+        this.addressType = addressType;
+        this.NPCI = npci;
+        this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.con"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
@@ -630,10 +597,9 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI = (octet6 >> 4) & 0x07;
+        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
-        //[cite_start]// Bytes 2 and 3 unused [cite: 282]
         const destinationAddressBuf = buffer.subarray(4, 6);
         const destinationAddress = KNXHelper.GetAddress(
           destinationAddressBuf,
@@ -642,37 +608,32 @@ export class EMI {
 
         const npdu = buffer.subarray(7, 7 + length);
 
-        return new LDataCon({
-          control: {
-            priority: controlField1.priority,
-            confirm: controlField1.confirm,
-          },
-          destinationAddress: destinationAddress as string,
-          addressType: addressType,
-          NPCI: NPCI as NPCI,
-          NPDU: npdu,
-        });
+        return new LDataCon(
+          controlField1.priority,
+          controlField1.confirm,
+          destinationAddress as string,
+          addressType,
+          NPCI_val as NPCI,
+          npdu,
+        );
       }
     },
     "L_Data.ind": class LDataInd implements ServiceMessage {
-      constructor(value: L_Data_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Data.ind must be an object with specific properties.");
-        }
+      constructor(priority: Priority, sourceAddress: string, destinationAddress: string, addressType: AddressType, npci: NPCI, npdu: Buffer) {
         this.controlField1 = new ControlField(0);
-        this.controlField1.priority = value.control.priority;
+        this.controlField1.priority = priority;
         if (
-          KNXHelper.isValidGroupAddress(value.destinationAddress) ||
-          KNXHelper.isValidIndividualAddress(value.destinationAddress)
+          KNXHelper.isValidGroupAddress(destinationAddress) ||
+          KNXHelper.isValidIndividualAddress(destinationAddress)
         ) {
-          this.destinationAddress = value.destinationAddress;
+          this.destinationAddress = destinationAddress;
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.sourceAddress = value.sourceAddress;
-        this.addressType = value.addressType;
-        this.NPCI = value.NPCI;
-        this.npdu = value.NPDU;
+        this.sourceAddress = sourceAddress;
+        this.addressType = addressType;
+        this.NPCI = npci;
+        this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.ind"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
@@ -725,7 +686,7 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI = (octet6 >> 4) & 0x07;
+        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -736,56 +697,54 @@ export class EMI {
 
         const npdu = buffer.subarray(7, 7 + length);
 
-        return new LDataInd({
-          control: {
-            priority: controlField1.priority,
-          },
-          sourceAddress: sourceAddress as string,
-          destinationAddress: destinationAddress as string,
-          addressType: addressType,
-          NPCI: NPCI as NPCI,
-          NPDU: npdu,
-        });
+        return new LDataInd(
+          controlField1.priority,
+          sourceAddress as string,
+          destinationAddress as string,
+          addressType,
+          NPCI_val as NPCI,
+          npdu,
+        );
       }
     },
     "L_Poll_Data.req": class LPollDataReq implements ServiceMessage {
-      constructor(value: L_Poll_Data_Req) {
-        this.#pollingGroup = value.pollingGroup;
-        this.#nrOfSlots = value.nrOfSlots;
+      constructor(pollingGroup: number, nrOfSlots: bits4) {
+        this.pollingGroup = pollingGroup;
+        this.nrOfSlots = nrOfSlots;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Poll_Data.req"]["EMI2/IMI2"].value;
       control = 0xf0;
-      #pollingGroup = 0;
-      #nrOfSlots: bits4 = 0;
+      _pollingGroup = 0;
+      _nrOfSlots: bits4 = 0;
 
       set pollingGroup(value: number) {
-        if (value < 0 || value > 65.535) throw new Error("The value must be 16 bits");
-        this.#pollingGroup = value;
+        if (value < 0 || value > 65535)
+          throw new Error("The value must be 16 bits");
+        this._pollingGroup = value;
       }
 
       get pollingGroup() {
-        return this.#pollingGroup;
+        return this._pollingGroup;
       }
 
       set nrOfSlots(value: bits4) {
         if (value < 0 || value > 7) throw new Error("The value must be 4 bits");
-        this.#nrOfSlots = value;
+        this._nrOfSlots = value;
       }
 
       get nrOfSlots() {
-        return this.#nrOfSlots;
+        return this._nrOfSlots;
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7);
         let octet7 = 0;
-        octet7 = octet7 | (this.#nrOfSlots & 0x0f);
+        octet7 = octet7 | (this._nrOfSlots & 0x0f);
         buffer.writeUInt8(this.messageCode, 0);
         buffer.writeUInt8(this.control, 1);
         buffer.writeUInt8(0, 2);
         buffer.writeUInt8(0, 3);
-        buffer.writeUInt8(this.#pollingGroup & 0xff00, 4);
-        buffer.writeUInt8(this.#pollingGroup & 0x00ff, 5);
+        buffer.writeUInt16BE(this._pollingGroup, 4);
         buffer.writeUInt8(octet7, 6);
         return buffer;
       }
@@ -794,8 +753,8 @@ export class EMI {
         return {
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control}`,
-          pollingGroup: `${this.#pollingGroup}`,
-          nrOfGroup: `${this.#nrOfSlots}`,
+          pollingGroup: `${this._pollingGroup}`,
+          nrOfGroup: `${this._nrOfSlots}`,
         };
       }
 
@@ -813,51 +772,54 @@ export class EMI {
         const pollingGroup = buffer.readUInt16BE(4);
         const nrOfSlots = (buffer.readUInt8(6) & 0x0f) as bits4;
 
-        return new LPollDataReq({
+        return new LPollDataReq(
           pollingGroup,
           nrOfSlots,
-        });
+        );
       }
     },
     "L_Poll_Data.con": class LPollDataCon implements ServiceMessage {
-      constructor(value: L_Poll_Data_Con) {
-        this.#pollingGroup = value.pollingGroup;
-        this.#nrOfSlots = value.nrOfSlots;
-        this.control.confirm = value.control.confirm;
+      constructor(pollingGroup: number, nrOfSlots: bits4, confirm: boolean) {
+        this.pollingGroup = pollingGroup;
+        this.nrOfSlots = nrOfSlots;
+        this.control.confirm = confirm;
       }
 
       control = new ControlField(0xf0);
-      #pollingGroup = 0;
-      #nrOfSlots: bits4 = 0;
+      _pollingGroup = 0;
+      _nrOfSlots: bits4 = 0;
 
       set pollingGroup(value: number) {
-        if (value < 0 || value > 65.535) throw new Error("The value must be 16 bits");
-        this.#pollingGroup = value;
+        if (value < 0 || value > 65535)
+          throw new Error("The value must be 16 bits");
+        this._pollingGroup = value;
       }
 
       get pollingGroup() {
-        return this.#pollingGroup;
+        return this._pollingGroup;
       }
 
       set nrOfSlots(value: bits4) {
         if (value < 0 || value > 7) throw new Error("The value must be 4 bits");
-        this.#nrOfSlots = value;
+        this._nrOfSlots = value;
       }
 
       get nrOfSlots() {
-        return this.#nrOfSlots;
+        return this._nrOfSlots;
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7);
         let octet7 = 0;
-        octet7 = octet7 | (this.#nrOfSlots & 0x0f);
-        buffer.writeUInt8(MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value, 0);
+        octet7 = octet7 | (this._nrOfSlots & 0x0f);
+        buffer.writeUInt8(
+          MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value,
+          0,
+        );
         this.control.buffer.copy(buffer, 1);
         buffer.writeUInt8(0, 2);
         buffer.writeUInt8(0, 3);
-        buffer.writeUInt8(this.#pollingGroup & 0xff00, 4);
-        buffer.writeUInt8(this.#pollingGroup & 0x00ff, 5);
+        buffer.writeUInt16BE(this._pollingGroup, 4);
         buffer.writeUInt8(octet7, 6);
         return buffer;
       }
@@ -866,8 +828,8 @@ export class EMI {
         return {
           messageCode: `Codigo de mensaje: ${MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value}`,
           control: `Control: ${this.control}`,
-          pollingGroup: `${this.#pollingGroup}`,
-          nrOfGroup: `${this.#nrOfSlots}`,
+          pollingGroup: `${this._pollingGroup}`,
+          nrOfGroup: `${this._nrOfSlots}`,
         };
       }
 
@@ -878,39 +840,36 @@ export class EMI {
             `Invalid message code for L_Poll_Data.con. Expected ${messageCode}, got ${buffer.readUInt8(0)}`,
           );
         }
-        const controlByte = buffer.readInt8(1);
+        const controlField = new ControlField(buffer.readUInt8(1));
         const pollingGroup = buffer.readUInt16BE(4);
         const nrOfSlots = (buffer.readUInt8(6) & 0x0f) as bits4;
 
-        return new LPollDataCon({
+        return new LPollDataCon(
           pollingGroup,
           nrOfSlots,
-          control: {
-            confirm: controlByte << 7 === 1 ? true : false,
-          },
-        });
+          controlField.confirm,
+        );
       }
     },
     "L_SystemBroadcast.req": class LSystemBroadcastReq implements ServiceMessage {
-      constructor(value: L_SystemBroadcast_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Data.ind must be an object with specific properties.");
-        }
+      constructor(priority: Priority, confirm: boolean, ackRequest: boolean, destinationAddress: string, addressType: 0 | 1, npci: NPCI, npdu: Buffer) {
         this.controlField1 = new ControlField(0b10000000);
-        this.controlField1.priority = value.control.priority;
-        this.controlField1.confirm = value.control.confirm;
-        this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
+        this.controlField1.priority = priority;
+        this.controlField1.confirm = confirm;
+        this.controlField1.ackRequest = ackRequest;
+        this.messageCode =
+          MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
         if (
-          KNXHelper.isValidGroupAddress(value.destinationAddress) ||
-          KNXHelper.isValidIndividualAddress(value.destinationAddress)
+          KNXHelper.isValidGroupAddress(destinationAddress) ||
+          KNXHelper.isValidIndividualAddress(destinationAddress)
         ) {
-          this.destinationAddress = value.destinationAddress;
+          this.destinationAddress = destinationAddress;
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = value.addressType;
-        this.NPCI = value.NPCI;
-        this.npdu = value.NPDU;
+        this.addressType = addressType;
+        this.NPCI = npci;
+        this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
@@ -956,11 +915,10 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI = (octet6 >> 4) & 0x07;
+        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
-        //[cite_start]// Usually System Broadcast destination is 0/0/0 or specific [cite: 297]
         const destinationAddress = KNXHelper.GetAddress(
           destinationAddressBuf,
           addressType === AddressType.GROUP ? "/" : ".",
@@ -968,40 +926,36 @@ export class EMI {
 
         const npdu = buffer.subarray(7, 7 + length);
 
-        return new LSystemBroadcastReq({
-          control: {
-            priority: controlField1.priority,
-            confirm: controlField1.confirm,
-            ackRequest: controlField1.ackRequest,
-          },
-          destinationAddress: destinationAddress as string,
-          addressType: addressType as 0 | 1,
-          NPCI: NPCI as NPCI,
-          NPDU: npdu,
-        });
+        return new LSystemBroadcastReq(
+          controlField1.priority,
+          controlField1.confirm,
+          controlField1.ackRequest,
+          destinationAddress as string,
+          addressType as 0 | 1,
+          NPCI_val as NPCI,
+          npdu,
+        );
       }
     },
     "L_SystemBroadcast.con": class LSystemBroadcastCon implements ServiceMessage {
-      constructor(value: L_SystemBroadcast_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Data.ind must be an object with specific properties.");
-        }
+      constructor(notRepeat: boolean, priority: Priority, confirm: boolean, destinationAddress: string, addressType: AddressType, npci: NPCI, npdu: Buffer) {
         this.controlField1 = new ControlField(0);
-        this.controlField1.repeat = value.control.notRepeat;
-        this.controlField1.priority = value.control.priority;
-        this.controlField1.confirm = value.control.confirm;
-        this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
+        this.controlField1.repeat = notRepeat;
+        this.controlField1.priority = priority;
+        this.controlField1.confirm = confirm;
+        this.messageCode =
+          MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
         if (
-          KNXHelper.isValidGroupAddress(value.destinationAddress) ||
-          KNXHelper.isValidIndividualAddress(value.destinationAddress)
+          KNXHelper.isValidGroupAddress(destinationAddress) ||
+          KNXHelper.isValidIndividualAddress(destinationAddress)
         ) {
-          this.destinationAddress = value.destinationAddress;
+          this.destinationAddress = destinationAddress;
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = value.addressType;
-        this.NPCI = value.NPCI;
-        this.npdu = value.NPDU;
+        this.addressType = addressType;
+        this.NPCI = npci;
+        this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
@@ -1047,7 +1001,7 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI = (octet6 >> 4) & 0x07;
+        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -1058,45 +1012,42 @@ export class EMI {
 
         const npdu = buffer.subarray(7, 7 + length);
 
-        return new LSystemBroadcastCon({
-          control: {
-            priority: controlField1.priority,
-            confirm: controlField1.confirm,
-            notRepeat: controlField1.repeat,
-          },
-          destinationAddress: destinationAddress as string,
-          addressType: addressType,
-          NPCI: NPCI as NPCI,
-          NPDU: npdu,
-        });
+        return new LSystemBroadcastCon(
+          controlField1.repeat,
+          controlField1.priority,
+          controlField1.confirm,
+          destinationAddress as string,
+          addressType,
+          NPCI_val as NPCI,
+          npdu,
+        );
       }
     },
     "L_SystemBroadcast.ind": class LSystemBroadcastInd implements ServiceMessage {
-      constructor(value: L_SystemBroadcast_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("L_Data.ind must be an object with specific properties.");
-        }
+      constructor(priority: Priority, confirm: boolean, notRepeat: boolean, sourceAddress: string, destinationAddress: string, addressType: AddressType, npci: NPCI, npdu: Buffer) {
         this.controlField1 = new ControlField(0);
-        this.controlField1.priority = value.control.priority;
+        this.controlField1.priority = priority;
+        this.controlField1.confirm = confirm;
+        this.controlField1.repeat = notRepeat;
         if (
-          KNXHelper.isValidGroupAddress(value.destinationAddress) ||
-          KNXHelper.isValidIndividualAddress(value.destinationAddress)
+          KNXHelper.isValidGroupAddress(destinationAddress) ||
+          KNXHelper.isValidIndividualAddress(destinationAddress)
         ) {
-          this.destinationAddress = value.destinationAddress;
+          this.destinationAddress = destinationAddress;
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         if (
-          KNXHelper.isValidGroupAddress(value.sourceAddress) ||
-          KNXHelper.isValidIndividualAddress(value.sourceAddress)
+          KNXHelper.isValidGroupAddress(sourceAddress) ||
+          KNXHelper.isValidIndividualAddress(sourceAddress)
         ) {
-          this.sourceAddress = value.sourceAddress;
+          this.sourceAddress = sourceAddress;
         } else {
           throw new Error("The Source Address is invalid Group Address or Individual Address");
         }
-        this.addressType = value.addressType;
-        this.NPCI = value.NPCI;
-        this.npdu = value.NPDU;
+        this.addressType = addressType;
+        this.NPCI = npci;
+        this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value;
 
@@ -1134,12 +1085,10 @@ export class EMI {
       }
 
       static fromBuffer(buffer: Buffer): LSystemBroadcastInd {
-        //[cite_start]// Spec[cite: 147]: L_SystemBroadcast.ind -> 28h
-        // Note: The class property 'messageCode' above references L_SystemBroadcast.CON (error in original class?),
-        // I will try to match the code found in the buffer.
-
-        // Strict check:
-        if (buffer.readUInt8(0) !== MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value) {
+        if (
+          buffer.readUInt8(0) !==
+          MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value
+        ) {
           throw new Error("This messageCode is not L_SystemBroadcast.ind");
         }
 
@@ -1150,13 +1099,8 @@ export class EMI {
         const sourceAddress = KNXHelper.GetAddress(sourceAddressBuf, ".");
 
         const octet6 = buffer.readUInt8(6);
-        //[cite_start]// Address type not strictly in bit 7 for SystemBroadcast Indication according to [cite: 312] diagram?
-        //[cite_start]// Diagram [cite: 313] shows Octet 6 (byte 7 in 1-based, so index 6) has NPCI and LG.
-        // Address Type is implicit in System Broadcast?
-        // But your constructor demands AddressType.
-        // Assuming standard L_Data frame layout for consistency with your class structure.
-        const addressType = (octet6 >> 7) & 0x01; // May be always 1 (Group)?
-        const NPCI = (octet6 >> 4) & 0x07;
+        const addressType = (octet6 >> 7) & 0x01;
+        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -1167,18 +1111,16 @@ export class EMI {
 
         const npdu = buffer.subarray(7, 7 + length);
 
-        return new LSystemBroadcastInd({
-          control: {
-            priority: controlField1.priority,
-            confirm: controlField1.confirm,
-            notRepeat: controlField1.repeat,
-          },
-          sourceAddress: sourceAddress as string,
-          destinationAddress: destinationAddress as string,
-          addressType: addressType,
-          NPCI: NPCI as NPCI,
-          NPDU: npdu,
-        });
+        return new LSystemBroadcastInd(
+          controlField1.priority,
+          controlField1.confirm,
+          controlField1.repeat,
+          sourceAddress as string,
+          destinationAddress as string,
+          addressType,
+          NPCI_val as NPCI,
+          npdu,
+        );
       }
     },
   } as const;
@@ -1195,23 +1137,22 @@ export class EMI {
       destinationAddress: string; // Individual address
       TPDU: Buffer; // Transport Layer Protocol Data Unit
 
-      constructor(value: N_Data_Individual_req_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Individual.req must be an object with specific properties.");
-        }
+      constructor(frameType: boolean, repeat: boolean, systemBroadcast: boolean, priority: Priority, ackRequest: boolean, confirm: boolean, destinationAddress: string, tpdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.frameType = value.control.frameType;
-        this.controlField.repeat = value.control.repeat;
-        this.controlField.systemBroadcast = value.control.systemBroadcast;
-        this.controlField.priority = value.control.priority;
-        this.controlField.ackRequest = value.control.ackRequest;
-        this.controlField.confirm = value.control.confirm;
+        this.controlField.frameType = frameType;
+        this.controlField.repeat = repeat;
+        this.controlField.systemBroadcast = systemBroadcast;
+        this.controlField.priority = priority;
+        this.controlField.ackRequest = ackRequest;
+        this.controlField.confirm = confirm;
 
-        if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
-          throw new Error("The Destination Address must be a valid Individual Address");
+        if (!KNXHelper.isValidIndividualAddress(destinationAddress)) {
+          throw new Error(
+            "The Destination Address must be a valid Individual Address",
+          );
         }
-        this.destinationAddress = value.destinationAddress;
-        this.TPDU = value.TPDU;
+        this.destinationAddress = destinationAddress;
+        this.TPDU = tpdu;
       }
 
       /**
@@ -1261,8 +1202,6 @@ export class EMI {
         const controlFieldByte = buffer.readUInt8(1);
         const controlField = new ControlField(controlFieldByte);
 
-        // Octets 3-4 (index 2-3) son 0x0000 (unused) en la Request.
-
         const destinationAddressBuf = buffer.subarray(4, 6);
         const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, ".");
 
@@ -1274,18 +1213,16 @@ export class EMI {
 
         const TPDU = buffer.subarray(7, 7 + length);
 
-        return new NDataIndividualReq({
-          control: {
-            frameType: controlField.frameType,
-            repeat: controlField.repeat,
-            systemBroadcast: controlField.systemBroadcast,
-            priority: controlField.priority,
-            ackRequest: controlField.ackRequest,
-            confirm: controlField.confirm,
-          },
-          destinationAddress: destinationAddress as string,
-          TPDU: TPDU,
-        });
+        return new NDataIndividualReq(
+          controlField.frameType,
+          controlField.repeat,
+          controlField.systemBroadcast,
+          controlField.priority,
+          controlField.ackRequest,
+          controlField.confirm,
+          destinationAddress as string,
+          TPDU,
+        );
       }
     },
     "N_Data_Individual.con": class NDataIndividualCon implements ServiceMessage {
@@ -1294,20 +1231,17 @@ export class EMI {
       destinationAddress: string; // Destination address
       TPDU: Buffer;
 
-      constructor(value: N_Data_Individual_con_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Individual.con must be an object with specific properties.");
-        }
+      constructor(confirm: boolean, destinationAddress: string, tpdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.confirm = value.control.confirm; // Set confirm bit
-        // The spec (3.3.5.3) for N_Data_Individual.con control field is "unused c".
-        // Therefore, priority should not be set here.
+        this.controlField.confirm = confirm; // Set confirm bit
 
-        if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
-          throw new Error("The Destination Address must be a valid Individual Address");
+        if (!KNXHelper.isValidIndividualAddress(destinationAddress)) {
+          throw new Error(
+            "The Destination Address must be a valid Individual Address",
+          );
         }
-        this.destinationAddress = value.destinationAddress;
-        this.TPDU = value.TPDU;
+        this.destinationAddress = destinationAddress;
+        this.TPDU = tpdu;
       }
 
       /**
@@ -1357,8 +1291,6 @@ export class EMI {
         const controlFieldByte = buffer.readUInt8(1);
         const controlField = new ControlField(controlFieldByte);
 
-        // Octets 3-4 (index 2-3) son 0x0000 (unused).
-
         const destinationAddressBuf = buffer.subarray(4, 6);
         const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, ".");
 
@@ -1370,13 +1302,11 @@ export class EMI {
 
         const TPDU = buffer.subarray(7, 7 + length);
 
-        return new NDataIndividualCon({
-          control: {
-            confirm: controlField.confirm,
-          },
-          destinationAddress: destinationAddress as string,
-          TPDU: TPDU,
-        });
+        return new NDataIndividualCon(
+          controlField.confirm,
+          destinationAddress as string,
+          TPDU,
+        );
       }
     },
     "N_Data_Individual.ind": class NDataIndividualInd implements ServiceMessage {
@@ -1387,24 +1317,25 @@ export class EMI {
       hopCount: number; // 4 bits (formerly NPCI)
       TPDU: Buffer;
 
-      constructor(value: N_Data_Individual_ind_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Individual.ind must be an object with specific properties.");
-        }
+      constructor(priority: number, sourceAddress: string, destinationAddress: string, hopCount: number, tpdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.priority = value.control.priority;
+        this.controlField.priority = priority;
 
-        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error("The Source Address must be a valid Individual Address");
+        if (!KNXHelper.isValidIndividualAddress(sourceAddress)) {
+          throw new Error(
+            "The Source Address must be a valid Individual Address",
+          );
         }
-        this.sourceAddress = value.sourceAddress;
+        this.sourceAddress = sourceAddress;
 
-        if (!KNXHelper.isValidIndividualAddress(value.destinationAddress)) {
-          throw new Error("The Destination Address must be a valid Individual Address");
+        if (!KNXHelper.isValidIndividualAddress(destinationAddress)) {
+          throw new Error(
+            "The Destination Address must be a valid Individual Address",
+          );
         }
-        this.destinationAddress = value.destinationAddress;
-        this.hopCount = value.hopCount;
-        this.TPDU = value.TPDU;
+        this.destinationAddress = destinationAddress;
+        this.hopCount = hopCount;
+        this.TPDU = tpdu;
       }
 
       /**
@@ -1422,7 +1353,6 @@ export class EMI {
         // Octet 7: hop_count_type (bits 6-4) | octet count (LG) (bits 3-0)
         buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f), 6);
         this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
-        // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -1473,15 +1403,13 @@ export class EMI {
 
         const TPDU = buffer.subarray(7, 7 + length);
 
-        return new NDataIndividualInd({
-          control: {
-            priority: controlField.priority,
-          },
-          sourceAddress: sourceAddress as string,
-          destinationAddress: destinationAddress as string,
-          hopCount: hopCount,
-          TPDU: TPDU,
-        });
+        return new NDataIndividualInd(
+          controlField.priority,
+          sourceAddress as string,
+          destinationAddress as string,
+          hopCount,
+          TPDU,
+        );
       }
     },
     "N_Data_Group.req": class NDataGroupReq implements ServiceMessage {
@@ -1490,20 +1418,17 @@ export class EMI {
       destinationAddress: string; // Group address
       APDU: Buffer;
 
-      constructor(value: N_Data_Group_req_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Group.req must be an object with specific properties.");
-        }
+      constructor(priority: number, destinationAddress: string, apdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.priority = value.control.priority;
-        // The spec (3.3.5.5) for N_Data_Group.req control field is "unused priority unused".
-        // Therefore, ackRequest should not be set here.
+        this.controlField.priority = priority;
 
-        if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
-          throw new Error("The Destination Address must be a valid Group Address");
+        if (!KNXHelper.isValidGroupAddress(destinationAddress)) {
+          throw new Error(
+            "The Destination Address must be a valid Group Address",
+          );
         }
-        this.destinationAddress = value.destinationAddress;
-        this.APDU = value.APDU;
+        this.destinationAddress = destinationAddress;
+        this.APDU = apdu;
       }
 
       /**
@@ -1521,7 +1446,6 @@ export class EMI {
         // Octet 7: hop_count_type (bits 7-4, default 0) | octet count (LG) (bits 3-0)
         buffer.writeUInt8(this.APDU.length & 0x0f, 6); // Default hop_count_type is 0
         this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
-        // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -1554,8 +1478,6 @@ export class EMI {
         const controlFieldByte = buffer.readUInt8(1);
         const controlField = new ControlField(controlFieldByte);
 
-        // Octets 3-4 (index 2-3) son 0x0000 (unused) en la Request.
-
         const destinationAddressBuf = buffer.subarray(4, 6);
         const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, "/"); // Dirección de Grupo
 
@@ -1567,13 +1489,11 @@ export class EMI {
 
         const APDU = buffer.subarray(7, 7 + length);
 
-        return new NDataGroupReq({
-          control: {
-            priority: controlField.priority,
-          },
-          destinationAddress: destinationAddress as string,
-          APDU: APDU,
-        });
+        return new NDataGroupReq(
+          controlField.priority,
+          destinationAddress as string,
+          APDU,
+        );
       }
     },
     "N_Data_Group.con": class NDataGroupCon implements ServiceMessage {
@@ -1582,20 +1502,17 @@ export class EMI {
       destinationAddress: string; // Group address
       APDU: Buffer;
 
-      constructor(value: N_Data_Group_con_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Group.con must be an object with specific properties.");
-        }
+      constructor(confirm: boolean, destinationAddress: string, apdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.confirm = value.control.confirm;
-        // The spec (3.3.5.6) for N_Data_Group.con control field is "unused c".
-        // Therefore, priority should not be set here.
+        this.controlField.confirm = confirm;
 
-        if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
-          throw new Error("The Destination Address must be a valid Group Address");
+        if (!KNXHelper.isValidGroupAddress(destinationAddress)) {
+          throw new Error(
+            "The Destination Address must be a valid Group Address",
+          );
         }
-        this.destinationAddress = value.destinationAddress;
-        this.APDU = value.APDU;
+        this.destinationAddress = destinationAddress;
+        this.APDU = apdu;
       }
 
       /**
@@ -1612,7 +1529,6 @@ export class EMI {
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         buffer.writeUInt8(this.APDU.length & 0x0f, 6); // Octet 7: LG (octet count), upper 4 bits unused
         this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
-        // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -1645,8 +1561,6 @@ export class EMI {
         const controlFieldByte = buffer.readUInt8(1);
         const controlField = new ControlField(controlFieldByte);
 
-        // Octets 3-4 (index 2-3) son 0x0000 (unused) en la Confirmation.
-
         const destinationAddressBuf = buffer.subarray(4, 6);
         const destinationAddress = KNXHelper.GetAddress(destinationAddressBuf, "/"); // Dirección de Grupo
 
@@ -1658,13 +1572,11 @@ export class EMI {
 
         const APDU = buffer.subarray(7, 7 + length);
 
-        return new NDataGroupCon({
-          control: {
-            confirm: controlField.confirm,
-          },
-          destinationAddress: destinationAddress as string,
-          APDU: APDU,
-        });
+        return new NDataGroupCon(
+          controlField.confirm,
+          destinationAddress as string,
+          APDU,
+        );
       }
     },
     "N_Data_Group.ind": class NDataGroupInd implements ServiceMessage {
@@ -1675,24 +1587,25 @@ export class EMI {
       hopCount: number; // 4 bits (formerly NPCI)
       APDU: Buffer;
 
-      constructor(value: N_Data_Group_ind_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Group.ind must be an object with specific properties.");
-        }
+      constructor(priority: number, sourceAddress: string, destinationAddress: string, hopCount: number, apdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.priority = value.control.priority;
+        this.controlField.priority = priority;
 
-        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error("The Source Address must be a valid Individual Address");
+        if (!KNXHelper.isValidIndividualAddress(sourceAddress)) {
+          throw new Error(
+            "The Source Address must be a valid Individual Address",
+          );
         }
-        this.sourceAddress = value.sourceAddress;
+        this.sourceAddress = sourceAddress;
 
-        if (!KNXHelper.isValidGroupAddress(value.destinationAddress)) {
-          throw new Error("The Destination Address must be a valid Group Address");
+        if (!KNXHelper.isValidGroupAddress(destinationAddress)) {
+          throw new Error(
+            "The Destination Address must be a valid Group Address",
+          );
         }
-        this.destinationAddress = value.destinationAddress;
-        this.hopCount = value.hopCount;
-        this.APDU = value.APDU;
+        this.destinationAddress = destinationAddress;
+        this.hopCount = hopCount;
+        this.APDU = apdu;
       }
 
       /**
@@ -1710,7 +1623,6 @@ export class EMI {
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
         buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.APDU.length & 0x0f), 6);
         this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
-        // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
 
@@ -1745,9 +1657,6 @@ export class EMI {
         const controlFieldByte = buffer.readUInt8(1);
         const controlField = new ControlField(controlFieldByte);
 
-        // ATENCIÓN: Tu toBuffer para esta clase escribe 0x0000 en el Source Address (índice 2-3).
-        // Sin embargo, la especificación KNX (y tu constructor) requiere una Source Address (Individual).
-        // Asumiré la estructura CORRECTA del protocolo (Source Address en 2-3) para la lectura.
         const sourceAddressBuf = buffer.subarray(2, 4);
         const sourceAddress = KNXHelper.GetAddress(sourceAddressBuf, "."); // Dirección Individual
 
@@ -1764,15 +1673,13 @@ export class EMI {
 
         const APDU = buffer.subarray(7, 7 + length);
 
-        return new NDataGroupInd({
-          control: {
-            priority: controlField.priority,
-          },
-          sourceAddress: sourceAddress as string,
-          destinationAddress: destinationAddress as string,
-          hopCount: hopCount,
-          APDU: APDU,
-        });
+        return new NDataGroupInd(
+          controlField.priority,
+          sourceAddress as string,
+          destinationAddress as string,
+          hopCount,
+          APDU,
+        );
       }
     },
     "N_Data_Broadcast.req": class NDataBroadcastReq implements ServiceMessage {
@@ -1781,16 +1688,13 @@ export class EMI {
       hopCount: NPCI;
       TPDU: Buffer;
 
-      constructor(value: N_Data_Broadcast_req_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Broadcast.req must be an object with specific properties.");
-        }
+      constructor(priority: number, hopCountType: NPCI, tpdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.priority = value.control.priority;
+        this.controlField.priority = priority;
         // The spec (3.3.5.8) for N_Data_Broadcast.req control field is "unused priority unused".
         // Therefore, ackRequest should not be set here.
-        this.hopCount = value.hopCountType;
-        this.TPDU = value.TPDU;
+        this.hopCount = hopCountType;
+        this.TPDU = tpdu;
       }
 
       /**
@@ -1836,17 +1740,15 @@ export class EMI {
         // const dest = KNXHelper.GetAddress(buffer.subarray(4, 6), "/");
 
         const octet6 = buffer.readUInt8(6);
-        const hopCount = octet6 & 0x70;
+        const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
         const TPDU = buffer.subarray(7, 7 + length);
 
-        return new NDataBroadcastReq({
-          control: {
-            priority: controlField.priority,
-          },
-          hopCountType: hopCount as NPCI,
-          TPDU: TPDU,
-        });
+        return new NDataBroadcastReq(
+          controlField.priority,
+          hopCount as NPCI,
+          TPDU,
+        );
       }
     },
     "N_Data_Broadcast.con": class NDataBroadcastCon implements ServiceMessage {
@@ -1854,16 +1756,13 @@ export class EMI {
       controlField: ControlField;
       TPDU: Buffer;
 
-      constructor(value: N_Data_Broadcast_con_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Broadcast.con must be an object with specific properties.");
-        }
+      constructor(confirm: boolean, tpdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.confirm = value.control.confirm;
+        this.controlField.confirm = confirm;
         // The spec (3.3.5.9) for N_Data_Broadcast.con control field is "unused unused unused c".
         // Therefore, priority should not be set here.
 
-        this.TPDU = value.TPDU;
+        this.TPDU = tpdu;
       }
 
       /**
@@ -1936,12 +1835,10 @@ export class EMI {
 
         const TPDU = buffer.subarray(7, 7 + length);
 
-        return new NDataBroadcastCon({
-          control: {
-            confirm: controlField.confirm,
-          },
-          TPDU: TPDU,
-        });
+        return new NDataBroadcastCon(
+          controlField.confirm,
+          TPDU,
+        );
       }
     },
     "N_Data_Broadcast.ind": class NDataBroadcastInd implements ServiceMessage {
@@ -1951,19 +1848,18 @@ export class EMI {
       hopCount: number; // 4 bits (formerly NPCI)
       TPDU: Buffer;
 
-      constructor(value: N_Data_Broadcast_ind_Ctor) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Data_Broadcast.ind must be an object with specific properties.");
-        }
+      constructor(priority: number, sourceAddress: string, hopCount: number, tpdu: Buffer) {
         this.controlField = new ControlField(0);
-        this.controlField.priority = value.control.priority;
+        this.controlField.priority = priority;
 
-        if (!KNXHelper.isValidIndividualAddress(value.sourceAddress)) {
-          throw new Error("The Source Address must be a valid Individual Address");
+        if (!KNXHelper.isValidIndividualAddress(sourceAddress)) {
+          throw new Error(
+            "The Source Address must be a valid Individual Address",
+          );
         }
-        this.sourceAddress = value.sourceAddress;
-        this.hopCount = value.hopCount;
-        this.TPDU = value.TPDU;
+        this.sourceAddress = sourceAddress;
+        this.hopCount = hopCount;
+        this.TPDU = tpdu;
       }
 
       /**
@@ -2015,48 +1911,46 @@ export class EMI {
           throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
         const octet6 = buffer.readUInt8(6);
-        const hopCount = octet6 & 0x70;
+        const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
         const TPDU = buffer.subarray(7, 7 + length);
 
-        return new NDataBroadcastInd({
-          control: { priority: controlField.priority },
-          sourceAddress: sourceAddress,
-          hopCount: hopCount,
-          TPDU: TPDU,
-        });
+        return new NDataBroadcastInd(
+          controlField.priority,
+          sourceAddress,
+          hopCount,
+          TPDU,
+        );
       }
     },
     "N_Poll_Data.req": class NPollDataReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Poll_Data.req"]["EMI2/IMI2"].value;
       control = 0xf0; // Fixed control byte for N_Poll_Data.req (similar to L_Poll_Data)
-      #pollingGroup: Buffer = Buffer.alloc(1, 0);
-      #nrOfSlots: bits4 = 0;
+      _pollingGroup: Buffer = Buffer.alloc(1, 0);
+      _nrOfSlots: bits4 = 0;
 
-      constructor(value: N_Poll_Data_Req) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Poll_Data.req must be an object with specific properties.");
-        }
-        this.nrOfSlots = value.nrOfSlots;
-        this.pollingGroup = value.pollingGroup;
+      constructor(pollingGroup: string, nrOfSlots: bits4) {
+        this.nrOfSlots = nrOfSlots;
+        this.pollingGroup = pollingGroup;
       }
 
       set pollingGroup(value: string) {
         const convertToAddress = KNXHelper.GetAddress_(value);
-        this.#pollingGroup = convertToAddress;
+        this._pollingGroup = convertToAddress;
       }
 
       get pollingGroup() {
-        return KNXHelper.GetAddress(this.#pollingGroup, "/", true) as string; // Se supone que es un dirección de grupo;
+        return KNXHelper.GetAddress(this._pollingGroup, "/", true) as string; // Se supone que es un dirección de grupo;
       }
 
       set nrOfSlots(value: bits4) {
-        if (value < 0 || value > 7) throw new Error("The nrOfSlots value must be 4 bits (0-7)");
-        this.#nrOfSlots = value;
+        if (value < 0 || value > 7)
+          throw new Error("The nrOfSlots value must be 4 bits (0-7)");
+        this._nrOfSlots = value;
       }
 
       get nrOfSlots() {
-        return this.#nrOfSlots;
+        return this._nrOfSlots;
       }
 
       /**
@@ -2068,10 +1962,10 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7);
         let octet7 = 0;
-        octet7 = octet7 | (this.#nrOfSlots & 0x0f); // NrOfSlots in lower 4 bits
+        octet7 = octet7 | (this._nrOfSlots & 0x0f); // NrOfSlots in lower 4 bits
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         buffer.writeUInt8(this.control, 1); // Octet 2: Control
-        this.#pollingGroup.copy(buffer, 0); // Octets 5-6: Polling Group
+        this._pollingGroup.copy(buffer, 0); // Octets 5-6: Polling Group
         buffer.writeUInt8(octet7, 6); // Octet 7: NrOfSlots (bits 3-0)
         return buffer;
       }
@@ -2084,8 +1978,8 @@ export class EMI {
         return {
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control.toString(16).padStart(2, "0")}`,
-          pollingGroup: `Grupo de sondeo: ${this.#pollingGroup}`,
-          nrOfSlots: `Número de ranuras: ${this.#nrOfSlots}`,
+          pollingGroup: `Grupo de sondeo: ${this._pollingGroup}`,
+          nrOfSlots: `Número de ranuras: ${this._nrOfSlots}`,
           rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
         };
       }
@@ -2108,45 +2002,42 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const nrOfSlots = octet6 & 0x0f; // Ejemplo, ver spec
 
-        return new NPollDataReq({
-          // Ajustar propiedades al constructor
-          pollingGroup: pollingGroup,
-          nrOfSlots: nrOfSlots as bits4,
-        });
+        return new NPollDataReq(
+          pollingGroup,
+          nrOfSlots as bits4,
+        );
       }
     },
     "N_Poll_Data.con": class NPollDataCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Poll_Data.con"]["EMI2/IMI2"].value;
       control = 0xf0; // Fixed control byte for N_Poll_Data.con
-      #pollingGroup: Buffer = Buffer.alloc(1, 0);
-      #nrOfSlots: bits4 = 0;
+      _pollingGroup: Buffer = Buffer.alloc(1, 0);
+      _nrOfSlots: bits4 = 0;
       pollData: Buffer; // Polled data
 
-      constructor(value: N_Poll_Data_Con) {
-        if (typeof value !== "object" || value === null) {
-          throw new Error("N_Poll_Data.con must be an object with specific properties.");
-        }
-        this.pollingGroup = value.pollingGroup;
-        this.nrOfSlots = value.nrOfSlots;
-        this.pollData = value.pollData;
+      constructor(pollingGroup: string, nrOfSlots: bits4, pollData: Buffer) {
+        this.pollingGroup = pollingGroup;
+        this.nrOfSlots = nrOfSlots;
+        this.pollData = pollData;
       }
 
       set pollingGroup(value: string) {
         const convertToAddress = KNXHelper.GetAddress_(value);
-        this.#pollingGroup = convertToAddress;
+        this._pollingGroup = convertToAddress;
       }
 
       get pollingGroup() {
-        return KNXHelper.GetAddress(this.#pollingGroup, "/", true) as string; // Se supone que es un dirección de grupo;
+        return KNXHelper.GetAddress(this._pollingGroup, "/", true) as string; // Se supone que es un dirección de grupo;
       }
 
       set nrOfSlots(value: bits4) {
-        if (value < 0 || value > 7) throw new Error("The nrOfSlots value must be 4 bits (0-7)");
-        this.#nrOfSlots = value;
+        if (value < 0 || value > 7)
+          throw new Error("The nrOfSlots value must be 4 bits (0-7)");
+        this._nrOfSlots = value;
       }
 
       get nrOfSlots() {
-        return this.#nrOfSlots;
+        return this._nrOfSlots;
       }
 
       /**
@@ -2164,9 +2055,9 @@ export class EMI {
         // Rellenar Octetos 3-4 (Source) con ceros explícitos si es necesario
         buffer.writeUInt16BE(0x0000, 2);
 
-        this.#pollingGroup.copy(buffer, 4); // Octets 5-6
+        this._pollingGroup.copy(buffer, 4); // Octets 5-6
 
-        const octet7 = this.#nrOfSlots & 0x0f;
+        const octet7 = this._nrOfSlots & 0x0f;
         buffer.writeUInt8(octet7, 6); // Octet 7
 
         this.pollData.copy(buffer, 7); // Octet 8...
@@ -2181,8 +2072,8 @@ export class EMI {
         return {
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control.toString(16).padStart(2, "0")}`,
-          pollingGroup: `Grupo de sondeo: ${this.#pollingGroup}`,
-          nrOfSlots: `Número de ranuras: ${this.#nrOfSlots}`,
+          pollingGroup: `Grupo de sondeo: ${this._pollingGroup}`,
+          nrOfSlots: `Número de ranuras: ${this._nrOfSlots}`,
           pollData: `pollData: ${this.pollData.toString("hex")}`,
           pollData_Length: `${this.pollData.length} octets`,
           rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
@@ -2235,11 +2126,11 @@ export class EMI {
         // Todo lo que resta del buffer es data
         const pollData = buffer.subarray(7);
 
-        return new NPollDataCon({
-          pollingGroup: pollingGroupStr,
-          nrOfSlots: nrOfSlots as bits4, // Cast a 'bits4' o number según tu tipo
-          pollData: pollData,
-        });
+        return new NPollDataCon(
+          pollingGroupStr,
+          nrOfSlots as bits4, // Cast a 'bits4' o number según tu tipo
+          pollData,
+        );
       }
     },
   } as const;
@@ -2249,11 +2140,8 @@ export class EMI {
       control = 0x00;
       destinationAddress: string;
 
-      constructor(value: T_Connect_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TConnectReq.name);
-        }
-        this.destinationAddress = value.destinationAddress;
+      constructor(destinationAddress: string) {
+        this.destinationAddress = destinationAddress;
       }
 
       toBuffer(): Buffer {
@@ -2291,9 +2179,9 @@ export class EMI {
             "The destinationAddress is not string, this fatal error is from GetAddress, dont be ignore it",
           );
 
-        return new TConnectReq({
-          destinationAddress: destinationAddress,
-        });
+        return new TConnectReq(
+          destinationAddress,
+        );
       }
     },
     "T_Connect.con": class TConnectCon implements ServiceMessage {
@@ -2301,11 +2189,8 @@ export class EMI {
       control = 0x00;
       destinationAddress: string;
 
-      constructor(value: T_Connect_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TConnectCon.name);
-        }
-        this.destinationAddress = value.destinationAddress;
+      constructor(destinationAddress: string) {
+        this.destinationAddress = destinationAddress;
       }
 
       toBuffer(): Buffer {
@@ -2340,9 +2225,9 @@ export class EMI {
             "The destinationAddress is not string, this fatal error is from GetAddress, dont be ignore it",
           );
 
-        return new TConnectCon({
-          destinationAddress: destinationAddress,
-        });
+        return new TConnectCon(
+          destinationAddress,
+        );
       }
     },
     "T_Connect.ind": class TConnectInd implements ServiceMessage {
@@ -2350,16 +2235,13 @@ export class EMI {
       control = new ControlField();
       sourceAddress: string;
 
-      constructor(value: T_Connect_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TConnectInd.name);
-        }
-        this.sourceAddress = value.sourceAddress;
-        this.control.ackRequest = value.control.ackRequest;
-        this.control.frameType = value.control.frameType;
-        this.control.repeat = value.control.repeat;
-        this.control.systemBroadcast = value.control.systemBroadcast;
-        this.control.priority = value.control.priority;
+      constructor(sourceAddress: string, frameType: boolean, repeat: boolean, systemBroadcast: boolean, priority: Priority, ackRequest: boolean) {
+        this.sourceAddress = sourceAddress;
+        this.control.ackRequest = ackRequest;
+        this.control.frameType = frameType;
+        this.control.repeat = repeat;
+        this.control.systemBroadcast = systemBroadcast;
+        this.control.priority = priority;
       }
 
       toBuffer(): Buffer {
@@ -2393,27 +2275,22 @@ export class EMI {
         if (typeof sourceAddress !== "string")
           throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
-        return new TConnectInd({
-          control: {
-            ackRequest: control.ackRequest,
-            frameType: control.frameType,
-            repeat: control.repeat,
-            systemBroadcast: control.systemBroadcast,
-            priority: control.priority,
-            confirm: control.confirm,
-          },
-          sourceAddress: sourceAddress,
-        });
+        return new TConnectInd(
+          sourceAddress,
+          control.frameType,
+          control.repeat,
+          control.systemBroadcast,
+          control.priority,
+          control.ackRequest,
+        );
       }
     },
     "T_Disconnect.req": class TDisconnectReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Disconnect.req"]["EMI2/IMI2"].value;
       control = 0x00;
 
-      constructor(value: object) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDisconnectReq.name);
-        }
+      constructor() {
+        // No tiene parámetros
       }
 
       toBuffer(): Buffer {
@@ -2422,9 +2299,9 @@ export class EMI {
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
-      describe() {
+      describe(): Record<string, string> {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
         };
       }
 
@@ -2434,22 +2311,20 @@ export class EMI {
         if (buffer.length < 6) throw new Error("Buffer too short");
 
         // No hay datos adicionales en req
-        return new TDisconnectReq({});
+        return new TDisconnectReq();
       }
     },
     "T_Disconnect.con": class TDisconnectCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Disconnect.con"]["EMI2/IMI2"].value;
       control = new ControlField();
 
-      constructor(value: T_Disconnect_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDisconnectCon.name);
-        }
-        this.control.ackRequest = value.control.ackRequest;
-        this.control.frameType = value.control.frameType;
-        this.control.repeat = value.control.repeat;
-        this.control.systemBroadcast = value.control.systemBroadcast;
-        this.control.priority = value.control.priority;
+      constructor(frameType: boolean, repeat: boolean, systemBroadcast: boolean, priority: Priority, ackRequest: boolean, confirm: boolean) {
+        this.control.ackRequest = ackRequest;
+        this.control.frameType = frameType;
+        this.control.repeat = repeat;
+        this.control.systemBroadcast = systemBroadcast;
+        this.control.priority = priority;
+        this.control.confirm = confirm;
       }
 
       toBuffer(): Buffer {
@@ -2461,8 +2336,8 @@ export class EMI {
       }
       describe() {
         return {
-          messageCode: this.messageCode,
-          control: this.control,
+          messageCode: this.messageCode.toString(),
+          control: this.control.describe(),
         };
       }
 
@@ -2473,31 +2348,27 @@ export class EMI {
 
         const control = new ControlField(buffer.readUInt8(1));
 
-        return new TDisconnectCon({
-          control: {
-            ackRequest: control.ackRequest,
-            frameType: control.frameType,
-            repeat: control.repeat,
-            systemBroadcast: control.systemBroadcast,
-            priority: control.priority,
-            confirm: control.confirm,
-          },
-        });
+        return new TDisconnectCon(
+          control.frameType,
+          control.repeat,
+          control.systemBroadcast,
+          control.priority,
+          control.ackRequest,
+          control.confirm,
+        );
       }
     },
     "T_Disconnect.ind": class TDisconnectInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Disconnect.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
 
-      constructor(value: T_Disconnect_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDisconnectInd.name);
-        }
-        this.control.ackRequest = value.control.ackRequest;
-        this.control.frameType = value.control.frameType;
-        this.control.repeat = value.control.repeat;
-        this.control.systemBroadcast = value.control.systemBroadcast;
-        this.control.priority = value.control.priority;
+      constructor(frameType: boolean, repeat: boolean, systemBroadcast: boolean, priority: Priority, ackRequest: boolean, confirm: boolean) {
+        this.control.ackRequest = ackRequest;
+        this.control.frameType = frameType;
+        this.control.repeat = repeat;
+        this.control.systemBroadcast = systemBroadcast;
+        this.control.priority = priority;
+        this.control.confirm = confirm;
       }
 
       toBuffer(): Buffer {
@@ -2509,8 +2380,8 @@ export class EMI {
       }
       describe() {
         return {
-          messageCode: this.messageCode,
-          control: this.control,
+          messageCode: this.messageCode.toString(),
+          control: this.control.describe(),
         };
       }
 
@@ -2521,16 +2392,14 @@ export class EMI {
 
         const control = new ControlField(buffer.readUInt8(1));
 
-        return new TDisconnectInd({
-          control: {
-            ackRequest: control.ackRequest,
-            frameType: control.frameType,
-            repeat: control.repeat,
-            systemBroadcast: control.systemBroadcast,
-            priority: control.priority,
-            confirm: control.confirm,
-          },
-        });
+        return new TDisconnectInd(
+          control.frameType,
+          control.repeat,
+          control.systemBroadcast,
+          control.priority,
+          control.ackRequest,
+          control.confirm,
+        );
       }
     },
     "T_Data_Connected.req": class TDataConnectedReq implements ServiceMessage {
@@ -2539,13 +2408,10 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Connected_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataConnectedReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: Priority, hopCount: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -2559,9 +2425,9 @@ export class EMI {
       }
       describe() {
         return {
-          messageCode: this.messageCode,
-          control: this.control,
-          hopCount: this.hopCount,
+          messageCode: this.messageCode.toString(),
+          control: this.control.describe(),
+          hopCount: this.hopCount.toString(),
         };
       }
       static fromBuffer(buffer: Buffer): TDataConnectedReq {
@@ -2581,11 +2447,11 @@ export class EMI {
 
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataConnectedReq({
-          control: { priority: control.priority },
-          hopCount: hopCount as NPCI,
-          APDU: apdu,
-        });
+        return new TDataConnectedReq(
+          control.priority,
+          hopCount,
+          apdu,
+        );
       }
     },
     "T_Data_Connected.con": class TDataConnectedCon implements ServiceMessage {
@@ -2593,12 +2459,9 @@ export class EMI {
       control = new ControlField();
       APDU: Buffer;
 
-      constructor(value: T_Data_Connected_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataConnectedCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.APDU = value.APDU;
+      constructor(confirm: boolean, apdu: Buffer) {
+        this.control.confirm = confirm;
+        this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
@@ -2614,7 +2477,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           APDU: this.APDU.toString("hex"),
         };
@@ -2629,10 +2492,10 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataConnectedCon({
-          control: { confirm: control.confirm },
-          APDU: apdu,
-        });
+        return new TDataConnectedCon(
+          control.confirm,
+          apdu,
+        );
       }
     },
     "T_Data_Connected.ind": class TDataConnectedInd implements ServiceMessage {
@@ -2642,14 +2505,11 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Connected_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataConnectedInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sourceAddress = value.sourceAddress;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, sourceAddress: string, apdu: Buffer, hopCount: number) {
+        this.control.priority = priority;
+        this.sourceAddress = sourceAddress;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -2666,7 +2526,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           APDU: this.APDU.toString("hex"),
@@ -2694,12 +2554,12 @@ export class EMI {
 
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataConnectedInd({
-          control: { priority: control.priority },
-          sourceAddress: sourceAddress,
-          hopCount: hopCount as NPCI,
-          APDU: apdu,
-        });
+        return new TDataConnectedInd(
+          control.priority,
+          sourceAddress,
+          apdu,
+          hopCount,
+        );
       }
     },
     "T_Data_Group.req": class TDataGroupReq implements ServiceMessage {
@@ -2708,13 +2568,10 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Group_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataGroupReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, hopCount: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -2730,9 +2587,9 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          hopCount: this.hopCount,
+          hopCount: this.hopCount.toString(),
           APDU: this.APDU.toString("hex"),
         };
       }
@@ -2749,11 +2606,11 @@ export class EMI {
         const length = octet6 & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataGroupReq({
-          control: { priority: control.priority },
-          hopCount: hopCount,
-          APDU: apdu,
-        });
+        return new TDataGroupReq(
+          control.priority,
+          hopCount,
+          apdu,
+        );
       }
     },
     "T_Data_Group.con": class TDataGroupCon implements ServiceMessage {
@@ -2761,12 +2618,9 @@ export class EMI {
       control = new ControlField();
       data: Buffer;
 
-      constructor(value: T_Data_Group_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataGroupCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.data = value.data;
+      constructor(confirm: boolean, data: Buffer) {
+        this.control.confirm = confirm;
+        this.data = data;
       }
 
       toBuffer(): Buffer {
@@ -2782,7 +2636,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
         };
       }
@@ -2796,10 +2650,10 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
-        return new TDataGroupCon({
-          control: { confirm: control.confirm },
-          data: data,
-        });
+        return new TDataGroupCon(
+          control.confirm,
+          data,
+        );
       }
     },
     "T_Data_Group.ind": class TDataGroupInd implements ServiceMessage {
@@ -2807,12 +2661,9 @@ export class EMI {
       control = new ControlField();
       APDU: Buffer;
 
-      constructor(value: T_Data_Group_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataGroupInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.APDU = value.APDU;
+      constructor(priority: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
@@ -2828,7 +2679,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           APDU: this.APDU.toString("hex"),
         };
@@ -2845,10 +2696,10 @@ export class EMI {
         const length = octet6 & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataGroupInd({
-          control: { priority: control.priority },
-          APDU: apdu,
-        });
+        return new TDataGroupInd(
+          control.priority,
+          apdu,
+        );
       }
     },
     "T_Data_Individual.req": class TDataIndividualReq implements ServiceMessage {
@@ -2858,14 +2709,11 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Individual_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataIndividualReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.destinationAddress = value.destinationAddress;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, destinationAddress: string, hopCount: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.destinationAddress = destinationAddress;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -2881,10 +2729,10 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
-          hopCount: this.hopCount,
+          hopCount: this.hopCount.toString(),
           APDU: this.APDU.toString("hex"),
         };
       }
@@ -2909,12 +2757,12 @@ export class EMI {
         const length = octet6 & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataIndividualReq({
-          control: { priority: control.priority },
-          destinationAddress: destinationAddress,
-          hopCount: hopCount,
-          APDU: apdu,
-        });
+        return new TDataIndividualReq(
+          control.priority,
+          destinationAddress,
+          hopCount,
+          apdu,
+        );
       }
     },
     "T_Data_Individual.con": class TDataIndividualCon implements ServiceMessage {
@@ -2923,13 +2771,10 @@ export class EMI {
       destinationAddress: string;
       APDU: Buffer;
 
-      constructor(value: T_Data_Individual_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataIndividualCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.destinationAddress = value.destinationAddress;
-        this.APDU = value.APDU;
+      constructor(confirm: boolean, destinationAddress: string, apdu: Buffer) {
+        this.control.confirm = confirm;
+        this.destinationAddress = destinationAddress;
+        this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
@@ -2945,7 +2790,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
         };
@@ -2970,11 +2815,11 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataIndividualCon({
-          control: { confirm: control.confirm },
-          destinationAddress: destinationAddress,
-          APDU: apdu,
-        });
+        return new TDataIndividualCon(
+          control.confirm,
+          destinationAddress,
+          apdu,
+        );
       }
     },
     "T_Data_Individual.ind": class TDataIndividualInd implements ServiceMessage {
@@ -2985,15 +2830,12 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Individual_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataIndividualInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sourceAddress = value.sourceAddress;
-        this.destinationAddress = value.destinationAddress;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, sourceAddress: string, destinationAddress: string, hopCount: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -3010,7 +2852,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
@@ -3046,13 +2888,13 @@ export class EMI {
         const length = octet6 & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataIndividualInd({
-          control: { priority: control.priority },
-          sourceAddress: sourceAddress,
-          destinationAddress: destinationAddress,
-          hopCount: hopCount as NPCI,
-          APDU: apdu,
-        });
+        return new TDataIndividualInd(
+          control.priority,
+          sourceAddress,
+          destinationAddress,
+          hopCount,
+          apdu,
+        );
       }
     },
     "T_Data_Broadcast.req": class TDataBroadcastReq implements ServiceMessage {
@@ -3061,13 +2903,10 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Broadcast_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataBroadcastReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, hopCount: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -3082,9 +2921,9 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          hopCount: this.hopCount,
+          hopCount: this.hopCount.toString(),
           APDU: this.APDU.toString("hex"),
         };
       }
@@ -3101,11 +2940,11 @@ export class EMI {
         const length = octet6 & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataBroadcastReq({
-          control: { priority: control.priority },
-          hopCount: hopCount,
-          APDU: apdu,
-        });
+        return new TDataBroadcastReq(
+          control.priority,
+          hopCount,
+          apdu,
+        );
       }
     },
     "T_Data_Broadcast.con": class TDataBroadcastCon implements ServiceMessage {
@@ -3113,12 +2952,9 @@ export class EMI {
       control = new ControlField();
       APDU: Buffer;
 
-      constructor(value: T_Data_Broadcast_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataBroadcastCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.APDU = value.APDU;
+      constructor(confirm: boolean, apdu: Buffer) {
+        this.control.confirm = confirm;
+        this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
@@ -3132,7 +2968,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
         };
       }
@@ -3147,10 +2983,10 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataBroadcastCon({
-          control: { confirm: control.confirm },
-          APDU: apdu,
-        });
+        return new TDataBroadcastCon(
+          control.confirm,
+          apdu,
+        );
       }
     },
     "T_Data_Broadcast.ind": class TDataBroadcastInd implements ServiceMessage {
@@ -3160,14 +2996,11 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: T_Data_Broadcast_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TDataBroadcastInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sourceAddress = value.sourceAddress;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, sourceAddress: string, hopCount: number, apdu: Buffer) {
+        this.control.priority = priority;
+        this.sourceAddress = sourceAddress;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -3183,7 +3016,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           APDU: this.APDU.toString("hex"),
@@ -3208,12 +3041,12 @@ export class EMI {
         const length = octet6 & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new TDataBroadcastInd({
-          control: { priority: control.priority },
-          sourceAddress: sourceAddress,
-          hopCount: hopCount as NPCI,
-          APDU: apdu,
-        });
+        return new TDataBroadcastInd(
+          control.priority,
+          sourceAddress,
+          hopCount,
+          apdu,
+        );
       }
     },
     "T_Poll_Data.req": class TPollDataReq implements ServiceMessage {
@@ -3222,12 +3055,9 @@ export class EMI {
       pollingGroup: string;
       numberOfSlots: number;
 
-      constructor(value: T_Poll_Data_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TPollDataReq.name);
-        }
-        this.pollingGroup = value.pollingGroup;
-        this.numberOfSlots = value.numberOfSlots;
+      constructor(pollingGroup: string, numberOfSlots: number) {
+        this.pollingGroup = pollingGroup;
+        this.numberOfSlots = numberOfSlots;
       }
 
       toBuffer(): Buffer {
@@ -3243,10 +3073,10 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           pollingGroup: this.pollingGroup,
-          numberOfSlots: this.numberOfSlots,
+          numberOfSlots: this.numberOfSlots.toString(),
         };
       }
 
@@ -3257,7 +3087,7 @@ export class EMI {
 
         // Estructura: MC(0) | Ctrl(1) | Unused(2-3) | PollGroup(4-5) | Slots(6)
         // Usamos separador "/" para grupos
-        const control = new ControlField(buffer.readUInt8(1));
+        // const control = new ControlField(buffer.readUInt8(1));
         const pollingGroup = KNXHelper.GetAddress(buffer.subarray(4, 6), "/");
         if (!pollingGroup)
           throw new Error(
@@ -3267,11 +3097,10 @@ export class EMI {
           throw new Error("The pollingGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         const slots = buffer.readUInt8(6) & 0x0f;
 
-        return new TPollDataReq({
-          control,
-          pollingGroup: pollingGroup,
-          numberOfSlots: slots as NPCI,
-        });
+        return new TPollDataReq(
+          pollingGroup,
+          slots,
+        );
       }
     },
     "T_Poll_Data.con": class TPollDataCon implements ServiceMessage {
@@ -3282,14 +3111,11 @@ export class EMI {
       pollData: Buffer;
       nrOfSlots: number;
 
-      constructor(value: T_Poll_Data_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(TPollDataCon.name);
-        }
-        this.sourceAddress = value.sourceAddress;
-        this.pollingGroup = value.pollingGroup;
-        this.pollData = value.pollData;
-        this.nrOfSlots = value.nrOfSlots;
+      constructor(sourceAddress: string, pollingGroup: string, pollData: Buffer, nrOfSlots: number) {
+        this.sourceAddress = sourceAddress;
+        this.pollingGroup = pollingGroup;
+        this.pollData = pollData;
+        this.nrOfSlots = nrOfSlots;
       }
 
       toBuffer(): Buffer {
@@ -3308,7 +3134,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           pollingGroup: this.pollingGroup,
@@ -3320,7 +3146,7 @@ export class EMI {
         const expectedCode = MESSAGE_CODE_FIELD["T_Poll_Data.con"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 7) throw new Error("Buffer too short");
-        const control = new ControlField(buffer.readUInt8(1));
+        // const control = new ControlField(buffer.readUInt8(1));
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
         const pollingGroup = KNXHelper.GetAddress(buffer.subarray(4, 6), "/");
         if (!sourceAddress)
@@ -3338,13 +3164,12 @@ export class EMI {
         const slots = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7);
 
-        return new TPollDataCon({
-          control,
-          sourceAddress: sourceAddress,
-          pollingGroup: pollingGroup,
-          nrOfSlots: slots as NPCI,
-          pollData: data,
-        });
+        return new TPollDataCon(
+          sourceAddress,
+          pollingGroup,
+          data,
+          slots,
+        );
       }
     },
   } as const;
@@ -3362,11 +3187,8 @@ export class EMI {
       messageCode = MESSAGE_CODE_FIELD["M_Connect.ind"]["EMI2/IMI2"].value;
       sourceAddress: string;
 
-      constructor(value: M_Connect_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MConnectInd.name);
-        }
-        this.sourceAddress = value.sourceAddress;
+      constructor(sourceAddress: string) {
+        this.sourceAddress = sourceAddress;
       }
 
       toBuffer(): Buffer {
@@ -3381,7 +3203,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           sourceAddress: this.sourceAddress,
         };
       }
@@ -3398,10 +3220,12 @@ export class EMI {
             "The sourceAddress is undefined or null, this fatal error is from GetAddress, dont be ignore it",
           );
         if (typeof sourceAddress !== "string")
-          throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
-        return new MConnectInd({
-          sourceAddress: sourceAddress,
-        });
+          throw new Error(
+            "The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it",
+          );
+        return new MConnectInd(
+          sourceAddress,
+        );
       }
     },
     "M_Disconnect.ind": class MDisconnectInd implements ServiceMessage {
@@ -3421,7 +3245,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
         };
       }
 
@@ -3438,13 +3262,10 @@ export class EMI {
       APDU: Buffer;
       hopCount: number;
 
-      constructor(value: M_User_Data_Connected_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MUserDataConnectedReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.APDU = value.APDU;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, apdu: Buffer, hopCount: number) {
+        this.control.priority = priority;
+        this.APDU = apdu;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -3461,9 +3282,9 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          hopCount: this.hopCount,
+          hopCount: this.hopCount.toString(),
           APDU: this.APDU.toString("hex"),
         };
       }
@@ -3490,11 +3311,11 @@ export class EMI {
         // Estandarizando: Leemos el buffer restante como APDU.
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new MUserDataConnectedReq({
-          control: { priority: control.priority },
-          hopCount: hopCount,
-          APDU: apdu,
-        });
+        return new MUserDataConnectedReq(
+          control.priority,
+          apdu,
+          hopCount,
+        );
       }
     },
     "M_User_Data_Connected.con": class MUserDataConnectedCon implements ServiceMessage {
@@ -3502,12 +3323,9 @@ export class EMI {
       control = new ControlField();
       APDU: Buffer;
 
-      constructor(value: M_User_Data_Connected_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MUserDataConnectedCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.APDU = value.APDU;
+      constructor(confirm: boolean, apdu: Buffer) {
+        this.control.confirm = confirm;
+        this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
@@ -3524,7 +3342,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           APDU: this.APDU.toString("hex"),
         };
@@ -3540,10 +3358,10 @@ export class EMI {
         // Mismo conflicto del byte 7 (0x02). Leemos length bytes desde 7.
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new MUserDataConnectedCon({
-          control: { confirm: control.confirm },
-          APDU: apdu,
-        });
+        return new MUserDataConnectedCon(
+          control.confirm,
+          apdu,
+        );
       }
     },
     "M_User_Data_Connected.ind": class MUserDataConnectedInd implements ServiceMessage {
@@ -3552,13 +3370,10 @@ export class EMI {
       sourceAddress: string;
       APDU: Buffer;
 
-      constructor(value: M_User_Data_Connected_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MUserDataConnectedInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sourceAddress = value.sourceAddress;
-        this.APDU = value.APDU;
+      constructor(priority: number, sourceAddress: string, apdu: Buffer) {
+        this.control.priority = priority;
+        this.sourceAddress = sourceAddress;
+        this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
@@ -3576,7 +3391,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           APDU: this.APDU.toString("hex"),
@@ -3598,11 +3413,11 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const apdu = buffer.subarray(7, 7 + length);
 
-        return new MUserDataConnectedInd({
-          control: { priority: control.priority },
-          sourceAddress: sourceAddress,
-          APDU: apdu,
-        });
+        return new MUserDataConnectedInd(
+          control.priority,
+          sourceAddress,
+          apdu,
+        );
       }
     },
     "A_Data_Group.req": class ADataGroupReq implements ServiceMessage {
@@ -3613,15 +3428,12 @@ export class EMI {
       data: Buffer;
       hopCount: number;
 
-      constructor(value: A_Data_Group_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(ADataGroupReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sap = value.sap;
-        this.apci = value.apci;
-        this.data = value.data;
-        this.hopCount = value.hopCount;
+      constructor(priority: number, sap: SAP, apci: APCI, data: Buffer, hopCount: number) {
+        this.control.priority = priority;
+        this.sap = sap;
+        this.apci = apci;
+        this.data = data;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -3642,10 +3454,10 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          sap: this.sap,
-          hopCount: this.hopCount,
+          sap: this.sap.toString(),
+          hopCount: this.hopCount.toString(),
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
         };
@@ -3675,13 +3487,13 @@ export class EMI {
         // Por simplicidad devolvemos el payload crudo, ajusta según tu parser APCI.
         const data = fullAPDU;
 
-        return new ADataGroupReq({
-          control: { priority: control.priority },
-          sap: sap,
-          apci: newAPCI,
-          data: data,
-          hopCount: hopCount,
-        });
+        return new ADataGroupReq(
+          control.priority,
+          sap,
+          newAPCI,
+          data,
+          hopCount,
+        );
       }
     },
     "A_Data_Group.con": class ADataGroupCon implements ServiceMessage {
@@ -3691,14 +3503,11 @@ export class EMI {
       apci: APCI;
       data: Buffer;
 
-      constructor(value: A_Data_Group_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(ADataGroupCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.sap = value.sap;
-        this.apci = value.apci;
-        this.data = value.data;
+      constructor(confirm: boolean, sap: SAP, apci: APCI, data: Buffer) {
+        this.control.confirm = confirm;
+        this.sap = sap;
+        this.apci = apci;
+        this.data = data;
       }
 
       toBuffer(): Buffer {
@@ -3719,9 +3528,9 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          sap: this.sap,
+          sap: this.sap.toString(),
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
         };
@@ -3741,12 +3550,12 @@ export class EMI {
         const fullAPCI = apci1 | (apci2 >> 4);
         const apci = new APCI(fullAPCI);
 
-        return new ADataGroupCon({
-          control: { confirm: control.confirm },
-          sap: sap,
-          apci: apci,
-          data: fullAPDU,
-        });
+        return new ADataGroupCon(
+          control.confirm,
+          sap,
+          apci,
+          fullAPDU,
+        );
       }
     },
     "A_Data_Group.ind": class ADataGroupInd implements ServiceMessage {
@@ -3756,14 +3565,11 @@ export class EMI {
       apci: APCI;
       data: Buffer;
 
-      constructor(value: A_Data_Group_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(ADataGroupInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sap = value.sap;
-        this.apci = value.apci;
-        this.data = value.data;
+      constructor(priority: number, sap: SAP, apci: APCI, data: Buffer) {
+        this.control.priority = priority;
+        this.sap = sap;
+        this.apci = apci;
+        this.data = data;
       }
 
       toBuffer(): Buffer {
@@ -3784,9 +3590,9 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          sap: this.sap,
+          sap: this.sap.toString(),
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
         };
@@ -3806,12 +3612,12 @@ export class EMI {
         const fullAPCI = apci1 | (apci2 >> 4);
         const apci = new APCI(fullAPCI);
 
-        return new ADataGroupInd({
-          control: { priority: control.priority },
-          sap: sap,
-          apci: apci,
-          data: fullAPDU,
-        });
+        return new ADataGroupInd(
+          control.priority,
+          sap,
+          apci,
+          fullAPDU,
+        );
       }
     },
     "M_User_Data_Individual.req": class MUserDataIndividualReq implements ServiceMessage {
@@ -3822,15 +3628,12 @@ export class EMI {
       data: Buffer;
       hopCount: number;
 
-      constructor(value: M_User_Data_Individual_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MUserDataIndividualReq.name);
-        }
-        this.control.priority = value.control.priority;
-        this.destinationAddress = value.destinationAddress;
+      constructor(priority: number, destinationAddress: string, data: Buffer, hopCount: number) {
+        this.control.priority = priority;
+        this.destinationAddress = destinationAddress;
         this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit; // 2C0
-        this.data = value.data;
-        this.hopCount = value.hopCount;
+        this.data = data;
+        this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
@@ -3850,10 +3653,10 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
-          hopCount: this.hopCount,
+          hopCount: this.hopCount.toString(),
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
         };
@@ -3876,12 +3679,12 @@ export class EMI {
 
         const data = buffer.subarray(7, 7 + length);
 
-        return new MUserDataIndividualReq({
-          control: { priority: control.priority },
-          destinationAddress: destAddr,
-          hopCount: hopCount,
-          data: data,
-        });
+        return new MUserDataIndividualReq(
+          control.priority,
+          destAddr,
+          data,
+          hopCount,
+        );
       }
     },
     "M_User_Data_Individual.con": class MUserDataIndividualCon implements ServiceMessage {
@@ -3891,14 +3694,11 @@ export class EMI {
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
       data: Buffer;
 
-      constructor(value: M_User_Data_Individual_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MUserDataIndividualCon.name);
-        }
-        this.control.confirm = value.control.confirm;
-        this.destinationAddress = value.destinationAddress;
+      constructor(confirm: boolean, destinationAddress: string, data: Buffer) {
+        this.control.confirm = confirm;
+        this.destinationAddress = destinationAddress;
         this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit; // 2C0
-        this.data = value.data;
+        this.data = data;
       }
 
       toBuffer(): Buffer {
@@ -3918,7 +3718,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
           apci: this.apci.describe(),
@@ -3939,11 +3739,11 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
-        return new MUserDataIndividualCon({
-          control: { confirm: control.confirm },
-          destinationAddress: destAddr,
-          data: data,
-        });
+        return new MUserDataIndividualCon(
+          control.confirm,
+          destAddr,
+          data,
+        );
       }
     },
     "M_User_Data_Individual.ind": class MUserDataIndividualInd implements ServiceMessage {
@@ -3954,15 +3754,12 @@ export class EMI {
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
       data: Buffer;
 
-      constructor(value: M_User_Data_Individual_ind) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(MUserDataIndividualInd.name);
-        }
-        this.control.priority = value.control.priority;
-        this.sourceAddress = value.sourceAddress;
-        this.destinationAddress = value.destinationAddress;
+      constructor(priority: number, sourceAddress: string, destinationAddress: string, data: Buffer) {
+        this.control.priority = priority;
+        this.sourceAddress = sourceAddress;
+        this.destinationAddress = destinationAddress;
         this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit; // 2C0
-        this.data = value.data;
+        this.data = data;
       }
 
       toBuffer(): Buffer {
@@ -3983,7 +3780,7 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
@@ -4013,12 +3810,12 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
-        return new MUserDataIndividualInd({
-          control: { priority: control.priority },
-          sourceAddress: sourceAddr,
-          destinationAddress: destAddr,
-          data: data,
-        });
+        return new MUserDataIndividualInd(
+          control.priority,
+          sourceAddr,
+          destAddr,
+          data,
+        );
       }
     },
     "A_Poll_Data.req": class APollDataReq implements ServiceMessage {
@@ -4027,12 +3824,9 @@ export class EMI {
       numberOfSlots: number;
       control: ControlField;
 
-      constructor(value: A_Poll_Data_req) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(APollDataReq.name);
-        }
-        this.pollingGroup = value.pollingGroup;
-        this.numberOfSlots = value.numberOfSlots;
+      constructor(pollingGroup: string, numberOfSlots: number) {
+        this.pollingGroup = pollingGroup;
+        this.numberOfSlots = numberOfSlots;
         this.control = new ControlField(0xf0);
       }
 
@@ -4049,10 +3843,10 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           pollingGroup: this.pollingGroup,
-          numberOfSlots: this.numberOfSlots,
+          numberOfSlots: this.numberOfSlots.toString(),
         };
       }
 
@@ -4068,10 +3862,10 @@ export class EMI {
           throw new Error("The pollGroup is not string, this fatal error is from GetAddress, dont be ignore it");
         const slots = buffer.readUInt8(6) & 0x0f;
 
-        return new APollDataReq({
-          pollingGroup: pollGroup,
-          numberOfSlots: slots,
-        });
+        return new APollDataReq(
+          pollGroup,
+          slots,
+        );
       }
     },
     "A_Poll_Data.con": class APollDataCon implements ServiceMessage {
@@ -4082,14 +3876,11 @@ export class EMI {
       pollData: Buffer;
       control: ControlField;
 
-      constructor(value: A_Poll_Data_con) {
-        if (typeof value !== "object" || value === null) {
-          throw new InvalidInputObject(APollDataCon.name);
-        }
-        this.sourceAddress = value.sourceAddress;
-        this.pollingGroup = value.pollingGroup;
-        this.numberOfSlots = value.numberOfSlots;
-        this.pollData = value.pollData;
+      constructor(sourceAddress: string, pollingGroup: string, numberOfSlots: number, pollData: Buffer) {
+        this.sourceAddress = sourceAddress;
+        this.pollingGroup = pollingGroup;
+        this.numberOfSlots = numberOfSlots;
+        this.pollData = pollData;
         this.control = new ControlField(0xf0);
       }
 
@@ -4107,11 +3898,11 @@ export class EMI {
 
       describe() {
         return {
-          messageCode: this.messageCode,
+          messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
           pollingGroup: this.pollingGroup,
-          numberOfSlots: this.numberOfSlots,
+          numberOfSlots: this.numberOfSlots.toString(),
           pollData: this.pollData.toString("hex"),
         };
       }
@@ -4141,12 +3932,12 @@ export class EMI {
         // Offset 7: Data
         const pollData = buffer.subarray(7);
 
-        return new APollDataCon({
-          sourceAddress: sourceAddress,
-          pollingGroup: pollingGroup,
-          numberOfSlots: slots,
-          pollData: pollData,
-        });
+        return new APollDataCon(
+          sourceAddress,
+          pollingGroup,
+          slots,
+          pollData,
+        );
       }
     },
   } as const;
@@ -4155,7 +3946,7 @@ export class EMI {
     "M_PropRead.req": class MPropReadReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_PropRead.req"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4177,7 +3968,7 @@ export class EMI {
     "M_PropRead.con": class MPropReadCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4199,7 +3990,7 @@ export class EMI {
     "M_PropWrite.req": class MPropWriteReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4221,7 +4012,7 @@ export class EMI {
     "M_PropWrite.con": class MPropWriteCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4243,7 +4034,7 @@ export class EMI {
     "M_PropInfo.ind": class MPropInfoInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_PropInfo.ind"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4265,7 +4056,7 @@ export class EMI {
     "M_FuncPropCommand.req": class MFuncPropCommandReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4287,7 +4078,7 @@ export class EMI {
     "M_FuncPropStateRead.req": class MFuncPropStateReadReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4309,7 +4100,7 @@ export class EMI {
     "M_FuncPropCommand.con": class MFuncPropCommandCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4331,7 +4122,7 @@ export class EMI {
     "M_FuncPropStateRead.con": class MFuncPropStateReadCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.con"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4353,7 +4144,7 @@ export class EMI {
     "M_Reset.req": class MResetReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4375,7 +4166,7 @@ export class EMI {
     "M_Reset.ind": class MResetInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value;
       data: Buffer;
-      constructor(data: Buffer | { data: Buffer }) {
+      constructor(data: Buffer | { data: Buffer; }) {
         this.data = Buffer.isBuffer(data) ? data : data.data;
       }
       toBuffer() {
@@ -4416,11 +4207,11 @@ type ExcludedServices = never;
  * Validates that a class constructor has a static fromBuffer method
  * that returns an instance of that same class.
  */
-type EMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
+type EMIServiceConstructor<T> = T extends { new(...args: any[]): infer I; }
   ? {
-      new (...args: any[]): I;
-      fromBuffer(buffer: Buffer): I;
-    }
+    new(...args: any[]): I;
+    fromBuffer(buffer: Buffer): I;
+  }
   : never;
 
 /**
@@ -4431,10 +4222,10 @@ type EMIServiceConstructor<T> = T extends { new (...args: any[]): infer I }
 type EMIValidator = {
   [K in KeysOfEMI]: {
     [S in keyof (typeof EMI)[K]]: S extends ExcludedServices
-      ? any
-      : (typeof EMI)[K][S] extends { new (...args: any[]): any }
-        ? EMIServiceConstructor<(typeof EMI)[K][S]>
-        : any;
+    ? any
+    : (typeof EMI)[K][S] extends { new(...args: any[]): any; }
+    ? EMIServiceConstructor<(typeof EMI)[K][S]>
+    : any;
   };
 };
 // !! This is for verify all class if have the method fromBuffer

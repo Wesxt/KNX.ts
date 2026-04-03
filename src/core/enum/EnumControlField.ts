@@ -25,10 +25,3 @@ export enum FrameType {
   EXTENDED = 0, // FT = 0 → L_Data_Extended Frame
   STANDARD = 1  // FT = 1 → L_Data_Standard Frame
 }
-
-
-export enum FrameKind {
-  L_DATA_FRAME = "L_DATA_FRAME",
-  L_POLL_DATA_FRAME = "L_POLL_DATA_FRAME",
-  ACKNOWLEDGEMENT_FRAME = "ACKNOWLEDGEMENT_FRAME"
-}

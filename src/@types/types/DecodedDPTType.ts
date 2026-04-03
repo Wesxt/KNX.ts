@@ -1,7 +1,6 @@
 import { KnxDataDecode } from "../../core/data/KNXDataDecode";
 
 type decode = typeof KnxDataDecode;
-// #region Decoded Types
 
 export type DecodedDPT1 = ReturnType<decode["asDpt1"]>;
 export type DecodedDPT2 = ReturnType<decode["asDpt2"]>;

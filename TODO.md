@@ -12,7 +12,7 @@ Aún no se ha probado la conexión TCP del host KNXnetIPServer, está en fase ex
 
 ### Enrutado de conexiones
 
-Tener varias conexiones de IP Tunneling y TPUART con la gestión de conexiones de la clase `Router`
+Tener varias conexiones de IP Tunneling con TPUART y/o USB con la gestión de conexiones de la clase `Router`
 
 - Ver si los mensajes se enrutan correctamente al host KNXnetIPServer para la ip de multidifusión
 
@@ -37,9 +37,9 @@ Implementaciones pendientes.
 
 - Manejar dispositivos en progMode, es vital para que sea posible parametrizar con ETS
 
-- Implementar un metodo para escribir un L_data.req con direcciones individuales, para evitar los grupos.
+- Implementar escucha de eventos basado en las direcciones de fuente
 
-- Implementar escucha de eventos basado en las direcciones de destino y de fuente
+- Usar las capas implementas de NPDU, TPDU y APDU en las clases de EMI
 
 #### Filtros
 
