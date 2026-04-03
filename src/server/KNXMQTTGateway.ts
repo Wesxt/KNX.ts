@@ -3,7 +3,7 @@ import { createServer } from "aedes-server-factory";
 import * as mqtt from "mqtt";
 
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
-import { CEMI } from "../core/CEMI";
+import { CEMIInstance } from "../core/CEMI";
 import { MQTTGatewayOptions } from "../@types/interfaces/servers";
 
 export class KNXMQTTGateway {
@@ -62,31 +62,29 @@ export class KNXMQTTGateway {
       });
 
       // Global Listener from KNXContext
-      this.options.knxContext.on(
-        "indication",
-        (cemi: InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>) => {
-          const dest = cemi.destinationAddress;
-          if (!dest) return;
+      this.options.knxContext.on("indication", (cemi: CEMIInstance) => {
+        if (!("destinationAddress" in cemi)) return;
+        const dest = cemi.destinationAddress;
+        if (!dest) return;
 
-          const cache = GroupAddressCache.getInstance();
-          const entries = cache.query(dest, undefined, undefined, true);
-          let decodedValue = undefined;
+        const cache = GroupAddressCache.getInstance();
+        const entries = cache.query(dest, undefined, undefined, true);
+        let decodedValue = undefined;
 
-          if (entries && entries.length > 0) {
-            decodedValue = entries[0].decodedValue;
-          }
+        if (entries && entries.length > 0) {
+          decodedValue = entries[0].decodedValue;
+        }
 
-          // Publish to mqtt
-          const pubTopic = `${this.topicPrefix}/state/${dest}`;
-          const payload = JSON.stringify({
-            decodedValue: decodedValue,
-          });
+        // Publish to mqtt
+        const pubTopic = `${this.topicPrefix}/state/${dest}`;
+        const payload = JSON.stringify({
+          decodedValue: decodedValue,
+        });
 
-          if (this.client?.connected) {
-            this.client.publish(pubTopic, payload, { retain: true });
-          }
-        },
-      );
+        if (this.client?.connected) {
+          this.client.publish(pubTopic, payload, { retain: true });
+        }
+      });
     });
   }
 

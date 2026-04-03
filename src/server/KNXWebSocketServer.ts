@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
-import { CEMI } from "../core/CEMI";
+import { CEMIInstance } from "../core/CEMI";
 import { WebSocketGatewayOptions } from "../@types/interfaces/servers";
 
 export class KNXWebSocketGateway {
@@ -31,7 +31,8 @@ export class KNXWebSocketGateway {
     });
 
     // Listen globally for events from knxContext to dispatch to WS clients
-    this.options.knxContext.on("indication", (cemi: InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>) => {
+    this.options.knxContext.on("indication", (cemi: CEMIInstance) => {
+      if (!("destinationAddress" in cemi)) return;
       const dest = cemi.destinationAddress;
       if (!dest) return;
 
