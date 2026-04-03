@@ -1,6 +1,6 @@
 {
   "name": "knx.ts",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A high-performance KNXnet/IP server and client library in TypeScript, focused on ETS stability.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -50,7 +50,6 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^22.19.13",
     "@types/node-hid": "^1.3.4",
-    "@types/pino": "^7.0.4",
     "@types/ws": "^8.18.1",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",

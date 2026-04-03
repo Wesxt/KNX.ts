@@ -1,4 +1,4 @@
-import pino, { Logger, TransportMultiOptions, TransportPipelineOptions, TransportTargetOptions } from "pino";
+import pino from "pino";
 import path from "path";
 import fs from "fs";
 import { KNXLoggerOptions } from "../@types/interfaces/connection";
@@ -8,8 +8,11 @@ import { KNXLoggerOptions } from "../@types/interfaces/connection";
  * Completely configurable via options, no environment variable dependencies.
  * Production mode (JSON) is only active if NOT in a test environment.
  */
-export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
-  const targets: (TransportTargetOptions<Record<string, any>> | TransportPipelineOptions<Record<string, any>>)[] = [];
+export const createKNXLogger = (options?: KNXLoggerOptions): pino.Logger => {
+  const targets: (
+    | pino.TransportTargetOptions<Record<string, any>>
+    | pino.TransportPipelineOptions<Record<string, any>>
+  )[] = [];
 
   // 1. Console Transport
   if (!options?.pretty) {
@@ -60,7 +63,7 @@ export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
     });
   }
 
-  const transportConfig = targets.length > 0 ? ({ targets } as TransportMultiOptions) : undefined;
+  const transportConfig = targets.length > 0 ? ({ targets } as pino.TransportMultiOptions) : undefined;
 
   const defaultOptions: any = {
     level: options?.level || "info",
@@ -84,13 +87,13 @@ export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
 /**
  * Global default logger instance.
  */
-export let knxLogger: Logger = createKNXLogger();
+export let knxLogger: pino.Logger = createKNXLogger();
 
 /**
  * Configures the global knxLogger instance.
  * Call this at the beginning of your application to apply custom settings.
  */
-export const setupLogger = (options: KNXLoggerOptions): Logger => {
+export const setupLogger = (options: KNXLoggerOptions): pino.Logger => {
   knxLogger = createKNXLogger(options);
   return knxLogger;
 };
