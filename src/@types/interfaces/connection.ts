@@ -1,4 +1,4 @@
-import { LoggerOptions } from "pino";
+import pino from "pino";
 import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
 
 /**
@@ -84,7 +84,7 @@ export interface ExternalManagerOptions {
    */
   logOptions?: KNXLoggerOptions;
 }
-export interface KNXLoggerOptions extends LoggerOptions {
+export interface KNXLoggerOptions extends pino.LoggerOptions {
   /**
    * Use pino-pretty but it's slow
    */
