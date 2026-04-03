@@ -1,11 +1,10 @@
-import { CEMI } from "../core/CEMI";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import { ControlField } from "../core/ControlField";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "./KNXHelper";
 import { AddressType } from "../core/enum/EnumControlFieldExtended";
 import { MessageCodeTranslator } from "./MessageCodeTranslator";
-import { EMI } from "../core/EMI";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { EMI, EMIInstance } from "../core/EMI";
 import { NPDU } from "../core/layers/data/NPDU";
 
 /**
@@ -17,7 +16,7 @@ export class CEMIAdapter {
    * Adapts a raw EMI2 message (Buffer) to a cEMI instance.
    * Typical EMI structure: [MC] [Ctrl] [Src] [Dst] [Len] [NPDU(NPCI + TPDU)]
    */
-  static emiToCemi(emiBuffer: Buffer): ServiceMessage | null {
+  static emiToCemi(emiBuffer: Buffer): CEMIInstance | null {
     if (emiBuffer.length < 7) throw new Error("EMI buffer too short");
 
     const messageCode = emiBuffer.readUInt8(0);
@@ -43,11 +42,11 @@ export class CEMIAdapter {
 
     // --- NPDU Extraction ---
     const npduBuff = emiBuffer.subarray(6);
+    // The implementation of NPDU have NPCI
     const npdu = NPDU.fromBuffer(npduBuff);
     controlField2.hopCount = npdu.hopCount;
     controlField2.addressType = npdu.addressType;
     dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(4, 6), npdu.addressType === 1 ? "/" : ".");
-    console.trace(npdu);
     // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
     const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
     if (cemiCode === null) return null;
@@ -55,19 +54,17 @@ export class CEMIAdapter {
     // Construct the appropriate cEMI class using CEMI.fromBuffer or directly
     // Since we already parsed components, we might want to find the class
     // But CEMI.fromBuffer takes a buffer. Let's use it for simplicity if we can re-construct a cEMI buffer
-    // Or just instantiate the specific class. 
+    // Or just instantiate the specific class.
     // Given the structure of CEMI.ts, it's better to use the constructors if possible or fromBuffer with a temporary buffer.
 
-    const tempCemi = new (CEMI.DataLinkLayerCEMI["L_Data.ind"] as any)(
+    const tempCemi = new CEMI.DataLinkLayerCEMI["L_Data.ind"](
       null,
       controlField1,
       controlField2,
       srcAddr,
       dstAddr,
-      npdu.TPDU
+      npdu.TPDU,
     );
-    // Adjust message code if it's not L_Data.ind
-    tempCemi.messageCode = cemiCode;
 
     return tempCemi;
   }
@@ -75,8 +72,10 @@ export class CEMIAdapter {
   /**
    * Converts a cEMI instance to an EMI2 compatible Buffer or ServiceMessage.
    */
-  static cemiToEmi(cemi: any): ServiceMessage | null {
-    if (!cemi.TPDU || !cemi.controlField1 || !cemi.controlField2) return null;
+  static cemiToEmi(cemi: CEMIInstance): EMIInstance | null {
+    if (!("TPDU" in cemi) || !("controlField1" in cemi) || !("controlField2" in cemi)) {
+      return null;
+    }
 
     const tpduBuffer = cemi.TPDU.toBuffer();
 
@@ -88,21 +87,24 @@ export class CEMIAdapter {
     const emiCode = MessageCodeTranslator.translate(cemi.messageCode, "CEMI", "EMI2/IMI2");
     if (emiCode === null) return null;
 
-    // Buffer [MC] [Ctrl] [Src] [Dst] [NPDU_Len] [NPCI] [TPDU]
-    const buffer = Buffer.alloc(7 + 1 + tpduBuffer.length);
+    // Buffer [MC] [Ctrl] [Src] [Dst] [NPCI] [TPDU]
+    const buffer = Buffer.alloc(7 + tpduBuffer.length);
     let offset = 0;
 
     buffer.writeUInt8(emiCode, offset++);
     cemi.controlField1.buffer.copy(buffer, offset++);
 
-    KNXHelper.GetAddress_(cemi.sourceAddress).copy(buffer, offset);
+    KNXHelper.GetAddress(cemi.sourceAddress, ".").copy(buffer, offset);
     offset += 2;
 
-    KNXHelper.GetAddress_(cemi.destinationAddress).copy(buffer, offset);
+    KNXHelper.GetAddress(
+      cemi.destinationAddress,
+      cemi.controlField2.addressType === AddressType.GROUP ? "/" : ".",
+    ).copy(buffer, offset);
     offset += 2;
 
-    // NPDU Length (NPCI + TPDU)
-    buffer.writeUInt8(tpduBuffer.length + 1, offset++);
+    // // NPDU Length (NPCI + TPDU)
+    // buffer.writeUInt8(tpduBuffer.length + 1, offset++);
 
     // Write NPCI then TPDU
     buffer.writeUInt8(npciByte, offset++);

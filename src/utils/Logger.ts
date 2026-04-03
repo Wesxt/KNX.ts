@@ -1,5 +1,4 @@
-import pino, { Logger, TransportMultiOptions } from "pino";
-import { isColorSupported } from "colorette";
+import pino, { Logger, TransportMultiOptions, TransportPipelineOptions, TransportTargetOptions } from "pino";
 import path from "path";
 import fs from "fs";
 import { KNXLoggerOptions } from "../@types/interfaces/connection";
@@ -10,15 +9,14 @@ import { KNXLoggerOptions } from "../@types/interfaces/connection";
  * Production mode (JSON) is only active if NOT in a test environment.
  */
 export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
-
-  const targets: any[] = [];
+  const targets: (TransportTargetOptions<Record<string, any>> | TransportPipelineOptions<Record<string, any>>)[] = [];
 
   // 1. Console Transport
   if (!options?.pretty) {
     targets.push({
       target: "pino-pretty",
       options: {
-        colorize: isColorSupported,
+        colorize: true,
         messageFormat: "[{module}] {msg}",
         translateTime: "SYS:HH:MM:ss.l",
         ignore: "pid,hostname,module",
@@ -62,9 +60,7 @@ export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
     });
   }
 
-  const transportConfig = targets.length > 0
-    ? { targets } as TransportMultiOptions
-    : undefined;
+  const transportConfig = targets.length > 0 ? ({ targets } as TransportMultiOptions) : undefined;
 
   const defaultOptions: any = {
     level: options?.level || "info",

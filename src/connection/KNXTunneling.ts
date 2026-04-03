@@ -3,16 +3,10 @@ import net from "net";
 import { KNXService } from "./KNXService";
 import { KNXnetIPHeader } from "../core/KNXnetIPHeader";
 import { HPAI, CRI, CRD } from "../core/KNXnetIPStructures";
-import {
-  KNXnetIPServiceType,
-  KNXnetIPErrorCodes,
-  HostProtocolCode,
-  ConnectionType,
-} from "../core/enum/KNXnetIPEnum";
-import { CEMI } from "../core/CEMI";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { KNXnetIPServiceType, KNXnetIPErrorCodes, HostProtocolCode, ConnectionType } from "../core/enum/KNXnetIPEnum";
+import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
-
+import { KNXHelper } from "../utils/KNXHelper";
 
 /**
  * Handles KNXnet/IP Tunneling connections for point-to-point communication with a KNX gateway.
@@ -25,8 +19,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private rxSequenceNumber: number = 0;
   private isConnected: boolean = false;
   private tcpBuffer: Buffer = Buffer.alloc(0);
-  public assignedAddress: number = 0; // Assigned Individual Address
-
+  public individualAddress: string = "1.0.1"; // Assigned Individual Address
   // Heartbeat
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private heartbeatFailures: number = 0;
@@ -58,8 +51,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     super(options);
     this._transport = options.transport || "UDP";
     if (!this.options.connectionType) {
-      this.options.connectionType =
-        ConnectionType.TUNNEL_CONNECTION;
+      this.options.connectionType = ConnectionType.TUNNEL_CONNECTION;
     }
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
     this.logger = this.logger.child({ module: "TunnelClient" });
@@ -93,7 +85,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         reject(err);
       };
 
-      const successListener = (info: any) => {
+      const successListener = () => {
         this.removeListener("error", errorListener); // Limpiamos el listener de error temporal
         resolve();
       };
@@ -103,17 +95,13 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       this.once("connected", successListener);
 
       // Bind
-      (this.socket as dgram.Socket).bind(
-        this.options.localPort,
-        this.options.localIp,
-        () => {
-          try {
-            this.sendConnectRequest();
-          } catch (e) {
-            reject(e);
-          }
-        },
-      );
+      (this.socket as dgram.Socket).bind(this.options.localPort, this.options.localIp, () => {
+        try {
+          this.sendConnectRequest();
+        } catch (e) {
+          reject(e);
+        }
+      });
     });
   }
 
@@ -121,14 +109,10 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     return new Promise((resolve, reject) => {
       this.socket = new net.Socket();
 
-      (this.socket as net.Socket).connect(
-        this.options.port!,
-        this.options.ip!,
-        () => {
-          this.sendConnectRequest();
-          this.once("connected", resolve);
-        },
-      );
+      (this.socket as net.Socket).connect(this.options.port!, this.options.ip!, () => {
+        this.sendConnectRequest();
+        this.once("connected", resolve);
+      });
 
       (this.socket as net.Socket).on("data", (data) => {
         this.tcpBuffer = Buffer.concat([this.tcpBuffer, data]);
@@ -156,29 +140,20 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
 
   private sendConnectRequest() {
     const localPort =
-      this._transport === "UDP"
-        ? (this.socket as dgram.Socket).address().port
-        : (this.socket as net.Socket).localPort!;
+      this._transport === "UDP" ? (this.socket as dgram.Socket).address().port : (this.socket as net.Socket).localPort!;
 
     const useRouteBack = this.options.useRouteBack;
     const hpai = new HPAI(
-      this._transport === "TCP"
-        ? HostProtocolCode.IPV4_TCP
-        : HostProtocolCode.IPV4_UDP,
+      this._transport === "TCP" ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
       useRouteBack ? "0.0.0.0" : this.options.localIp!,
       useRouteBack ? 0 : localPort,
     );
-    // @ts-ignore
     const cri = new CRI(this.options.connectionType!);
 
     const header = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_REQUEST, 0);
     // CORRECCIÓN
     // Estructura: HPAI (Control) -> HPAI (Data) -> CRI
-    const body = Buffer.concat([
-      hpai.toBuffer(),
-      hpai.toBuffer(),
-      cri.toBuffer(),
-    ]);
+    const body = Buffer.concat([hpai.toBuffer(), hpai.toBuffer(), cri.toBuffer()]);
     header.totalLength = 6 + body.length;
 
     this.sendRaw(Buffer.concat([header.toBuffer(), body]));
@@ -192,21 +167,13 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
           : (this.socket as net.Socket).localPort!;
       const useRouteBack = this.options.useRouteBack;
       const hpai = new HPAI(
-        this._transport === "TCP"
-          ? HostProtocolCode.IPV4_TCP
-          : HostProtocolCode.IPV4_UDP,
+        this._transport === "TCP" ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
         useRouteBack ? "0.0.0.0" : this.options.localIp!,
         useRouteBack ? 0 : localPort,
       );
 
-      const header = new KNXnetIPHeader(
-        KNXnetIPServiceType.DISCONNECT_REQUEST,
-        0,
-      );
-      const body = Buffer.concat([
-        Buffer.from([this.channelId, 0x00]),
-        hpai.toBuffer(),
-      ]);
+      const header = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_REQUEST, 0);
+      const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
       header.totalLength = 6 + body.length;
       this.sendRaw(Buffer.concat([header.toBuffer(), body]));
 
@@ -237,17 +204,15 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   }
 
   // #region Message Queue & Sending
-  async send(cemi: ServiceMessage | Buffer): Promise<void> {
+  async send(cemi: CEMIInstance | Buffer): Promise<void> {
     if (!this.isConnected) throw new Error("Not connected");
 
     if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
       throw new Error("Outgoing queue full");
     }
-
+    this.emit("send", cemi);
     const cemiBuffer = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
-    const isDeviceMgmt =
-      this.options.connectionType ===
-      ConnectionType.DEVICE_MGMT_CONNECTION;
+    const isDeviceMgmt = this.options.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION;
     const serviceType = isDeviceMgmt
       ? KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST
       : KNXnetIPServiceType.TUNNELLING_REQUEST;
@@ -266,12 +231,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     this.activeRequest = msg;
 
     const header = new KNXnetIPHeader(msg.serviceType, 0);
-    const connHeader = Buffer.from([
-      0x04,
-      this.channelId,
-      this.sequenceNumber,
-      0x00,
-    ]);
+    const connHeader = Buffer.from([0x04, this.channelId, this.sequenceNumber, 0x00]);
     header.totalLength = 6 + connHeader.length + msg.packet.length;
     const packet = Buffer.concat([header.toBuffer(), connHeader, msg.packet]);
 
@@ -294,12 +254,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       const msg = this.pendingAck.currentMsg;
 
       const header = new KNXnetIPHeader(msg.serviceType, 0);
-      const connHeader = Buffer.from([
-        0x04,
-        this.channelId,
-        this.pendingAck.seq,
-        0x00,
-      ]);
+      const connHeader = Buffer.from([0x04, this.channelId, this.pendingAck.seq, 0x00]);
       header.totalLength = 6 + connHeader.length + msg.packet.length;
       const packet = Buffer.concat([header.toBuffer(), connHeader, msg.packet]);
 
@@ -346,7 +301,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       const body = msg.subarray(6);
 
       switch (header.serviceType) {
-        case KNXnetIPServiceType.CONNECT_RESPONSE:
+        case KNXnetIPServiceType.CONNECT_RESPONSE: {
           const status = body[1];
           if (status === KNXnetIPErrorCodes.E_NO_ERROR) {
             this.channelId = body[0];
@@ -357,22 +312,20 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
             // Parse CRD
             if (body.length >= 14) {
               const crd = CRD.fromBuffer(body.subarray(10));
-              this.assignedAddress = crd.knxAddress;
+              this.individualAddress = KNXHelper.GetAddress(crd.knxAddress, ".");
               this.emit("connected", {
                 channelId: this.channelId,
-                assignedAddress: crd.knxAddress,
+                individualAddress: this.individualAddress,
               });
             } else {
               this.emit("connected", { channelId: this.channelId });
             }
             this.startHeartbeat();
           } else {
-            this.emit(
-              "error",
-              new Error(`Connect Error: 0x${status.toString(16)}`),
-            );
+            this.emit("error", new Error(`Connect Error: 0x${status.toString(16)}`));
           }
           break;
+        }
         case KNXnetIPServiceType.CONNECTIONSTATE_RESPONSE:
           if (body[0] === this.channelId) {
             if (body[1] === KNXnetIPErrorCodes.E_NO_ERROR) {
@@ -385,10 +338,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
               this.logger.warn(`Heartbeat response error from server: 0x${body[1].toString(16)}`);
               // If it's a connection ID error, we should probably disconnect
               if (body[1] === KNXnetIPErrorCodes.E_CONNECTION_ID) {
-                this.emit(
-                  "error",
-                  new Error("Connection ID no longer valid on server"),
-                );
+                this.emit("error", new Error("Connection ID no longer valid on server"));
                 this.disconnect();
               }
             }
@@ -396,14 +346,8 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
           break;
         case KNXnetIPServiceType.CONNECTIONSTATE_REQUEST:
           if (body[0] === this.channelId) {
-            const respHeader = new KNXnetIPHeader(
-              KNXnetIPServiceType.CONNECTIONSTATE_RESPONSE,
-              0,
-            );
-            const respBody = Buffer.from([
-              this.channelId,
-              KNXnetIPErrorCodes.E_NO_ERROR,
-            ]);
+            const respHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECTIONSTATE_RESPONSE, 0);
+            const respBody = Buffer.from([this.channelId, KNXnetIPErrorCodes.E_NO_ERROR]);
             respHeader.totalLength = 6 + respBody.length;
             this.sendRaw(Buffer.concat([respHeader.toBuffer(), respBody]));
           }
@@ -412,23 +356,15 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
           this.handleRequest(body, KNXnetIPServiceType.TUNNELLING_ACK);
           break;
         case KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST:
-          this.handleRequest(
-            body,
-            KNXnetIPServiceType.DEVICE_CONFIGURATION_ACK,
-          );
+          this.handleRequest(body, KNXnetIPServiceType.DEVICE_CONFIGURATION_ACK);
           break;
         case KNXnetIPServiceType.TUNNELLING_ACK:
         case KNXnetIPServiceType.DEVICE_CONFIGURATION_ACK:
           if (this.pendingAck && body[2] === this.pendingAck.seq) {
             const status = body[3];
             if (status !== KNXnetIPErrorCodes.E_NO_ERROR) {
-              this.logger.error(
-                `Received ACK with error status: 0x${status.toString(16)}. Terminating.`,
-              );
-              if (this.activeRequest)
-                this.activeRequest.reject(
-                  new Error(`ACK Error: 0x${status.toString(16)}`),
-                );
+              this.logger.error(`Received ACK with error status: 0x${status.toString(16)}. Terminating.`);
+              if (this.activeRequest) this.activeRequest.reject(new Error(`ACK Error: 0x${status.toString(16)}`));
               clearTimeout(this.pendingAck.timer);
               this.pendingAck = null;
               this.isSending = false;
@@ -455,16 +391,8 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
           break;
         case KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE:
           // Body: ConnHeader(4) + FeatureID(1) + ReturnCode(1) + Value(n)
-          if (
-            this.isSending &&
-            this.activeRequest?.responseType ===
-            KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE
-          ) {
-            if (
-              body[0] === 0x04 &&
-              body[1] === this.channelId &&
-              body[2] === this.sequenceNumber
-            ) {
+          if (this.isSending && this.activeRequest?.responseType === KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE) {
+            if (body[0] === 0x04 && body[1] === this.channelId && body[2] === this.sequenceNumber) {
               const returnCode = body[5];
               const val = body.subarray(6);
 
@@ -520,8 +448,13 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         const data = body.subarray(len);
         const cemi = CEMI.fromBuffer(data);
         this.emit("indication", cemi);
+        if (!("destinationAddress" in cemi)) return;
+        this.emit(cemi.destinationAddress, cemi);
         this.emit("raw_indication", data);
-      } catch (e) { }
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (e) {
+        /* empty */
+      }
     } else if (seq === ((this.rxSequenceNumber - 1) & 0xff)) {
       // Duplicate frame, send ACK again but don't process
       this.sendAck(ackType, seq, KNXnetIPErrorCodes.E_NO_ERROR);
@@ -541,11 +474,11 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private sendRaw(buffer: Buffer) {
     if (!this.socket) return;
     if (this._transport === "UDP") {
-      (this.socket as dgram.Socket).send(
-        buffer,
-        this.options.port!,
-        this.options.ip!,
-      );
+      (this.socket as dgram.Socket).send(buffer, this.options.port, this.options.ip, (err) => {
+        if (err) {
+          this.emit("error", err);
+        }
+      });
     } else {
       (this.socket as net.Socket).write(buffer);
     }
@@ -563,36 +496,23 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
 
   private sendHeartbeatRequest() {
     const localPort =
-      this._transport === "UDP"
-        ? (this.socket as dgram.Socket).address().port
-        : (this.socket as net.Socket).localPort!;
+      this._transport === "UDP" ? (this.socket as dgram.Socket).address().port : (this.socket as net.Socket).localPort!;
 
     const useRouteBack = this.options.useRouteBack;
     const hpai = new HPAI(
-      this._transport === "TCP"
-        ? HostProtocolCode.IPV4_TCP
-        : HostProtocolCode.IPV4_UDP,
+      this._transport === "TCP" ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
       useRouteBack ? "0.0.0.0" : this.options.localIp!,
       useRouteBack ? 0 : localPort,
     );
-    const header = new KNXnetIPHeader(
-      KNXnetIPServiceType.CONNECTIONSTATE_REQUEST,
-      0,
-    );
-    const body = Buffer.concat([
-      Buffer.from([this.channelId, 0x00]),
-      hpai.toBuffer(),
-    ]);
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.CONNECTIONSTATE_REQUEST, 0);
+    const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
     header.totalLength = 6 + body.length;
 
     this.sendRaw(Buffer.concat([header.toBuffer(), body]));
 
     // Check timeout in 10s (spec recommendation)
     if (this.heartbeatRetryTimer) clearTimeout(this.heartbeatRetryTimer);
-    this.heartbeatRetryTimer = setTimeout(
-      () => this.handleHeartbeatTimeout(),
-      10000,
-    );
+    this.heartbeatRetryTimer = setTimeout(() => this.handleHeartbeatTimeout(), 10000);
   }
 
   private handleHeartbeatTimeout() {

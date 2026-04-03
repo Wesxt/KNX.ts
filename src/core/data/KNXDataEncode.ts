@@ -33,18 +33,16 @@ import { DPTNotFound, InvalidParametersForDpt } from "../../errors/DPTNotFound";
 import { KNXData } from "./KNXData";
 
 export class KnxDataEncoder extends KNXData {
-
   private constructor() {
     super();
     throw new Error("This class is static and cannot be instantiated.");
   }
 
   private static allPropertiesTypeVerify(
-    data: Object,
+    data: object,
     type: "string" | "number" | "bigint" | "boolean" | "symbol" | "undefined" | "object" | "function",
   ) {
-    if (typeof data !== "object")
-      throw new TypeError("The parameter is not object");
+    if (typeof data !== "object") throw new TypeError("The parameter is not object");
     return Object.values(data).every((item) => typeof item === type);
   }
 
@@ -60,7 +58,10 @@ export class KnxDataEncoder extends KNXData {
   }
 
   // #region Method for encoding dpts
-  static encodeThis<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(dpt: T, data: AllDpts<T>): Buffer {
+  static encodeThis<T extends (typeof KnxDataEncoder.dptEnum)[number] | string | null>(
+    dpt: T,
+    data: AllDpts<T>,
+  ): Buffer {
     let dptNum = this.getDptNumber<T>(dpt);
     if (dptNum === null) throw new DPTNotFound();
 
@@ -87,8 +88,7 @@ export class KnxDataEncoder extends KNXData {
         if ("char" in data && typeof data.char === "string") return this.encodeDpt4001(data as DPT4);
         break;
       case 5:
-        if ("valueDpt5" in data && typeof data.valueDpt5 === "number")
-          return this.encodeDpt5(data as DPT5);
+        if ("valueDpt5" in data && typeof data.valueDpt5 === "number") return this.encodeDpt5(data as DPT5);
         break;
       case 5001:
         if (
@@ -190,34 +190,44 @@ export class KnxDataEncoder extends KNXData {
           return this.encodeDpt12001(data as DPT12001);
         break;
       case 13001:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13001(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13001(data as DPT13001);
         break;
       case 13002:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13002(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13002(data as DPT13001);
         break;
       case 13010:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13010(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13010(data as DPT13001);
         break;
       case 13011:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13011(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13011(data as DPT13001);
         break;
       case 13012:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13012(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13012(data as DPT13001);
         break;
       case 13013:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13013(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13013(data as DPT13001);
         break;
       case 13014:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13014(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13014(data as DPT13001);
         break;
       case 13015:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13015(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13015(data as DPT13001);
         break;
       case 13016:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13016(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13016(data as DPT13001);
         break;
       case 13100:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return this.encodeDpt13100(data as DPT13001);
+        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
+          return this.encodeDpt13100(data as DPT13001);
         break;
       case 14:
         if ("valueDpt14" in data && typeof data.valueDpt14 === "number") return this.encodeDpt14(data as DPT14);
@@ -302,7 +312,8 @@ export class KnxDataEncoder extends KNXData {
           return this.encodeDpt27001(data as DPT27001);
         break;
       case 28001:
-        if ("textDpt28001" in data && typeof data.textDpt28001 === "string") return this.encodeDpt28001(data as DPT28001);
+        if ("textDpt28001" in data && typeof data.textDpt28001 === "string")
+          return this.encodeDpt28001(data as DPT28001);
         break;
       case 29:
         if ("valueDpt29" in data && typeof data.valueDpt29 === "bigint") return this.encodeDpt29(data as DPT29);
@@ -385,8 +396,7 @@ export class KnxDataEncoder extends KNXData {
         if ("char" in data && typeof data.char === "string") return data;
         break;
       case 5:
-        if ("valueDpt5" in data && typeof data.valueDpt5 === "number")
-          return data;
+        if ("valueDpt5" in data && typeof data.valueDpt5 === "number") return data;
         break;
       case 5001:
         if (

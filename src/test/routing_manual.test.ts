@@ -1,7 +1,8 @@
 import { KNXnetIPServer } from "../connection/KNXnetIPServer";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { MessageCodeTranslator } from "../utils/MessageCodeTranslator";
-import { getLocalIP } from "../utils/localIp";
+import { CEMI } from "../core/CEMI";
+import { KnxDataDecode } from "../core/data/KNXDataDecode";
 // import { getLocalIP } from "../utils/localIp";
 
 // Configuration for KNX Routing
@@ -15,7 +16,7 @@ async function testRouting() {
   console.log(`
 --- Testing Routing (Multicast Group: ${MULTICAST_IP}:${PORT}) ---`);
 
-  const localIp = "192.168.0.169";
+  const localIp = "192.168.0.238";
   console.log(`Using Local IP: ${localIp}`);
 
   const client = new KNXnetIPServer({
@@ -25,16 +26,7 @@ async function testRouting() {
     friendlyName: "Arnold",
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
-    logOptions: {
-      logDir: "./log",
-      logToFile: true
-    },
-    externals: {
-      tpuart: {
-        path: '/dev/ttyACM0',
-      }
-    },
-    useAllInterfaces: false
+    useAllInterfaces: false,
   });
 
   routing = client;
@@ -52,16 +44,17 @@ async function testRouting() {
     console.log("[CEMI]", msg.constructor.name, msg.toBuffer());
   });
 
-  client.on("1/1/2", (cemi: ServiceMessage) => {
-    console.log("[Listen in 1/1/2]:", cemi.toBuffer());
+  client.on("0/0/2", (cemi: ServiceMessage) => {
+    const data = (cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.req"]>).TPDU.apdu.data;
+    try {
+      console.log("[Listen in 0/0/2]:", KnxDataDecode.decodeThis(16, data));
+    } catch (e) {
+      console.error(e);
+    }
   });
 
   client.on("raw_indication", (msg: Buffer) => {
-    console.log(
-      "[RAWI]",
-      MessageCodeTranslator.getServiceName(msg.readUint8(0), "CEMI"),
-      msg,
-    );
+    console.log("[RAWI]", MessageCodeTranslator.getServiceName(msg.readUint8(0), "CEMI"), msg);
   });
 
   client.on("routing_busy", (busy: any) => {
@@ -100,9 +93,7 @@ async function gracefulShutdown(reason: string) {
 process.once("SIGINT", () => gracefulShutdown("SIGINT received (Ctrl+C)"));
 process.once("SIGTERM", () => gracefulShutdown("SIGTERM received"));
 process.once("SIGBREAK", () => gracefulShutdown("SIGBREAK received (Windows)"));
-process.once("SIGUSR2" as any, () =>
-  gracefulShutdown("SIGUSR2 received (restart)"),
-);
+process.once("SIGUSR2" as any, () => gracefulShutdown("SIGUSR2 received (restart)"));
 process.once("uncaughtException", (err) => {
   console.error("Uncaught exception:", err);
   void gracefulShutdown("uncaughtException");
