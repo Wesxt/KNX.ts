@@ -89,7 +89,7 @@ export const enum AllowedSupportedServiceFamilies {
   Security = 0x09,
 }
 
-export enum KNXTimeoutConstants {
+export const enum KNXTimeoutConstants {
   CONNECT_REQUEST_TIMEOUT = 10,
   CONNECTIONSTATE_REQUEST_TIMEOUT = 10,
   DEVICE_CONFIGURATION_REQUEST_TIMEOUT = 10,
@@ -97,7 +97,7 @@ export enum KNXTimeoutConstants {
   CONNECTION_ALIVE_TIME = 120,
 }
 
-export enum TunnelLink {
+export const enum TunnelLink {
   TUNNEL_LINKLAYER = 0x02,
   TUNNEL_RAW = 0x04,
   TUNNEL_BUSMONITOR = 0x80,

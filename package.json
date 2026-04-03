@@ -1,6 +1,6 @@
 {
   "name": "knx.ts",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A high-performance KNXnet/IP server and client library in TypeScript, focused on ETS stability.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
