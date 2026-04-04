@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 import { CEMIInstance } from "../core/CEMI";
-import { WebSocketGatewayOptions } from "../@types/interfaces/servers";
+import { WebSocketGatewayOptions, WSClientPayload } from "../@types/interfaces/servers";
 
 export class KNXWebSocketGateway {
   private wss: WebSocketServer | null = null;
@@ -12,6 +12,8 @@ export class KNXWebSocketGateway {
 
   constructor(options: WebSocketGatewayOptions) {
     this.options = options;
+    // Enable the cache singleton
+    GroupAddressCache.getInstance().setEnabled(true);
   }
 
   public start() {
@@ -50,7 +52,8 @@ export class KNXWebSocketGateway {
     });
   }
 
-  private handleClientMessage(ws: WebSocket, payload: any) {
+  private handleClientMessage(ws: WebSocket, payload: WSClientPayload) {
+    if (!("action" in payload) || !("groupAddress" in payload) || !("value" in payload) || !("dpt" in payload)) return;
     const { action, groupAddress, value, dpt } = payload;
 
     if (action === "config_dpt" && groupAddress && dpt) {
@@ -86,7 +89,7 @@ export class KNXWebSocketGateway {
 
       // Context .write naturally encodes using KNXDataEncoder internally if dpt is provided
       this.options.knxContext
-        .write(groupAddress, targetDpt, value)
+        .write(groupAddress, targetDpt as any, value)
         .then(() => {
           ws.send(JSON.stringify({ action: "write_ack", groupAddress }));
         })

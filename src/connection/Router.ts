@@ -57,8 +57,6 @@ export class Router extends EventEmitter {
     if (options.knxNetIpServer) {
       options.knxNetIpServer.individualAddress = this.routerAddress;
       const ipServer = new KNXnetIPServer(options.knxNetIpServer);
-      ipServer.isCacheDelegated = true;
-      ipServer.isEventsDelegated = true;
       this.registerLink(`IP KNXnet/IP Server: ${ipServer.options.localIp}:${ipServer.options.port}`, ipServer);
     }
     if (options.tpuart) {
@@ -85,6 +83,8 @@ export class Router extends EventEmitter {
 
   public registerLink(key: string, link: KNXService) {
     if (this.links.has(key)) return;
+    link.isCacheDelegated = true;
+    link.isEventsDelegated = true;
     this.links.set(key, link);
     this.logger.info(`Link registered: ${key}`);
 

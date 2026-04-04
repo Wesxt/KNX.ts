@@ -4,7 +4,7 @@ import * as mqtt from "mqtt";
 
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 import { CEMIInstance } from "../core/CEMI";
-import { MQTTGatewayOptions } from "../@types/interfaces/servers";
+import { MQTTCommandPayload, MQTTGatewayOptions } from "../@types/interfaces/servers";
 
 export class KNXMQTTGateway {
   private options: MQTTGatewayOptions;
@@ -16,6 +16,8 @@ export class KNXMQTTGateway {
   constructor(options: MQTTGatewayOptions) {
     this.options = options;
     this.topicPrefix = options.topicPrefix || "knx";
+    // Enable the cache singleton
+    GroupAddressCache.getInstance().setEnabled(true);
   }
 
   public async start(): Promise<void> {
@@ -96,7 +98,7 @@ export class KNXMQTTGateway {
     const action = parts[2];
     const groupAddress = parts.slice(3).join("/"); // To handle 1/2/3
 
-    let payload: any = {};
+    let payload: MQTTCommandPayload = {};
     try {
       const msgStr = message.toString();
       payload = msgStr ? JSON.parse(msgStr) : {};
@@ -105,7 +107,7 @@ export class KNXMQTTGateway {
       // simple value fallback
       payload = { value: message.toString() };
     }
-
+    if (!("value" in payload) || !("dpt" in payload)) return;
     const { value, dpt } = payload;
 
     if (action === "config_dpt" && dpt) {
@@ -125,7 +127,7 @@ export class KNXMQTTGateway {
     if (action === "write" && value !== undefined) {
       const targetDpt = dpt || GroupAddressCache.getInstance().getAddressDPT(groupAddress);
 
-      (this.options.knxContext as any).write(groupAddress, targetDpt, value).catch((err: any) => {
+      this.options.knxContext.write(groupAddress, targetDpt as any, value).catch((err: any) => {
         this.publishError(groupAddress, err.message);
       });
     }

@@ -6,9 +6,9 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 
 ## 🌟 Capacidades
 
-- **Túnel UDP Robusto**: Implementa una cola estricta *Stop-and-Wait* y gestión de números de secuencia. Esto elimina los problemas comunes de "conexión interrumpida" en ETS o otras aplicaciones durante sesiones largas.
+- **Túnel UDP Robusto**: Implementa una cola estricta _Stop-and-Wait_ y gestión de números de secuencia. Esto elimina los problemas comunes de "conexión interrumpida" en ETS o otras aplicaciones durante sesiones largas.
 - **Enrutamiento KNXnet/IP (Routing)**: Soporta enrutamiento multicast (Solo en el servidor **KNXnet/IP**).
-- **Descubrimiento en el servidor KNXnet/IP**: Soporta ``SEARCH_REQUEST``, ``SEARCH_REQUEST_EXTENDED``, ``DESCRIPTION_REQUEST``, ``CONNECT_REQUEST`` y ``CONNECTIONSTATE_REQUEST`` para que aplicaciones como ETS pueda descubrirlo sin necesidad de especificarselo.
+- **Descubrimiento en el servidor KNXnet/IP**: Soporta `SEARCH_REQUEST`, `SEARCH_REQUEST_EXTENDED`, `DESCRIPTION_REQUEST`, `CONNECT_REQUEST` y `CONNECTIONSTATE_REQUEST` para que aplicaciones como ETS pueda descubrirlo sin necesidad de especificarselo.
 - **Interfaces de Hardware Directas**: Soporte nativo para **interfaces USB KNX** (vía `node-hid`) y chips serie **TPUART** (vía `serialport`).
 - **Puente de Aprendizaje (Router)**: Enrutamiento avanzado multi-interfaz con Prevención de Bucles, Seguimiento de Firmas y Aprendizaje de Direcciones Individuales (IA), permitiéndote puentear varias interfaces físicas y túneles simultáneamente.
 - **Eventos Intuitivos Basados en Direcciones**: Escucha telegramas específicos usando direcciones de grupo como nombres de eventos (ej., `server.on("1/1/1", ...)`).
@@ -20,7 +20,7 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 Según el `TODO.md`, varias características se encuentran actualmente en estado **experimental** o bajo desarrollo:
 
 - **Soporte TCP**: La implementación está presente, pero las pruebas están actualmente en fase experimental.
-- **Parametrización de Dispositivos**: Se planea el soporte para el *Modo de Programación* (progMode) para permitir la configuración completa del dispositivo a través de ETS.
+- **Parametrización de Dispositivos**: Se planea el soporte para el _Modo de Programación_ (progMode) para permitir la configuración completa del dispositivo a través de ETS.
 - **Filtrado de Origen**: El filtrado basado en direcciones de origen y el enrutamiento selectivo están en la hoja de ruta.
 - **Uso de las capas NPDU, TPDU y APDU**: En EMI hace falta usarlas para una correcta deserialización.
 
@@ -72,7 +72,7 @@ Para desarrolladores que construyen herramientas avanzadas de monitoreo o inyecc
 - Clases `CEMI` / `EMI` para analizar y serializar tramas Common EMI y EMI antiguas.
 - Clases `APDU`, `NPDU`, `TPDU` para la manipulación de las capas de Red, Transporte y Aplicación.
 - `ControlField` para analizar y serializar los control field de los mensajes CEMI o EMI.
-- `ExtendedControlField` para analizar y serializar los ``Extended Control Field`` o ``Control Field 2`` de los mensajes CEMI.
+- `ExtendedControlField` para analizar y serializar los `Extended Control Field` o `Control Field 2` de los mensajes CEMI.
 - `AddressType` Es un enumerable que ayuda a identificar el bit de Address Type (AT) del ExtendedControlField, asi puede saber que dirección de destino se trata, si de grupo o individual.
 - `APCI` Para analizar y serializar los APCI que se alojan entre los datos de TPDU y APDU, debe tener cuidado ya que el APCI se maneja con 10 bits y escribe en los 2 bits menos significativos del Byte que donde el TPCI y los siguientes 2 bits son exclusivos del APCI y los 6 bits son del APCI o son datos.
 - `APCIEnum` Es un enumerable que ayuda a escribir el APCI según la especificación, **Advertencia**: Esta enumeración asume todos comandos dentro son 10 bits o 2 bytes pero dentro de la mascara 0x3FF, los que son de longitud de 4 bits simplemente están en una mascara 0x3C0.
@@ -80,6 +80,7 @@ Para desarrolladores que construyen herramientas avanzadas de monitoreo o inyecc
 - `TPCIType` Es un enumerable que ayuda a escribir o indentificar los TPCI según la especificación.
 - `DPTs` La librería exporta interfaces como `DPT5001` o `DPT1`, estas interfaces son usadas por KnxDataDecode para devolver objetos javascript y KnxDataEncoder para pasarlos como parametros para convertirlos en Buffer.
 - `ServiceMessage` Es una interfaz que implementan todos los mensajes del CEMI y EMI, tambien todas las capas NPDU, TPDU y APCI, esto sirve para que contegan dos metodos utiles: `toBuffer` para devolver la instancia en un buffer y `describe` que otorga información sobre la instancia de una forma amigable de ver. **Nota**: En la mayoria de clases que exporta esta librería y no implementa esta interfaz como el APCI aún tienen el metodo `describe`.
+- `CEMIInstance` Es un tipo de todas las instancias de CEMI.
 
 ## 🛠️ Inicio Rápido
 
@@ -88,59 +89,166 @@ Para desarrolladores que construyen herramientas avanzadas de monitoreo o inyecc
 Perfecto para crear un puente entre tu red IP y el bus KNX.
 
 ```typescript
-import { KNXnetIPServer, ServiceMessage, KnxDataDecode } from 'knx.ts';
+import { KNXnetIPServer, ServiceMessage, KnxDataDecode, CEMIInstance } from "knx.ts";
 
 const server = new KNXnetIPServer({
-  localIp: '192.168.1.50',
-  individualAddress: '1.1.0', // Tenga cuidado de hacer conflicto
-  friendlyName: 'TypeScript KNX Gateway', // Este nombre se muestra en el ETS
-  clientAddrs: '1.1.10:5' // Proporciona 5 ranuras de túnel comenzando desde 1.1.10
+  localIp: "192.168.1.50",
+  individualAddress: "1.1.0", // Tenga cuidado de hacer conflicto
+  friendlyName: "TypeScript KNX Gateway", // Este nombre se muestra en el ETS
+  clientAddrs: "1.1.10:5", // Proporciona 5 ranuras de túnel comenzando desde 1.1.10
 });
 
 server.connect().then(() => {
-  console.log('El servidor KNXnet/IP está en funcionamiento');
+  console.log("El servidor KNXnet/IP está en funcionamiento");
 });
 
 // Escucha específica para una Dirección de Grupo
-server.on('1/1/1', (cemi: ServiceMessage) => {
-  console.log('Nuevos datos en 1/1/1:', cemi.TPDU.apdu.data); // Datos crudos del APDU
-  console.log('Datos decodificados:', KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Dato convertido en un valor de javascript
+server.on("1/1/1", (cemi: CEMIInstance) => {
+  console.log("Nuevos datos en 1/1/1:", cemi.TPDU.apdu.data); // Datos crudos del APDU
+  console.log("Datos decodificados:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Dato convertido en un valor de javascript
 });
 ```
 
 ### Conexión USB Directa
 
 ```typescript
-import { KNXUSBConnection } from 'knx.ts';
+import { KNXUSBConnection } from "knx.ts";
 
 const usb = new KNXUSBConnection({
   // Omitir path/vendorId descubrirá automáticamente la primera interfaz USB KNX conocida
 });
 
 usb.connect().then(() => {
-  console.log('Conectado directamente a la interfaz USB KNX');
+  console.log("Conectado directamente a la interfaz USB KNX");
 });
 
-usb.on('indication', (cemi) => {
-  console.log('Origen del telegrama USB:', cemi.sourceAddress);
+usb.on("indication", (cemi) => {
+  console.log("Origen del telegrama USB:", cemi.sourceAddress);
 });
 ```
 
 ### Cliente de Túnel (Tunneling)
 
 ```typescript
-import { KNXTunneling } from 'knx.ts';
+import { KNXTunneling } from "knx.ts";
 
 const tunnel = new KNXTunneling({
-  ip: '192.168.1.100', 
+  ip: "192.168.1.100",
   port: 3671,
-  localIp: '192.168.1.50'
+  localIp: "192.168.1.50",
 });
 
 tunnel.connect().then(() => {
-  console.log('Conectado al bus KNX');
+  console.log("Conectado al bus KNX");
 });
 ```
+
+## 🌐 Pasarelas WebSocket y MQTT (API)
+
+### GroupAddressCache (Caché Integrada)
+
+Las pasarelas dependen del `GroupAddressCache` interno de la librería para conocer qué DPT se asocia a cada dirección de grupo, lo que les permite decodificar automáticamente valores y recibirlos en formato primtivo sin enviar la DPT en cada petición.
+
+Todos los `KNXService` (tales como `KNXnetIPServer`, `Router`, etc.) integran un `GroupAddressCache`. Él escucha los telegramas de entrada y recuerda el último valor conocido junto con el histórico para las distintas herramientas de consulta en las APIs de WebSocket o lecturas internas locales.
+
+> **Importante**: La caché viene **deshabilitada por defecto** para ahorrar memoria en proyectos que no la requieran. 
+> Para activarla (muy recomendado antes de usar `KNXWebSocketGateway` o `KNXMQTTGateway`), debes habilitarla globalmente así:
+
+```typescript
+import { GroupAddressCache } from 'knx.ts';
+
+// Habilita el singleton global
+GroupAddressCache.getInstance().setEnabled(true);
+
+// Opcionalmente puedes configurar sus límites de espacio (máx direcciones en memoria, máx msj históricos por dirección)
+GroupAddressCache.getInstance().configure(65535, 10);
+```
+
+Si creas una instancia de un enrutador y registras enlaces en él, el enrutador se encargará de la gestión de la caché y hará lo mismo con los eventos de direcciones de destino.
+
+```typescript
+import { Router, KNXUSBConnection, CEMIInstance } from "knx.ts";
+
+const router = new Router();
+const usb = new KNXUSBConnection();
+// El enrutador se encargará de la gestión de la caché y emitirá eventos de direcciones de destino en lugar del enlace.
+router.addLink(usb);
+
+router.on("1/1/1", (cemi: CEMIInstance) => { // <--- se activa
+  console.log("Nuevos datos en 1/1/1:", cemi.TPDU.apdu.data); // Datos crudos del APDU
+  console.log("Datos decodificados:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Valor de javascript convertido
+});
+
+usb.on("1/1/1", (cemi: CEMIInstance) => { // <--- no se activa
+  console.log("Nuevos datos en 1/1/1:", cemi.TPDU.apdu.data); // Datos crudos del APDU
+  console.log("Datos decodificados:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Valor de javascript convertido
+});
+```
+
+La librería proporciona servidores pasarela integrados que permiten una fácil integración con interfaces web, tableros o plataformas IoT. Ambas pasarelas actúan como puente sobre un `Router` existente o una instancia `KNXService` (como `KNXnetIPServer` o `KNXUSBConnection`).
+
+Las cargas útiles (payloads) de mensajes de esta API están exportadas como interfaces `WSClientPayload`, `WSServerPayload`, `MQTTCommandPayload` y `MQTTStatePayload` para que puedas usarlas directamente en tus proyectos de TypeScript.
+
+### Pasarela WebSocket
+
+El `KNXWebSocketGateway` proporciona una API bidireccional sencilla basada en JSON a través de WebSockets.
+
+```typescript
+import { KNXWebSocketGateway } from "knx.ts/server";
+// O usar: import { KNXWebSocketGateway } from 'knx.ts' si se exporta desde la raíz.
+
+const wsGateway = new KNXWebSocketGateway({
+  port: 8080,
+  knxContext: router, // Proporciona un Router o cualquier instancia de KNXService
+});
+
+wsGateway.start();
+```
+
+**Cargas útiles JSON de la API WebSocket:**
+
+- **Leer / Consultar**: Solicitar lectura desde el bus KNX o consultar valores almacenados en caché.
+  - Solicitud: `{ "action": "read", "groupAddress": "1/2/3" }`
+  - Respuesta: `{ "action": "read_result", "groupAddress": "1/2/3", "data": ... }`
+  - Consultar Caché: `{ "action": "query", "groupAddress": "1/2/3", "onlyLatest": true }`
+
+- **Escribir**: Enviar telegramas al bus KNX.
+  - Comando: `{ "action": "write", "groupAddress": "1/2/3", "value": 22.5, "dpt": "9.001" }`
+
+- **Suscribirse / Desuscribirse**: Escuchar eventos del bus.
+  - Suscribir: `{ "action": "subscribe", "groupAddress": "1/2/3" }` (Usa `"*"` para escuchar todas las direcciones).
+  - Evento (Respuesta): `{ "action": "event", "groupAddress": "1/2/3", "decodedValue": ... }`
+
+- **Configurar DPT**: Informar a la caché de un `DPT` correspondiente a una dirección de grupo.
+  - Comando: `{ "action": "config_dpt", "groupAddress": "1/2/3", "dpt": "1.001" }`
+
+### Pasarela MQTT
+
+El `KNXMQTTGateway` se conecta a un broker MQTT existente o arranca uno embebido dentro del Node usando `aedes`.
+
+```typescript
+import { KNXMQTTGateway } from "knx.ts/server";
+
+const mqttGateway = new KNXMQTTGateway({
+  embeddedBroker: { port: 1883 }, // O usa brokerUrl: "mqtt://tu-broker:1883"
+  knxContext: router,
+  topicPrefix: "knx", // El prefijo por defecto es "knx"
+});
+
+await mqttGateway.start();
+```
+
+**Estructura de la API MQTT:**
+
+- **Actualizaciones de Estado**: Cada vez que el bus intercepta datos, la pasarela publica la carga útil decodificada en:
+  `[prefijo]/state/[direccionDeGrupo]` (ej. `knx/state/1/2/3`) como un mensaje con la bandera _retained_ y el JSON: `{ "decodedValue": ... }`.
+
+- **Comandos (Escribir / Leer / Configurar DPT)**: Envía mensajes con carga JSON a los siguientes tópicos:
+  - Comando Escribir (Write): `[prefijo]/command/write/[direccionDeGrupo]`
+    - Carga útil: `{ "value": 22.5, "dpt": "9.001" }` o un valor primitivo si el DPT fue configurado localmente.
+  - Comando Leer (Read): `[prefijo]/command/read/[direccionDeGrupo]`
+  - Configurar DPT: `[prefijo]/command/config_dpt/[direccionDeGrupo]`
+    - Carga útil: `{ "dpt": "9.001" }`
 
 ## 📝 Registros (Logging)
 
@@ -149,13 +257,13 @@ La librería utiliza un registrador único global basado en [Pino](https://getpi
 Esto es crucial porque no necesitas instanciar Pino tú mismo; el `knxLogger` interno gestiona su estado para evitar la sobrecarga de rendimiento de múltiples instancias.
 
 ```typescript
-import { setupLogger, knxLogger } from 'knx.ts';
+import { setupLogger, knxLogger } from "knx.ts";
 
 // Configurar el registrador global
 setupLogger({
-  level: 'debug', // ej., 'info', 'warn', 'error', 'debug'
+  level: "debug", // ej., 'info', 'warn', 'error', 'debug'
   logToFile: true,
-  logDir: './logs',
+  logDir: "./logs",
 });
 
 // También puedes usar el registrador global en tu propia aplicación
@@ -172,13 +280,15 @@ La librería está orientada a eventos. Dependiendo de la clase utilizada, se em
 
 Todas las clases de conexión (`KNXnetIPServer`, `KNXTunneling`, `KNXUSBConnection`, `TPUARTConnection`) heredan de `KNXService` y emiten los siguientes eventos estándar:
 
-| Evento | Descripción | Argumentos del Callback |
-|--------|-------------|-------------------------|
-| `connected` | Conexión establecida y hardware/socket listo. | `void` (Server/USB/TPUART) / `{ channelId }` (Tunnel) |
-| `disconnected` | Conexión perdida o cerrada explícitamente. | `void` |
-| `error` | Ocurrió un error fatal durante la operación. | `err: Error` |
-| `indication` | Cualquier telegrama KNX estándar entrante (cEMI / L_Data.ind). | `cemi: ServiceMessage` |
-| `raw_indication`| El Buffer sin procesar antes del análisis (EMI/cEMI/carga útil). | `data: Buffer` |
+| Evento           | Descripción                                                      | Argumentos del Callback                               |
+| ---------------- | ---------------------------------------------------------------- | ----------------------------------------------------- |
+| `connected`      | Conexión establecida y hardware/socket listo.                    | `void` (Server/USB/TPUART) / `{ channelId }` (Tunnel) |
+| `disconnected`   | Conexión perdida o cerrada explícitamente.                       | `void`                                                |
+| `error`          | Ocurrió un error fatal durante la operación.                     | `err: Error`                                          |
+| `indication`     | Cualquier telegrama KNX estándar entrante (cEMI / L_Data.ind).   | `cemi: CEMIInstance`                                  |
+| `raw_indication` | El Buffer sin procesar antes del análisis (EMI/cEMI/carga útil). | `data: Buffer`                                        |
+| `indication_emi` | Emitido cuando se recibe un mensaje formateado en EMI1/EMI2 desde interfaces USB antiguas. | `emi: EMIInstance`                                    |
+| `send`           | Emitido cuando se envía un mensaje al bus.                       | `data: CEMIInstance`                                  |
 
 ### Eventos Específicos de Clase
 
@@ -208,18 +318,18 @@ Dependiendo del tipo de conexión, algunas clases emiten eventos específicos ad
 
 Debido a que el `Router` enlaza múltiples interfaces, emite eventos de enrutamiento específicos del enlace en lugar de indicaciones estándar:
 
-- `indication_link`: Emitido cuando un paquete se enruta a través del puente. Argumento: `{ src: string, msg: ServiceMessage }` donde `src` es el nombre de la clase de la conexión de origen.
+- `indication_link`: Emitido cuando un paquete se enruta a través del puente. Argumento: `{ src: string, msg: CEMIInstance }` donde `src` es el nombre de la clase de la conexión de origen.
 - `error`: Emitido cuando falla un enlace subyacente. Argumento: `{ link: KNXService, error: Error }`.
 
 ### Entendiendo el Objeto Telegrama
 
 El objeto `cemi` o `emi` (que implementa `ServiceMessage`) contiene toda la información sobre el telegrama KNX. Aquí están las propiedades más relevantes:
 
-| Propiedad | Tipo | Descripción |
-|-----------|------|-------------|
-| `sourceAddress` | `string` | Dirección física del remitente (ej., `"1.1.5"`). |
-| `destinationAddress` | `string` | Dirección de grupo (ej., `"1/1/1"`) o dirección física. |
-| `TPDU.apdu.data` | `Buffer` | Los datos de la carga útil sin procesar. |
+| Propiedad                | Tipo     | Descripción                                                        |
+| ------------------------ | -------- | ------------------------------------------------------------------ |
+| `sourceAddress`          | `string` | Dirección física del remitente (ej., `"1.1.5"`).                   |
+| `destinationAddress`     | `string` | Dirección de grupo (ej., `"1/1/1"`) o dirección física.            |
+| `TPDU.apdu.data`         | `Buffer` | Los datos de la carga útil sin procesar.                           |
 | `TPDU.apdu.apci.command` | `string` | Tipo de comando (`A_GroupValue_Write`, `A_GroupValue_Read`, etc.). |
 
 #### Manejo de Cargas Útiles de Datos
@@ -238,23 +348,23 @@ La librería proporciona utilidades estáticas para manejar la conversión de Ti
 Usa `KnxDataDecode` para transformar los datos cEMI sin procesar en valores legibles, hay varios metodos con el prefijo `asDpt` que son especificos, el metodo `decodeThis` es util y practico si no quieres lidiar con esos:
 
 ```typescript
-import { KnxDataDecode } from 'knx.ts';
+import { KnxDataDecode } from "knx.ts";
 
-server.on('1/1/1', (cemi) => {
+server.on("1/1/1", (cemi) => {
   // Decodificar como DPT 1 (Booleano)
   const value = KnxDataDecode.decodeThis(1, cemi.TPDU.apdu.data);
-  console.log('Valor decodificado:', value); // true o false
+  console.log("Valor decodificado:", value); // true o false
 
   // Decodificar solo como DPT 1 (Booleano)
   const value1 = KnxDataDecode.asDpt1(cemi.TPDU.apdu.data);
 
   // Decodificar como DPT 9 (Flotante de 2 bytes, ej., Temperatura)
   const temp = KnxDataDecode.decodeThis(9, cemi.TPDU.apdu.data);
-  console.log('Temperatura:', temp, '°C');
+  console.log("Temperatura:", temp, "°C");
 
   // El primer parametro acepta strings con la numeración estandar del DPT
-  const temp1 = KnxDataDecode.decodeThis("9", cemi.TPDU.apdu.data)
-  const porcentage = KnxDataDecode.decodeThis("5.001", cemi.TPDU.apdu.data)
+  const temp1 = KnxDataDecode.decodeThis("9", cemi.TPDU.apdu.data);
+  const porcentage = KnxDataDecode.decodeThis("5.001", cemi.TPDU.apdu.data);
 });
 ```
 
@@ -263,7 +373,7 @@ server.on('1/1/1', (cemi) => {
 Usa `KnxDataEncoder` con el método `encodeThis` para preparar buffers para telegramas KNX; el segundo parámetro es siempre un objeto, hay varios metodos con el prefijo `encodeDpt` que son especificos, el metodo `encodeThis` es util y practico si no quieres lidiar con esos:
 
 ```typescript
-import { KnxDataEncoder } from 'knx.ts';
+import { KnxDataEncoder } from "knx.ts";
 
 // Codificar un Booleano (DPT 1)
 const buf1 = KnxDataEncoder.encodeThis(1, { value: true });
@@ -303,7 +413,7 @@ En la API real del proyecto, normalmente construyes primero las capas **APDU** y
 Define el comando (**APCI**) y los datos del mensaje.
 
 ```typescript
-import { APDU, APCI, APCIEnum } from 'knx.ts';
+import { APDU, APCI, APCIEnum } from "knx.ts";
 
 const apci = new APCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit);
 const apdu = new APDU(undefined, apci, Buffer.from([0x01]), true);
@@ -314,13 +424,9 @@ const apdu = new APDU(undefined, apci, Buffer.from([0x01]), true);
 Envuelve la APDU y define el tipo de transporte.
 
 ```typescript
-import { TPDU, TPCI, TPCIType } from 'knx.ts';
+import { TPDU, TPCI, TPCIType } from "knx.ts";
 
-const tpdu = new TPDU(
-  new TPCI(TPCIType.T_DATA_GROUP_PDU),
-  apdu,
-  apdu.data,
-);
+const tpdu = new TPDU(new TPCI(TPCIType.T_DATA_GROUP_PDU), apdu, apdu.data);
 ```
 
 #### 3. cEMI `L_Data.req`
@@ -328,13 +434,7 @@ const tpdu = new TPDU(
 En esta librería no se construye un `new CEMI()` genérico para este caso. Debes instanciar el servicio cEMI concreto y pasarle sus campos de control, direcciones y `TPDU`.
 
 ```typescript
-import {
-  AddressType,
-  CEMI,
-  ControlField,
-  ExtendedControlField,
-  Priority,
-} from 'knx.ts';
+import { AddressType, CEMI, ControlField, ExtendedControlField, Priority } from "knx.ts";
 
 const controlField1 = new ControlField();
 controlField1.frameType = true;
@@ -344,14 +444,7 @@ const controlField2 = new ExtendedControlField();
 controlField2.addressType = AddressType.GROUP;
 controlField2.hopCount = 6;
 
-const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](
-  null,
-  controlField1,
-  controlField2,
-  "1.1.1",
-  "1/1/1",
-  tpdu,
-);
+const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](null, controlField1, controlField2, "1.1.1", "1/1/1", tpdu);
 ```
 
 #### 4. Additional Information (opcional)
@@ -359,10 +452,7 @@ const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](
 `AdditionalInformationField` no se rellena asignando `type` y `data` manualmente. Debes crear instancias de los tipos concretos definidos en `KNXAddInfoTypes` y añadirlas al campo.
 
 ```typescript
-import {
-  AdditionalInformationField,
-  ManufacturerSpecificData,
-} from 'knx.ts';
+import { AdditionalInformationField, ManufacturerSpecificData } from "knx.ts";
 
 const addInfo = new AdditionalInformationField();
 const manufacturerInfo = new ManufacturerSpecificData();
@@ -374,17 +464,17 @@ cemi.additionalInfo = addInfo;
 
 #### 5. EMI (External Message Interface)
 
-`EMI` tampoco se usa como una instancia genérica con `new EMI()`. La clase actúa como contenedor de servicios y parser (`EMI.fromBuffer(...)`). En conexiones como `KNXUSBConnection`, la librería convierte automáticamente un `ServiceMessage` cEMI a EMI cuando hace falta.
+`EMI` tampoco se usa como una instancia genérica con `new EMI()`. La clase actúa como contenedor de servicios y parser (`EMI.fromBuffer(...)`). En conexiones como `KNXUSBConnection`, la librería convierte automáticamente un `CEMIInstance` cEMI a EMI cuando hace falta.
 
 ### Ejemplo de ensamblaje y envío final
 
-Una vez construida la estructura, puedes enviarla directamente como `ServiceMessage`, o serializarla con `toBuffer()` si realmente necesitas el buffer crudo.
+Una vez construida la estructura, puedes enviarla directamente como `CEMIInstance`, o serializarla con `toBuffer()` si realmente necesitas el buffer crudo.
 
 ```typescript
-import { KNXTunneling } from 'knx.ts';
+import { KNXTunneling } from "knx.ts";
 
 const tunnel = new KNXTunneling({
-  ip: '192.168.1.10',
+  ip: "192.168.1.10",
   port: 3671,
 });
 

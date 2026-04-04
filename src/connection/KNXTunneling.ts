@@ -7,6 +7,7 @@ import { KNXnetIPServiceType, KNXnetIPErrorCodes, HostProtocolCode, ConnectionTy
 import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
 import { KNXHelper } from "../utils/KNXHelper";
+import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 
 /**
  * Handles KNXnet/IP Tunneling connections for point-to-point communication with a KNX gateway.
@@ -210,6 +211,33 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
       throw new Error("Outgoing queue full");
     }
+
+    let cemiObj: CEMIInstance | undefined = undefined;
+    if (Buffer.isBuffer(cemi)) {
+      try {
+        cemiObj = CEMI.fromBuffer(cemi);
+      } catch {
+        /* empty */
+      }
+    } else {
+      cemiObj = cemi;
+    }
+
+    if (cemiObj && "destinationAddress" in cemiObj && "sourceAddress" in cemiObj) {
+      if (!this.isCacheDelegated) {
+        try {
+          GroupAddressCache.getInstance().processCEMI(
+            cemiObj as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
+          );
+        } catch {
+          /* empty */
+        }
+      }
+      if (!this.isEventsDelegated && cemiObj.destinationAddress) {
+        this.emit(cemiObj.destinationAddress, cemiObj);
+      }
+    }
+
     this.emit("send", cemi);
     const cemiBuffer = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
     const isDeviceMgmt = this.options.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION;
@@ -448,11 +476,21 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         const data = body.subarray(len);
         const cemi = CEMI.fromBuffer(data);
         this.emit("indication", cemi);
+        if (!this.isCacheDelegated && "destinationAddress" in cemi && "sourceAddress" in cemi) {
+          try {
+            GroupAddressCache.getInstance().processCEMI(
+              cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
+            );
+          } catch {
+            /* empty */
+          }
+        }
         if (!("destinationAddress" in cemi)) return;
-        this.emit(cemi.destinationAddress, cemi);
+        if (!this.isEventsDelegated) {
+          this.emit(cemi.destinationAddress, cemi);
+        }
         this.emit("raw_indication", data);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (e) {
+      } catch {
         /* empty */
       }
     } else if (seq === ((this.rxSequenceNumber - 1) & 0xff)) {

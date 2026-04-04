@@ -23,6 +23,8 @@ export abstract class KNXService<TOptions extends AllConnectionOptions = AllConn
   protected _transport: "UDP" | "TCP" = "UDP";
   protected logger: Logger;
   public individualAddress: string = "1.0.1";
+  public isCacheDelegated: boolean = false;
+  public isEventsDelegated: boolean = false;
 
   constructor(options: TOptions = {} as TOptions) {
     super();

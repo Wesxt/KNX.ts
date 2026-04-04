@@ -4,6 +4,7 @@ import { TPUARTOptions } from "../@types/interfaces/connection";
 import { CEMIAdapter } from "../utils/CEMIAdapter";
 import { KNXHelper } from "../utils/KNXHelper";
 import { CEMI, CEMIInstance } from "../core/CEMI";
+import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 
 const UART_SERVICES = {
   RESET_REQ: 0x01,
@@ -112,6 +113,18 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
           const cemi = CEMIAdapter.emiToCemi(emiBuffer);
           if (cemi) {
             this.emit("indication", cemi);
+            if (!this.isCacheDelegated && "destinationAddress" in cemi && "sourceAddress" in cemi) {
+              try {
+                GroupAddressCache.getInstance().processCEMI(
+                  cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
+                );
+              } catch {
+                /* empty */
+              }
+            }
+            if (!this.isEventsDelegated && "destinationAddress" in cemi) {
+              this.emit(cemi.destinationAddress as string, cemi);
+            }
             this.emit("raw_indication", cemi.toBuffer());
           }
         }
@@ -243,6 +256,33 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
 
   async send(data: Buffer | CEMIInstance): Promise<void> {
     if (this.connectionState < TPUARTState.ONLINE) throw new Error("TPUART offline");
+
+    let cemiObj: CEMIInstance | undefined = undefined;
+    if (Buffer.isBuffer(data)) {
+      try {
+        cemiObj = CEMI.fromBuffer(data);
+      } catch {
+        /* empty */
+      }
+    } else {
+      cemiObj = data;
+    }
+
+    if (cemiObj && "destinationAddress" in cemiObj && "sourceAddress" in cemiObj) {
+      if (!this.isCacheDelegated) {
+        try {
+          GroupAddressCache.getInstance().processCEMI(
+            cemiObj as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
+          );
+        } catch {
+          /* empty */
+        }
+      }
+      if (!this.isEventsDelegated && cemiObj.destinationAddress) {
+        this.emit(cemiObj.destinationAddress, cemiObj);
+      }
+    }
+
     const frame = Buffer.isBuffer(data) ? data : CEMIAdapter.cemiToEmi(data)?.toBuffer();
     if (!frame) throw new Error("Invalid data");
     this.emit("send", data);

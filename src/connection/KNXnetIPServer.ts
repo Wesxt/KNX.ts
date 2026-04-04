@@ -61,9 +61,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
   private _tunnelConnections = new Map<number, TunnelConnection>();
 
-  public isCacheDelegated: boolean = false;
-  public isEventsDelegated: boolean = false;
-
   private readonly MAX_QUEUE_SIZE = 100;
   private readonly BUSY_THRESHOLD = 15;
   private readonly HEARTBEAT_TIMEOUT = KNXTimeoutConstants.CONNECTION_ALIVE_TIME * 1000;

@@ -22,3 +22,8 @@ export * from "./core/layers/data/NPDU";
 export * from "./core/layers/data/TPDU";
 export * from "./core/layers/interfaces/APCI";
 export * from "./core/layers/interfaces/TPCI";
+export * from "./core/cache/GroupAddressCache";
+export * from "./@types/interfaces/servers";
+export type { CEMIInstance } from "./core/CEMI";
+export type { EMIInstance } from "./core/EMI";
+export type { ServiceMessage } from "./@types/interfaces/ServiceMessage";

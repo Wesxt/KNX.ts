@@ -1,9 +1,7 @@
-import { KNXnetIPServer } from "../../connection/KNXnetIPServer";
 import { KNXService } from "../../connection/KNXService";
-import { Router } from "../../connection/Router";
 
 export interface MQTTGatewayOptions {
-  knxContext: Router | KNXnetIPServer;
+  knxContext: KNXService;
 
   // Either spin up an internal Aedes broker
   embeddedBroker?: {
@@ -23,4 +21,42 @@ export interface MQTTGatewayOptions {
 export interface WebSocketGatewayOptions {
   port: number;
   knxContext: KNXService;
+}
+
+export interface WSClientPayload {
+  action: "read" | "query" | "write" | "config_dpt" | "subscribe" | "unsubscribe";
+  groupAddress?: string;
+  dpt?: string | number;
+  value?: any;
+  onlyLatest?: boolean;
+  startDate?: string | Date;
+  endDate?: string | Date;
+}
+
+export interface WSServerPayload {
+  action:
+    | "connected"
+    | "error"
+    | "event"
+    | "config_dpt_ack"
+    | "write_ack"
+    | "subscribe_ack"
+    | "unsubscribe_ack"
+    | "read_result"
+    | "query_result";
+  message?: string;
+  groupAddress?: string;
+  dpt?: string | number;
+  decodedValue?: any;
+  data?: any;
+  results?: any[];
+}
+
+export interface MQTTCommandPayload {
+  value?: any;
+  dpt?: string | number;
+}
+
+export interface MQTTStatePayload {
+  decodedValue: any;
 }
