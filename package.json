@@ -44,7 +44,7 @@
     "typescript"
   ],
   "author": "Arnold Steven Beleño Zuletta (Wesxt)",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
