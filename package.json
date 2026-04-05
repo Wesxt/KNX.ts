@@ -4,6 +4,10 @@
   "description": "A high-performance KNXnet/IP server and client library in TypeScript, focused on ETS stability.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Wesxt/KNX.ts.git"
+  },
   "files": [
     "dist",
     "README.md",
