@@ -25,9 +25,9 @@
     "test:emi": "tsx src/test/test_emi.test.ts",
     "test:servers": "tsx src/test/servers_manual.test.ts",
     "pack:test": "npm pack",
-    "release:patch": "npm version patch && npm publish",
-    "release:minor": "npm version minor && npm publish",
-    "release:major": "npm version major && npm publish"
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major"
   },
   "contributors": [
     {
