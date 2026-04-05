@@ -242,8 +242,9 @@ export class EMI {
 
         return buffer;
       }
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           systemStatus: `${this.systemStatus.describe()}`,
           LL: this._LL.toString(),
           NL: this._NL.toString(),
@@ -311,6 +312,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           status: `Estado: ${this.status.describe()}`,
           timeStamp: `Marca de tiempo: ${this.timeStamp}`,
@@ -390,6 +392,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           time: `Tiempo: ${this.time}`,
           data: `Datos: ${this.data.toString("hex")}`,
           rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
@@ -482,6 +485,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -569,6 +573,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -661,6 +666,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
@@ -752,8 +758,9 @@ export class EMI {
         return buffer;
       }
 
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control}`,
           pollingGroup: `${this._pollingGroup}`,
@@ -820,8 +827,9 @@ export class EMI {
         return buffer;
       }
 
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Codigo de mensaje: ${MESSAGE_CODE_FIELD["L_Poll_Data.con"]["EMI2/IMI2"].value}`,
           control: `Control: ${this.control}`,
           pollingGroup: `${this._pollingGroup}`,
@@ -890,6 +898,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -983,6 +992,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -1085,6 +1095,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -1193,8 +1204,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Individual.req message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -1280,8 +1292,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Individual.con message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -1366,8 +1379,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Individual.ind message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
@@ -1457,8 +1471,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Group.req message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -1534,8 +1549,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Group.con message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
@@ -1620,8 +1636,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Group.ind message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
@@ -1710,8 +1727,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Broadcast.req message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           TPDU: `TPDU: ${this.TPDU.toString("hex")}`,
@@ -1772,8 +1790,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Broadcast.con message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           APDU: `APDU: ${this.TPDU.toString("hex")}`,
@@ -1866,8 +1885,9 @@ export class EMI {
        * Provides a human-readable description of the N_Data_Broadcast.ind message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Código de mensaje: ${this.messageCode}`,
           controlField: `Campo de control: ${this.controlField.describe()}`,
           sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
@@ -1949,8 +1969,9 @@ export class EMI {
        * Provides a human-readable description of the N_Poll_Data.req message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control.toString(16).padStart(2, "0")}`,
           pollingGroup: `Grupo de sondeo: ${this._pollingGroup}`,
@@ -2039,8 +2060,9 @@ export class EMI {
        * Provides a human-readable description of the N_Poll_Data.con message.
        * @returns A record of message properties and their string values.
        */
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: `Codigo de mensaje: ${this.messageCode}`,
           control: `Control: ${this.control.toString(16).padStart(2, "0")}`,
           pollingGroup: `Grupo de sondeo: ${this._pollingGroup}`,
@@ -2123,8 +2145,9 @@ export class EMI {
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
-      describe(): Record<string, string | number> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           control: this.control,
           destinationAddress: this.destinationAddress,
@@ -2170,8 +2193,9 @@ export class EMI {
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
-      describe(): Record<string, string | number> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           control: this.control,
           destinationAddress: this.destinationAddress,
@@ -2228,6 +2252,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           control: this.control,
           sourceAddress: this.sourceAddress,
@@ -2273,8 +2298,9 @@ export class EMI {
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
-      describe(): Record<string, string> {
+      describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
         };
       }
@@ -2317,6 +2343,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
         };
@@ -2368,6 +2395,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
         };
@@ -2413,6 +2441,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           hopCount: this.hopCount.toString(),
@@ -2461,6 +2490,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           APDU: this.APDU.toString("hex"),
@@ -2507,6 +2537,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -2563,6 +2594,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           hopCount: this.hopCount.toString(),
@@ -2608,6 +2640,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
         };
@@ -2648,6 +2681,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           APDU: this.APDU.toString("hex"),
@@ -2695,6 +2729,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
@@ -2751,6 +2786,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
@@ -2809,6 +2845,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -2872,6 +2909,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           hopCount: this.hopCount.toString(),
@@ -2915,6 +2953,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
         };
@@ -2960,6 +2999,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -3012,6 +3052,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           pollingGroup: this.pollingGroup,
@@ -3070,6 +3111,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -3134,6 +3176,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           sourceAddress: this.sourceAddress,
         };
@@ -3172,6 +3215,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
         };
       }
@@ -3209,6 +3253,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           hopCount: this.hopCount.toString(),
@@ -3265,6 +3310,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           APDU: this.APDU.toString("hex"),
@@ -3311,6 +3357,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -3370,6 +3417,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sap: this.sap.toString(),
@@ -3438,6 +3486,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sap: this.sap.toString(),
@@ -3495,6 +3544,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sap: this.sap.toString(),
@@ -3553,6 +3603,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
@@ -3613,6 +3664,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           destinationAddress: this.destinationAddress,
@@ -3671,6 +3723,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -3729,6 +3782,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           pollingGroup: this.pollingGroup,
@@ -3781,6 +3835,7 @@ export class EMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
           sourceAddress: this.sourceAddress,
@@ -3835,6 +3890,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3857,6 +3913,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3879,6 +3936,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3901,6 +3959,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3923,6 +3982,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3945,6 +4005,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3967,6 +4028,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -3989,6 +4051,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -4011,6 +4074,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -4033,6 +4097,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };
@@ -4055,6 +4120,7 @@ export class EMI {
       }
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           data: this.data.toString("hex"),
         };

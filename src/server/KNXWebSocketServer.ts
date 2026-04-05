@@ -2,6 +2,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 import { CEMIInstance } from "../core/CEMI";
 import { WebSocketGatewayOptions, WSClientPayload } from "../@types/interfaces/servers";
+import { Router } from "../connection/Router";
+import { IndicationRouterLink } from "../@types/interfaces/connection";
 
 export class KNXWebSocketGateway {
   private wss: WebSocketServer | null = null;
@@ -17,44 +19,73 @@ export class KNXWebSocketGateway {
   }
 
   public start() {
-    this.wss = new WebSocketServer({ port: this.options.port });
+    this.wss = new WebSocketServer({
+      host: this.options.host,
+      port: this.options.port,
+    });
     this.wss.on("connection", (ws) => {
       ws.on("message", (message) => {
         try {
           const payload = JSON.parse(message.toString());
+          if (typeof payload !== "object" || payload === null) {
+            throw new Error("Payload must be a JSON object");
+          }
           this.handleClientMessage(ws, payload);
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (e) {
-          this.sendError(ws, "Invalid JSON format");
+        } catch (e: any) {
+          this.sendError(ws, e.message || "Invalid JSON format");
         }
       });
       // Acknowledge connection
       ws.send(JSON.stringify({ action: "connected", message: "KNX WebSocket Gateway connected" }));
     });
 
-    // Listen globally for events from knxContext to dispatch to WS clients
-    this.options.knxContext.on("indication", (cemi: CEMIInstance) => {
-      if (!("destinationAddress" in cemi)) return;
-      const dest = cemi.destinationAddress;
-      if (!dest) return;
+    if (this.options.knxContext instanceof Router) {
+      // Listen globally for events from knxContext to dispatch to WS clients
+      this.options.knxContext.on("indication_link", (data: IndicationRouterLink) => {
+        const { msg: cemi, src } = data;
+        if (!("destinationAddress" in cemi)) return;
+        const dest = cemi.destinationAddress;
 
-      if (this.activeSubscriptions.has(dest) || this.activeSubscriptions.has("*")) {
-        const cache = GroupAddressCache.getInstance();
-        const entries = cache.query(dest, undefined, undefined, true);
-        let decodedValue = undefined;
+        if (this.activeSubscriptions.has(dest) || this.activeSubscriptions.has("*")) {
+          const cache = GroupAddressCache.getInstance();
+          const entries = cache.query(dest, undefined, undefined, true);
+          let decodedValue = undefined;
 
-        if (entries && entries.length > 0) {
-          decodedValue = entries[0].decodedValue;
+          if (entries && entries.length > 0) {
+            decodedValue = entries[0].decodedValue;
+          }
+
+          this.broadcast(dest, cemi, decodedValue, src);
         }
+      });
+    } else {
+      // Listen globally for events from knxContext to dispatch to WS clients
+      this.options.knxContext.on("indication", (cemi: CEMIInstance) => {
+        if (!("destinationAddress" in cemi)) return;
+        const dest = cemi.destinationAddress;
 
-        this.broadcast(dest, cemi, decodedValue);
-      }
-    });
+        if (this.activeSubscriptions.has(dest) || this.activeSubscriptions.has("*")) {
+          const cache = GroupAddressCache.getInstance();
+          const entries = cache.query(dest, undefined, undefined, true);
+          let decodedValue = undefined;
+
+          if (entries && entries.length > 0) {
+            decodedValue = entries[0].decodedValue;
+          }
+
+          this.broadcast(dest, cemi, decodedValue);
+        }
+      });
+    }
   }
 
   private handleClientMessage(ws: WebSocket, payload: WSClientPayload) {
-    if (!("action" in payload) || !("groupAddress" in payload) || !("value" in payload) || !("dpt" in payload)) return;
     const { action, groupAddress, value, dpt } = payload;
+    if (typeof value !== "object") this.sendError(ws, "The value is must be object");
+    if (!action) {
+      this.sendError(ws, "Missing action in payload");
+      return;
+    }
 
     if (action === "config_dpt" && groupAddress && dpt) {
       GroupAddressCache.getInstance().setAddressDPT(groupAddress, dpt);
@@ -93,7 +124,8 @@ export class KNXWebSocketGateway {
         .then(() => {
           ws.send(JSON.stringify({ action: "write_ack", groupAddress }));
         })
-        .catch((err) => {
+        .catch((err: any) => {
+          console.error(err);
           this.sendError(ws, err.message);
         });
       return;
@@ -112,14 +144,18 @@ export class KNXWebSocketGateway {
       ws.send(JSON.stringify({ action: "unsubscribe_ack", groupAddress: target }));
       return;
     }
+
+    this.sendError(ws, `Unknown action or missing parameters for action: ${action}`);
   }
 
-  private broadcast(address: string, cemi: any, decodedValue?: any) {
+  private broadcast(address: string, cemi: CEMIInstance, decodedValue?: any, sourceLinkKey?: string) {
     if (!this.wss) return;
     const msg = JSON.stringify({
       action: "event",
       groupAddress: address,
-      decodedValue,
+      cemi: cemi.describe(),
+      decodedValue: decodedValue ?? null,
+      sourceLinkKey,
     });
     this.wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {

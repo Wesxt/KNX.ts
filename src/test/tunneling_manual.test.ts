@@ -35,8 +35,8 @@ async function testTunneling() {
       valueTest++;
       bol = !bol;
       client.write("5/5/1", 1, { value: bol });
-      client.write("5/5/2", 9, { valueDpt9: valueTest });
-      client.write("5/5/3", 9, { valueDpt9: valueTest });
+      client.write("5/5/2", 9, { value: valueTest });
+      client.write("5/5/3", 9, { value: valueTest });
     }, 5000);
   });
 

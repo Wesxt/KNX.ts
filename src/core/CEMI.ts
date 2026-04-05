@@ -1,4 +1,4 @@
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { DescribeEstructure, ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { KNXHelper } from "../utils/KNXHelper";
 import { ControlField } from "./ControlField";
 import { ExtendedControlField } from "./ControlFieldExtended";
@@ -38,7 +38,7 @@ export enum CEMIAddInfoType {
   MANUFACTURER_SPECIFIC = 0xfe,
 }
 
-export class AdditionalInformationField {
+export class AdditionalInformationField implements DescribeEstructure {
   private _items: AddInfoBase[] = [];
 
   constructor(items: AddInfoBase[] = []) {
@@ -166,6 +166,13 @@ export class AdditionalInformationField {
 
     return new AdditionalInformationField(items);
   }
+
+  describe() {
+    return {
+      obj: this.constructor.name,
+      items: this._items.map((item) => item.describe()),
+    };
+  }
 }
 
 export class CEMI {
@@ -289,8 +296,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           controlField1: this.controlField1.describe(),
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
@@ -398,8 +406,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           controlField1: this.controlField1.describe(),
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
@@ -510,8 +519,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           controlField1: this.controlField1.describe(),
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
@@ -616,8 +626,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           controlField1: this.controlField1.describe(),
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
@@ -727,8 +738,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           controlField1: this.controlField1.describe(),
           controlField2: this.controlField2.describe(),
           sourceAddress: this.sourceAddress,
@@ -760,8 +772,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           data: this.data,
         };
       }
@@ -805,8 +818,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           data: this.data,
         };
       }
@@ -850,8 +864,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           data: this.data,
         };
       }
@@ -898,8 +913,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           data: this.data,
         };
       }
@@ -947,8 +963,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           tpdu: this.tpdu.describe(),
         };
       }
@@ -996,8 +1013,9 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo,
+          additionalInfo: this.additionalInfo.describe(),
           tpdu: this.tpdu.describe(),
         };
       }
@@ -1060,6 +1078,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1122,6 +1141,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1189,6 +1209,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1253,6 +1274,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1329,6 +1351,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1385,6 +1408,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1441,6 +1465,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1490,6 +1515,7 @@ export class CEMI {
 
       describe() {
         return {
+          obj: this.constructor.name,
           messageCode: this.messageCode,
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
@@ -1532,7 +1558,7 @@ export class CEMI {
     //     return buffer;
     //   }
     //   describe() {
-    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo };
+    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo.describe() };
     //   }
 
     //   static fromBuffer(buffer: Buffer): M_Reset_req {
@@ -1564,7 +1590,7 @@ export class CEMI {
     //     return buffer;
     //   }
     //   describe() {
-    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo };
+    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo.describe() };
     //   }
 
     //   static fromBuffer(buffer: Buffer): M_Reset_ind {

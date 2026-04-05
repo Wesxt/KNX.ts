@@ -17,7 +17,7 @@ async function testUsb() {
   const num = 0;
   let bol = false;
   setInterval(() => {
-    // const value = KnxDataEncoder.encodeThis("5", { valueDpt5: num++ })
+    // const value = KnxDataEncoder.encodeThis("5", { value: num++ })
     // usb.read("1/0/4");
     // const dptValue = KnxDataEncoder.encodeThis(1, { value: bol });
     // const controlField = new ControlField(0xbc);

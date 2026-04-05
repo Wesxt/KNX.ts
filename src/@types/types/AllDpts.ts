@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { KnxDataEncoder } from "../../core/data/KNXDataEncode";
 import {
   DPT1,

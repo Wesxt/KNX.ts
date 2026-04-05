@@ -73,7 +73,7 @@ export class KnxDataEncoder extends KNXData {
         if ("value" in data && typeof data.value === "boolean") return this.encodeDpt1(data as DPT1);
         break;
       case 2:
-        if ("control" in data && "valueDpt2" in data && this.allPropertiesTypeVerify(data, "number"))
+        if ("control" in data && "value" in data && this.allPropertiesTypeVerify(data, "number"))
           return this.encodeDpt2(data as DPT2);
         break;
       case 3007:
@@ -88,67 +88,62 @@ export class KnxDataEncoder extends KNXData {
         if ("char" in data && typeof data.char === "string") return this.encodeDpt4001(data as DPT4);
         break;
       case 5:
-        if ("valueDpt5" in data && typeof data.valueDpt5 === "number") return this.encodeDpt5(data as DPT5);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt5(data as DPT5);
         break;
       case 5001:
-        if (
-          "valueDpt5001" in data &&
-          typeof data.valueDpt5001 === "number" &&
-          data.valueDpt5001 <= 100 &&
-          data.valueDpt5001 >= 0
-        )
+        if ("value" in data && typeof data.value === "number" && data.value <= 100 && data.value >= 0)
           return this.encodeDpt5001(data as DPT5001);
         break;
       case 5002:
-        if ("valueDpt5002" in data && typeof data.valueDpt5002 === "number") return this.encodeDpt5002(data as DPT5002);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt5002(data as DPT5002);
         break;
       case 6:
-        if ("valueDpt6" in data && typeof data.valueDpt6 === "number") return this.encodeDpt6(data as DPT6);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt6(data as DPT6);
         break;
       case 6010:
-        if ("valueDpt6" in data && typeof data.valueDpt6 === "number") return this.encodeDpt6(data as DPT6);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt6(data as DPT6);
         break;
       case 6020:
         if ("status" in data && "mode" in data) return this.encodeDpt6020(data as DPT6020);
         break;
       case 7:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7(data as DPT7);
         break;
       case 7001:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7001(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7001(data as DPT7);
         break;
       case 7002:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7002(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7002(data as DPT7);
         break;
       case 7003:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7003(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7003(data as DPT7);
         break;
       case 7004:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7004(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7004(data as DPT7);
         break;
       case 7005:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7005(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7005(data as DPT7);
         break;
       case 7006:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7006(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7006(data as DPT7);
         break;
       case 7007:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7007(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7007(data as DPT7);
         break;
       case 7011:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7011(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7011(data as DPT7);
         break;
       case 7012:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7012(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7012(data as DPT7);
         break;
       case 7013:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return this.encodeDpt7013(data as DPT7);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt7013(data as DPT7);
         break;
       case 8:
-        if ("valueDpt8" in data && typeof data.valueDpt8 === "number") return this.encodeDpt8(data as DPT8);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt8(data as DPT8);
         break;
       case 9:
-        if ("valueDpt9" in data && typeof data.valueDpt9 === "number") return this.encodeDpt9(data as DPT9);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt9(data as DPT9);
         break;
       case 10001:
         if (
@@ -170,67 +165,52 @@ export class KnxDataEncoder extends KNXData {
           return this.encodeDpt11001(data as DPT11001);
         break;
       case 12:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number")
-          return this.encodeDpt12001(data as DPT12001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt12001(data as DPT12001);
         break;
       case 12001:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number")
-          return this.encodeDpt12001(data as DPT12001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt12001(data as DPT12001);
         break;
       case 12100:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number")
-          return this.encodeDpt12001(data as DPT12001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt12001(data as DPT12001);
         break;
       case 12101:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number")
-          return this.encodeDpt12001(data as DPT12001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt12001(data as DPT12001);
         break;
       case 12102:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number")
-          return this.encodeDpt12001(data as DPT12001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt12001(data as DPT12001);
         break;
       case 13001:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13001(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13001(data as DPT13001);
         break;
       case 13002:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13002(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13002(data as DPT13001);
         break;
       case 13010:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13010(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13010(data as DPT13001);
         break;
       case 13011:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13011(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13011(data as DPT13001);
         break;
       case 13012:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13012(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13012(data as DPT13001);
         break;
       case 13013:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13013(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13013(data as DPT13001);
         break;
       case 13014:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13014(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13014(data as DPT13001);
         break;
       case 13015:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13015(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13015(data as DPT13001);
         break;
       case 13016:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13016(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13016(data as DPT13001);
         break;
       case 13100:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number")
-          return this.encodeDpt13100(data as DPT13001);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt13100(data as DPT13001);
         break;
       case 14:
-        if ("valueDpt14" in data && typeof data.valueDpt14 === "number") return this.encodeDpt14(data as DPT14);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt14(data as DPT14);
         break;
       case 15:
         if (
@@ -257,66 +237,65 @@ export class KnxDataEncoder extends KNXData {
         if ("hex" in data && typeof data.hex === "number") return this.encodeDpt16002(data as DPT16002);
         break;
       case 20:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20(data as DPT20);
         break;
       case 20001:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20001(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20001(data as DPT20);
         break;
       case 20002:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20002(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20002(data as DPT20);
         break;
       case 20003:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20003(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20003(data as DPT20);
         break;
       case 20004:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20004(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20004(data as DPT20);
         break;
       case 20005:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20005(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20005(data as DPT20);
         break;
       case 20006:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20006(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20006(data as DPT20);
         break;
       case 20007:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20007(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20007(data as DPT20);
         break;
       case 20008:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20008(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20008(data as DPT20);
         break;
       case 20011:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20011(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20011(data as DPT20);
         break;
       case 20012:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20012(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20012(data as DPT20);
         break;
       case 20013:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20013(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20013(data as DPT20);
         break;
       case 20014:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20014(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20014(data as DPT20);
         break;
       case 20017:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20017(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20017(data as DPT20);
         break;
       case 20020:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20020(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20020(data as DPT20);
         break;
       case 20021:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20021(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20021(data as DPT20);
         break;
       case 20022:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return this.encodeDpt20022(data as DPT20);
+        if ("value" in data && typeof data.value === "number") return this.encodeDpt20022(data as DPT20);
         break;
       case 27001:
         if ("mask" in data && "status" in data && this.allPropertiesTypeVerify(data, "number"))
           return this.encodeDpt27001(data as DPT27001);
         break;
       case 28001:
-        if ("textDpt28001" in data && typeof data.textDpt28001 === "string")
-          return this.encodeDpt28001(data as DPT28001);
+        if ("value" in data && typeof data.value === "string") return this.encodeDpt28001(data as DPT28001);
         break;
       case 29:
-        if ("valueDpt29" in data && typeof data.valueDpt29 === "bigint") return this.encodeDpt29(data as DPT29);
+        if ("value" in data && typeof data.value === "bigint") return this.encodeDpt29(data as DPT29);
         break;
       case 238600:
         if ("BF" in data && "LF" in data && "Addr" in data && this.allPropertiesTypeVerify(data, "number"))
@@ -384,7 +363,7 @@ export class KnxDataEncoder extends KNXData {
         if ("value" in data && typeof data.value === "boolean") return data;
         break;
       case 2:
-        if ("control" in data && "valueDpt2" in data && this.allPropertiesTypeVerify(data, "number")) return data;
+        if ("control" in data && "value" in data && this.allPropertiesTypeVerify(data, "number")) return data;
         break;
       case 3007:
         if ("control" in data && "stepCode" in data && this.allPropertiesTypeVerify(data, "number")) return data;
@@ -396,67 +375,61 @@ export class KnxDataEncoder extends KNXData {
         if ("char" in data && typeof data.char === "string") return data;
         break;
       case 5:
-        if ("valueDpt5" in data && typeof data.valueDpt5 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 5001:
-        if (
-          "valueDpt5001" in data &&
-          typeof data.valueDpt5001 === "number" &&
-          data.valueDpt5001 <= 100 &&
-          data.valueDpt5001 >= 0
-        )
-          return data;
+        if ("value" in data && typeof data.value === "number" && data.value <= 100 && data.value >= 0) return data;
         break;
       case 5002:
-        if ("valueDpt5002" in data && typeof data.valueDpt5002 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 6:
-        if ("valueDpt6" in data && typeof data.valueDpt6 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 6010:
-        if ("valueDpt6" in data && typeof data.valueDpt6 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 6020:
         if ("status" in data && "mode" in data) return data;
         break;
       case 7:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7001:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7002:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7003:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7004:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7005:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7006:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7007:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7011:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7012:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 7013:
-        if ("valueDpt7" in data && typeof data.valueDpt7 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 8:
-        if ("valueDpt8" in data && typeof data.valueDpt8 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 9:
-        if ("valueDpt9" in data && typeof data.valueDpt9 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 10001:
         if (
@@ -478,52 +451,52 @@ export class KnxDataEncoder extends KNXData {
           return data;
         break;
       case 12:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 12001:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 12100:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 12101:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 12102:
-        if ("valueDpt12001" in data && typeof data.valueDpt12001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13001:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13002:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13010:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13011:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13012:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13013:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13014:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13015:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13016:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 13100:
-        if ("valueDpt13001" in data && typeof data.valueDpt13001 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 14:
-        if ("valueDpt14" in data && typeof data.valueDpt14 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 15:
         if (
@@ -550,64 +523,64 @@ export class KnxDataEncoder extends KNXData {
         if ("hex" in data && typeof data.hex === "number") return data;
         break;
       case 20:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20001:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20002:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20003:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20004:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20005:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20006:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20007:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20008:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20011:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20012:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20013:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20014:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20017:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20020:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20021:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 20022:
-        if ("valueDpt20" in data && typeof data.valueDpt20 === "number") return data;
+        if ("value" in data && typeof data.value === "number") return data;
         break;
       case 27001:
         if ("mask" in data && "status" in data && this.allPropertiesTypeVerify(data, "number")) return data;
         break;
       case 28001:
-        if ("textDpt28001" in data && typeof data.textDpt28001 === "string") return data;
+        if ("value" in data && typeof data.value === "string") return data;
         break;
       case 29:
-        if ("valueDpt29" in data && typeof data.valueDpt29 === "bigint") return data;
+        if ("value" in data && typeof data.value === "bigint") return data;
         break;
       case 238600:
         if ("BF" in data && "LF" in data && "Addr" in data && this.allPropertiesTypeVerify(data, "number")) return data;
@@ -697,9 +670,9 @@ export class KnxDataEncoder extends KNXData {
    * Los parámetros deben ser 0 o 1.
    * Retorna un Buffer de 1 byte.
    */
-  static encodeDpt2({ control, valueDpt2 }: DPT2) {
+  static encodeDpt2({ control, value }: DPT2) {
     const buffer = Buffer.alloc(1);
-    buffer.writeUint8((control << 1) | valueDpt2, 0);
+    buffer.writeUint8((control << 1) | value, 0);
     return buffer;
   }
 
@@ -750,7 +723,7 @@ export class KnxDataEncoder extends KNXData {
   /**
    * DPT5: 1 byte unsigned (0…255)
    */
-  static encodeDpt5({ valueDpt5: value }: DPT5): Buffer {
+  static encodeDpt5({ value }: DPT5): Buffer {
     if (value < 0 || value > 255) throw new Error("DPT5 value must be between 0 and 255");
     const buffer = Buffer.alloc(1);
     buffer.writeUInt8(value, 0);
@@ -760,23 +733,23 @@ export class KnxDataEncoder extends KNXData {
   /**
    * DPT5001: Percentage (0–100) codificado en escala 0–255
    */
-  static encodeDpt5001({ valueDpt5001: value }: DPT5001): Buffer {
+  static encodeDpt5001({ value }: DPT5001): Buffer {
     const encodedValue = Math.round((value / 100) * 255);
-    return this.encodeDpt5({ valueDpt5: encodedValue });
+    return this.encodeDpt5({ value: encodedValue });
   }
 
   /**
    * DPT5002: Angle (0–360°) codificado en escala 0–255
    */
-  static encodeDpt5002({ valueDpt5002: value }: DPT5002): Buffer {
+  static encodeDpt5002({ value }: DPT5002): Buffer {
     const encodedValue = Math.round((value / 360) * 255);
-    return this.encodeDpt5({ valueDpt5: encodedValue });
+    return this.encodeDpt5({ value: encodedValue });
   }
 
   /**
    * DPT6: 1 byte signed (-128…127)
    */
-  static encodeDpt6({ valueDpt6: value }: DPT6): Buffer {
+  static encodeDpt6({ value }: DPT6): Buffer {
     if (value < -128 || value > 127) throw new Error("DPT6 value must be between -128 and 127");
     const buffer = Buffer.alloc(1);
     buffer.writeInt8(value, 0);
@@ -786,15 +759,15 @@ export class KnxDataEncoder extends KNXData {
   /**
    * DPT6001: Se codifica igual que DPT6 (por ejemplo, porcentaje expresado en valor numérico)
    */
-  static encodeDpt6001({ valueDpt6: value }: DPT6): Buffer {
-    return this.encodeDpt6({ valueDpt6: value });
+  static encodeDpt6001({ value }: DPT6): Buffer {
+    return this.encodeDpt6({ value });
   }
 
   /**
    * DPT6010: Counter pulses, codificado igual que DPT6
    */
-  static encodeDpt6010({ valueDpt6: value }: DPT6): Buffer {
-    return this.encodeDpt6({ valueDpt6: value });
+  static encodeDpt6010({ value }: DPT6): Buffer {
+    return this.encodeDpt6({ value });
   }
 
   /**
@@ -811,7 +784,7 @@ export class KnxDataEncoder extends KNXData {
   /**
    * DPT7: 2-byte unsigned (0…65535)
    */
-  static encodeDpt7({ valueDpt7: value }: DPT7): Buffer {
+  static encodeDpt7({ value }: DPT7): Buffer {
     if (value < 0 || value > 65535) throw new Error("DPT7 value must be between 0 and 65535");
     const buffer = Buffer.alloc(2);
     buffer.writeUInt16BE(value, 0);
@@ -822,72 +795,72 @@ export class KnxDataEncoder extends KNXData {
    * DPT7001: Pulses (igual que DPT7)
    */
   static encodeDpt7001(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7002: Time in ms (igual que DPT7)
    */
   static encodeDpt7002(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7003: Time in seconds (valor en segundos escalado multiplicando por 100)
    */
-  static encodeDpt7003({ valueDpt7: value }: DPT7): Buffer {
+  static encodeDpt7003({ value }: DPT7): Buffer {
     const scaled = Math.round(value * 100);
-    return this.encodeDpt7({ valueDpt7: scaled });
+    return this.encodeDpt7({ value: scaled });
   }
 
   /**
    * DPT7004: Time in seconds (valor en segundos escalado multiplicando por 10)
    */
-  static encodeDpt7004({ valueDpt7: value }: DPT7): Buffer {
+  static encodeDpt7004({ value }: DPT7): Buffer {
     const scaled = Math.round(value * 10);
-    return this.encodeDpt7({ valueDpt7: scaled });
+    return this.encodeDpt7({ value: scaled });
   }
 
   /**
    * DPT7005: Time in seconds (igual que DPT7)
    */
   static encodeDpt7005(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7006: Time in minutes (igual que DPT7)
    */
   static encodeDpt7006(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7007: Time in hours (igual que DPT7)
    */
   static encodeDpt7007(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7011: Distance in mm (igual que DPT7)
    */
   static encodeDpt7011(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7012: Bus power supply current in mA (igual que DPT7)
    */
   static encodeDpt7012(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
    * DPT7013: Light intensity in lux (igual que DPT7)
    */
   static encodeDpt7013(data: DPT7): Buffer {
-    return this.encodeDpt7({ valueDpt7: data.valueDpt7 });
+    return this.encodeDpt7({ value: data.value });
   }
 
   /**
@@ -897,24 +870,24 @@ export class KnxDataEncoder extends KNXData {
    * @param param0 Objeto con la propiedad value a codificar.
    * @returns Buffer con el valor codificado en 2 octetos (big-endian).
    */
-  static encodeDpt8({ valueDpt8 }: DPT8): Buffer {
-    if (valueDpt8 < -32768 || valueDpt8 > 32767) {
+  static encodeDpt8({ value }: DPT8): Buffer {
+    if (value < -32768 || value > 32767) {
       throw new Error("DPT8 value must be between -32768 and 32767");
     }
     const buffer = Buffer.alloc(2);
-    buffer.writeInt16BE(valueDpt8, 0);
+    buffer.writeInt16BE(value, 0);
     return buffer;
   }
 
-  static encodeDpt9({ valueDpt9 }: DPT9): Buffer {
+  static encodeDpt9({ value }: DPT9): Buffer {
     // 1. Manejo de seguridad para valores no numéricos
-    if (isNaN(valueDpt9) || !isFinite(valueDpt9)) {
+    if (isNaN(value) || !isFinite(value)) {
       return Buffer.from([0x7f, 0xff]);
     }
 
     // 2. Cálculo inicial de la mantisa según la fórmula: Float = (0.01 * M) * 2^E
     // Despejamos M inicial (con E=0): M = Value / 0.01
-    let m = valueDpt9 / 0.01;
+    let m = value / 0.01;
     let e = 0;
 
     // 3. Normalización: M debe estar en el rango [-2048, 2047]
@@ -1033,34 +1006,34 @@ export class KnxDataEncoder extends KNXData {
    * @param param0 Objeto con { value }
    * @returns Buffer de 4 octetos con el valor codificado.
    */
-  static encodeDpt12001({ valueDpt12001 }: DPT12001): Buffer {
-    if (valueDpt12001 < 0 || valueDpt12001 > 0xffffffff) {
+  static encodeDpt12001({ value }: DPT12001): Buffer {
+    if (value < 0 || value > 0xffffffff) {
       throw new Error("DPT 12.001 value must be between 0 and 4294967295");
     }
     const buffer = Buffer.alloc(4);
-    buffer.writeUInt32BE(valueDpt12001, 0);
+    buffer.writeUInt32BE(value, 0);
     return buffer;
   }
 
   /**
    * Codifica DPT 12.100: DPT_LongTimePeriod_Sec
    */
-  static encodeDpt12100({ valueDpt12001 }: DPT12001): Buffer {
-    return this.encodeDpt12001({ valueDpt12001 });
+  static encodeDpt12100({ value }: DPT12001): Buffer {
+    return this.encodeDpt12001({ value });
   }
 
   /**
    * Codifica DPT 12.101: DPT_LongTimePeriod_Min
    */
-  static encodeDpt12101({ valueDpt12001 }: DPT12001): Buffer {
-    return this.encodeDpt12001({ valueDpt12001 });
+  static encodeDpt12101({ value }: DPT12001): Buffer {
+    return this.encodeDpt12001({ value });
   }
 
   /**
    * Codifica DPT 12.102: DPT_LongTimePeriod_Hrs
    */
-  static encodeDpt12102({ valueDpt12001 }: DPT12001): Buffer {
-    return this.encodeDpt12001({ valueDpt12001 });
+  static encodeDpt12102({ value }: DPT12001): Buffer {
+    return this.encodeDpt12001({ value });
   }
 
   /**
@@ -1068,20 +1041,20 @@ export class KnxDataEncoder extends KNXData {
    * @param param0 Objeto con la propiedad { value } que contiene el valor a codificar.
    * @returns Buffer de 4 octetos con el valor codificado en formato big-endian.
    */
-  static encodeDpt13001({ valueDpt13001 }: DPT13001): Buffer {
-    if (valueDpt13001 < -2147483648 || valueDpt13001 > 2147483647) {
+  static encodeDpt13001({ value }: DPT13001): Buffer {
+    if (value < -2147483648 || value > 2147483647) {
       throw new Error("DPT 13.001 value must be between -2147483648 and 2147483647");
     }
     const buffer = Buffer.alloc(4);
-    buffer.writeInt32BE(valueDpt13001, 0);
+    buffer.writeInt32BE(value, 0);
     return buffer;
   }
 
   /**
    * Codifica DPT 13.002: DPT_FlowRate_m3/h
    */
-  static encodeDpt13002({ valueDpt13001 }: DPT13001): Buffer {
-    const rawValue = Math.round(valueDpt13001 * 10000);
+  static encodeDpt13002({ value }: DPT13001): Buffer {
+    const rawValue = Math.round(value * 10000);
     if (rawValue < -2147483648 || rawValue > 2147483647) {
       throw new Error("DPT 13.002 value, after scaling, must be between -2147483648 and 2147483647");
     }
@@ -1093,65 +1066,65 @@ export class KnxDataEncoder extends KNXData {
   /**
    * DPT 13.010: DPT_ActiveEnergy
    */
-  static encodeDpt13010({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13010({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.011: DPT_ApparantEnergy
    */
-  static encodeDpt13011({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13011({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.012: DPT_ReactiveEnergy
    */
-  static encodeDpt13012({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13012({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.013: DPT_ActiveEnergy_kWh
    */
-  static encodeDpt13013({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13013({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.014: DPT_ApparantEnergy_kVAh
    */
-  static encodeDpt13014({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13014({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.015: DPT_ReactiveEnergy_kVARh
    */
-  static encodeDpt13015({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13015({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.016: DPT_ActiveEnergy_MWh
    */
-  static encodeDpt13016({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13016({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * DPT 13.100: DPT_LongDeltaTimeSec
    */
-  static encodeDpt13100({ valueDpt13001 }: DPT13001): Buffer {
-    return this.encodeDpt13001({ valueDpt13001 });
+  static encodeDpt13100({ value }: DPT13001): Buffer {
+    return this.encodeDpt13001({ value });
   }
 
   /**
    * Codifica DPT14: 4-Octet Float Value (IEEE 754 single precision).
    */
-  static encodeDpt14({ valueDpt14 }: DPT14): Buffer {
+  static encodeDpt14({ value }: DPT14): Buffer {
     const buffer = Buffer.alloc(4);
-    buffer.writeFloatBE(valueDpt14, 0);
+    buffer.writeFloatBE(value, 0);
     return buffer;
   }
 
@@ -1227,205 +1200,205 @@ export class KnxDataEncoder extends KNXData {
   /**
    * Codifica DPT20: Datapoint Type N8
    */
-  static encodeDpt20({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 255) {
+  static encodeDpt20({ value }: DPT20): Buffer {
+    if (value < 0 || value > 255) {
       throw new Error("DPT20 value must be between 0 and 255");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.001: DPT_SCLOMode
    */
-  static encodeDpt20001({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 3) {
+  static encodeDpt20001({ value }: DPT20): Buffer {
+    if (value < 0 || value > 3) {
       throw new Error("DPT 20.001 value must be between 0 and 3");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.002: DPT_BuildingMode
    */
-  static encodeDpt20002({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 2) {
+  static encodeDpt20002({ value }: DPT20): Buffer {
+    if (value < 0 || value > 2) {
       throw new Error("DPT 20.002 value must be between 0 and 2");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.003: DPT_OccMode
    */
-  static encodeDpt20003({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 2) {
+  static encodeDpt20003({ value }: DPT20): Buffer {
+    if (value < 0 || value > 2) {
       throw new Error("DPT 20.003 value must be between 0 and 2");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.004: DPT_Priority
    */
-  static encodeDpt20004({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 3) {
+  static encodeDpt20004({ value }: DPT20): Buffer {
+    if (value < 0 || value > 3) {
       throw new Error("DPT 20.004 value must be between 0 and 3");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.005: DPT_LightApplicationMode
    */
-  static encodeDpt20005({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 2) {
+  static encodeDpt20005({ value }: DPT20): Buffer {
+    if (value < 0 || value > 2) {
       throw new Error("DPT 20.005 value must be between 0 and 2");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.006: DPT_ApplicationArea
    */
-  static encodeDpt20006({ valueDpt20 }: DPT20): Buffer {
+  static encodeDpt20006({ value }: DPT20): Buffer {
     const validValues = [0, 1, 10, 11, 12, 13, 14, 20, 30, 40, 50];
-    if (!validValues.includes(valueDpt20)) {
+    if (!validValues.includes(value)) {
       throw new Error("DPT 20.006 value must be one of: " + validValues.join(", "));
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.007: DPT_AlarmClassType
    */
-  static encodeDpt20007({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 3) {
+  static encodeDpt20007({ value }: DPT20): Buffer {
+    if (value < 0 || value > 3) {
       throw new Error("DPT 20.007 value must be between 0 and 3");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.008: DPT_PSUMode
    */
-  static encodeDpt20008({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 2) {
+  static encodeDpt20008({ value }: DPT20): Buffer {
+    if (value < 0 || value > 2) {
       throw new Error("DPT 20.008 value must be between 0 and 2");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.011: DPT_ErrorClass_System
    */
-  static encodeDpt20011({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 18) {
+  static encodeDpt20011({ value }: DPT20): Buffer {
+    if (value < 0 || value > 18) {
       throw new Error("DPT 20.011 value must be between 0 and 18");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.012: DPT_ErrorClass_HVAC
    */
-  static encodeDpt20012({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 4) {
+  static encodeDpt20012({ value }: DPT20): Buffer {
+    if (value < 0 || value > 4) {
       throw new Error("DPT 20.012 value must be between 0 and 4");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.013: DPT_Time_Delay
    */
-  static encodeDpt20013({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 25) {
+  static encodeDpt20013({ value }: DPT20): Buffer {
+    if (value < 0 || value > 25) {
       throw new Error("DPT 20.013 value must be between 0 and 25");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.014: DPT_Beaufort_Wind_Force_Scale
    */
-  static encodeDpt20014({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 12) {
+  static encodeDpt20014({ value }: DPT20): Buffer {
+    if (value < 0 || value > 12) {
       throw new Error("DPT 20.014 value must be between 0 and 12");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.017: DPT_SensorSelect
    */
-  static encodeDpt20017({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 4) {
+  static encodeDpt20017({ value }: DPT20): Buffer {
+    if (value < 0 || value > 4) {
       throw new Error("DPT 20.017 value must be between 0 and 4");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.020: DPT_ActuatorConnectType
    */
-  static encodeDpt20020({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 !== 1 && valueDpt20 !== 2) {
+  static encodeDpt20020({ value }: DPT20): Buffer {
+    if (value !== 1 && value !== 2) {
       throw new Error("DPT 20.020 value must be either 1 (SensorConnection) or 2 (ControllerConnection)");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.021: DPT_Cloud_Cover
    */
-  static encodeDpt20021({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 9) {
+  static encodeDpt20021({ value }: DPT20): Buffer {
+    if (value < 0 || value > 9) {
       throw new Error("DPT 20.021 value must be between 0 and 9");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
   /**
    * DPT 20.022: DPT_PowerReturnMode
    */
-  static encodeDpt20022({ valueDpt20 }: DPT20): Buffer {
-    if (valueDpt20 < 0 || valueDpt20 > 2) {
+  static encodeDpt20022({ value }: DPT20): Buffer {
+    if (value < 0 || value > 2) {
       throw new Error("DPT 20.022 value must be between 0 and 2");
     }
     const buffer = Buffer.alloc(1);
-    buffer.writeUInt8(valueDpt20, 0);
+    buffer.writeUInt8(value, 0);
     return buffer;
   }
 
@@ -1444,8 +1417,8 @@ export class KnxDataEncoder extends KNXData {
   /**
    * Codifica DPT 28.001: DPT_UTF-8.
    */
-  static encodeDpt28001({ textDpt28001 }: DPT28001): Buffer {
-    const utf8Buffer = Buffer.from(textDpt28001, "utf8");
+  static encodeDpt28001({ value }: DPT28001): Buffer {
+    const utf8Buffer = Buffer.from(value, "utf8");
     const nullTerminator = Buffer.from([0x00]);
     return Buffer.concat([utf8Buffer, nullTerminator]);
   }
@@ -1453,14 +1426,14 @@ export class KnxDataEncoder extends KNXData {
   /**
    * Codifica DPT29: 4-Octet Signed Value (V64) en 8 octetos.
    */
-  static encodeDpt29({ valueDpt29 }: DPT29): Buffer {
+  static encodeDpt29({ value }: DPT29): Buffer {
     const min = -9223372036854775808n;
     const max = 9223372036854775807n;
-    if (valueDpt29 < min || valueDpt29 > max) {
+    if (value < min || value > max) {
       throw new Error("DPT29 value must be between -9223372036854775808 and 9223372036854775807");
     }
     const buffer = Buffer.alloc(8);
-    buffer.writeBigInt64BE(valueDpt29, 0);
+    buffer.writeBigInt64BE(value, 0);
     return buffer;
   }
 

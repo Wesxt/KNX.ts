@@ -76,7 +76,8 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     // Set defaults for discovery if not provided
     const routingOptions = this.options;
     const netInfo = getNetworkInfo();
-
+    this.options.ip = options.ip || "224.0.23.12";
+    this.options.port = options.port || 3671;
     this.options.localIp = options.localIp || netInfo.address;
     routingOptions.individualAddress = options.individualAddress || "15.15.0";
     this.individualAddress = routingOptions.individualAddress;
@@ -91,7 +92,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (!options.serialNumber) {
       // eslint-disable-next-line no-useless-escape
       const macBuf = Buffer.from(netInfo.mac.replace(/[:\-]/g, ""), "hex");
-      const port = options.port || 3671;
+      const port = this.options.port;
       const serial = Buffer.from(macBuf);
       serial[0] ^= (port >> 8) & 0xff;
       serial[1] ^= port & 0xff;
@@ -106,7 +107,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (routingOptions.MAX_PENDING_REQUESTS_PER_CLIENT)
       this.MAX_PENDING_REQUESTS_PER_CLIENT = routingOptions.MAX_PENDING_REQUESTS_PER_CLIENT;
 
-    this.logger.info(`Initialized on ${this.options.localIp}:${options.port || 3671}`);
+    this.logger.info(`Initialized on ${this.options.localIp}:${this.options.port}`);
     this.logger.info(`Serial Number: ${routingOptions.serialNumber.toString("hex").toUpperCase()}`);
 
     const serverIA = KNXHelper.GetAddress(routingOptions.individualAddress, ".").readUInt16BE();
@@ -160,7 +161,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             try {
               socket.addMembership(this.options.ip, this.options.localIp);
               joinedInterfaces.add(this.options.localIp);
-              this.logger.info(`Joined multicast on primary interface (${this.options.localIp})`);
+              this.logger.info(`Joined multicast on primary interface (${this.options.ip})`);
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e) {
               this.logger.debug(`Failed to join multicast on primary interface ${this.options.localIp}`);
@@ -174,7 +175,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
                 if (net.family === "IPv4" && !net.internal) {
                   if (!joinedInterfaces.has(net.address)) {
                     try {
-                      socket.addMembership(this.options.ip!, net.address);
+                      socket.addMembership(this.options.ip as string, net.address);
                       joinedInterfaces.add(net.address);
                       this.logger.info(`Joined multicast on interface ${name} (${net.address})`);
                       // eslint-disable-next-line @typescript-eslint/no-unused-vars

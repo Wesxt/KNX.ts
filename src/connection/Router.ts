@@ -3,7 +3,7 @@ import { KNXService } from "./KNXService";
 import { TPUARTConnection } from "./TPUART";
 import { KNXTunneling } from "./KNXTunneling";
 import { KNXUSBConnection } from "./KNXUSBConnection";
-import { RouterConnOptions } from "../@types/interfaces/connection";
+import { KNXUSBOptions, RouterConnOptions, TPUARTOptions } from "../@types/interfaces/connection";
 import { Logger } from "pino";
 import { knxLogger } from "../utils/Logger";
 import { CEMI, CEMIInstance } from "../core/CEMI";
@@ -61,18 +61,19 @@ export class Router extends EventEmitter {
     }
     if (options.tpuart) {
       options.tpuart.individualAddress = this.routerAddress;
-      this.registerLink("TPUART", new TPUARTConnection(options.tpuart));
+      this.registerLink("TPUART", new TPUARTConnection(options.tpuart as TPUARTOptions));
     }
     if (options.tunneling) {
       options.tunneling.forEach((c) => {
         // * Tunneling doesn't support individualAddress, is assigned by the tunnel connection
         // c.individualAddress = this.routerAddress;
-        this.registerLink(`IP Tunneling: ${c.ip}:${c.port}`, new KNXTunneling(c));
+        const client = new KNXTunneling(c);
+        this.registerLink(`IP Tunneling: ${client.options.ip}:${client.options.port}`, client);
       });
     }
     if (options.usb) {
       options.usb.individualAddress = this.routerAddress;
-      this.registerLink("KNXUSB", new KNXUSBConnection(options.usb));
+      this.registerLink("KNXUSB", new KNXUSBConnection(options.usb as KNXUSBOptions));
     }
 
     this.logger.info(`Router initialized at ${this.routerAddress}`);
@@ -199,7 +200,7 @@ export class Router extends EventEmitter {
     // If packet is destined for the router itself, consume it and don't route
     if (!isGroup && dest === this.routerAddress) {
       this.logger.debug({ src: data.sourceAddress }, "Packet consumed by router local address");
-      this.emit("indication_link", { src: source.constructor.name, msg: data });
+      this.emit("indication_link", { src: keySource, msg: data });
       return;
     }
 
@@ -213,7 +214,7 @@ export class Router extends EventEmitter {
           });
         }
         // Send to upper layers (KNXnet/IP server core)
-        this.emit("indication_link", { src: source.constructor.name, msg: data });
+        this.emit("indication_link", { src: keySource, msg: data });
         return; // Do not flood
       }
       // If target is unknown, knxd broadcasts it to all interfaces
@@ -235,7 +236,7 @@ export class Router extends EventEmitter {
     }
 
     // Notify upper layers
-    this.emit("indication_link", { src: source.constructor.name, msg: data });
+    this.emit("indication_link", { src: keySource, msg: data });
   }
 
   /**
@@ -310,13 +311,13 @@ export class Router extends EventEmitter {
       new APDU(
         new TPCI(TPCIType.T_DATA_GROUP_PDU),
         new APCI(APCIEnum.A_GroupValue_Read_Protocol_Data_Unit),
-        Buffer.alloc(0),
+        Buffer.alloc(1),
         true,
       ),
-      Buffer.alloc(0),
+      Buffer.alloc(1),
     );
 
-    const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, this.routerAddress, destination, tpdu);
+    const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, "0.0.0", destination, tpdu);
     this.logger.debug({ service: cemi.constructor.name }, "Sending GroupValue_Read");
 
     return this.send(cemi);

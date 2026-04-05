@@ -27,3 +27,13 @@ export * from "./@types/interfaces/servers";
 export type { CEMIInstance } from "./core/CEMI";
 export type { EMIInstance } from "./core/EMI";
 export type { ServiceMessage } from "./@types/interfaces/ServiceMessage";
+export type {
+  KNXnetIPServerOptions,
+  TPUARTOptions,
+  KNXUSBOptions,
+  KNXLoggerOptions,
+  KNXTunnelingOptions,
+  RouterConnOptions,
+  KNXDiscoveredDevice,
+  IndicationRouterLink,
+} from "./@types/interfaces/connection";

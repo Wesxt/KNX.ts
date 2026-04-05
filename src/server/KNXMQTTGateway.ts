@@ -1,5 +1,5 @@
 import { Aedes } from "aedes";
-import { createServer } from "aedes-server-factory";
+import { createServer, Server } from "aedes-server-factory";
 import * as mqtt from "mqtt";
 
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
@@ -9,7 +9,7 @@ import { MQTTCommandPayload, MQTTGatewayOptions } from "../@types/interfaces/ser
 export class KNXMQTTGateway {
   private options: MQTTGatewayOptions;
   private aedesBroker: Aedes | null = null;
-  private server: any = null;
+  private server: Server | null = null;
   private client: mqtt.MqttClient | null = null;
   private topicPrefix: string;
 
@@ -23,23 +23,29 @@ export class KNXMQTTGateway {
   public async start(): Promise<void> {
     // 1. Setup embedded broker if requested
     if (this.options.embeddedBroker) {
-      this.aedesBroker = new Aedes();
-      this.server = createServer(this.aedesBroker as any);
+      this.aedesBroker = await Aedes.createBroker();
+      this.server = createServer(this.aedesBroker);
       const port = this.options.embeddedBroker.port;
       const host = this.options.embeddedBroker.host || "127.0.0.1";
 
-      await new Promise<void>((serverResolve) => {
+      await new Promise<void>((serverResolve, serverReject) => {
+        if (!this.server) return serverReject(new Error("The server is null"));
+        this.server.on("error", (err: any) => {
+          serverReject(new Error(`MQTT Server error: ${err.message}`));
+        });
         this.server.listen(port, host, () => {
           serverResolve();
         });
       });
     }
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
       // 2. Setup Client to bridge KNX to MQTT
       const url =
         this.options.brokerUrl ||
-        (this.options.embeddedBroker ? `mqtt://127.0.0.1:${this.options.embeddedBroker.port}` : null);
+        (this.options.embeddedBroker
+          ? `mqtt://${this.options.embeddedBroker.host ?? "127.0.0.1"}:${this.options.embeddedBroker.port}`
+          : null);
 
       if (!url) {
         throw new Error("No Broker URL provided nor embedded broker requested.");
@@ -48,15 +54,20 @@ export class KNXMQTTGateway {
       this.client = mqtt.connect(url, {
         username: this.options.mqttUsername,
         password: this.options.mqttPassword,
+        connectTimeout: 5000, // Add timeout
       });
 
       this.client.on("connect", () => {
         // Subscribe to command topics: prefix/command/action/groupAddress
         // Actions: write, read, config_dpt
-        this.client?.subscribe(`${this.topicPrefix}/command/write/+`);
-        this.client?.subscribe(`${this.topicPrefix}/command/read/+`);
-        this.client?.subscribe(`${this.topicPrefix}/command/config_dpt/+`);
+        this.client?.subscribe(`${this.topicPrefix}/command/write/#`);
+        this.client?.subscribe(`${this.topicPrefix}/command/read/#`);
+        this.client?.subscribe(`${this.topicPrefix}/command/config_dpt/#`);
         resolve();
+      });
+
+      this.client.on("error", (err) => {
+        reject(new Error(`MQTT Client error: ${err.message}`));
       });
 
       this.client.on("message", (topic, message) => {
