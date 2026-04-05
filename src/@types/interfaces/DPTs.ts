@@ -4,7 +4,7 @@ export interface DPT1 {
 }
 export interface DPT2 {
   control: 0 | 1;
-  valueDpt2: 0 | 1;
+  value: 0 | 1;
 }
 export interface DPT3 {
   control: 0 | 1;
@@ -14,29 +14,29 @@ export interface DPT4 {
   char: string;
 }
 export interface DPT5 {
-  valueDpt5: number; // 0-255
+  value: number; // 0-255
 }
 export interface DPT5001 {
-  valueDpt5001: number; // 0-100 (Percentage)
+  value: number; // 0-100 (Percentage)
 }
 export interface DPT5002 {
-  valueDpt5002: number; // 0-360 (Angle)
+  value: number; // 0-360 (Angle)
 }
 export interface DPT6 {
-  valueDpt6: number; // -128 to 127
+  value: number; // -128 to 127
 }
 export interface DPT6020 {
   status: 0 | 1; // 0-1 (1 bit)
   mode: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7; // 0-7 (3 bits)
 }
 export interface DPT7 {
-  valueDpt7: number; // 0-65535
+  value: number; // 0-65535
 }
 export interface DPT8 {
-  valueDpt8: number;
+  value: number;
 }
 export interface DPT9 {
-  valueDpt9: number;
+  value: number;
 }
 export interface DPT10001 {
   day: number;
@@ -50,13 +50,13 @@ export interface DPT11001 {
   year: number;
 }
 export interface DPT12001 {
-  valueDpt12001: number;
+  value: number;
 }
 export interface DPT13001 {
-  valueDpt13001: number;
+  value: number;
 }
 export interface DPT14 {
-  valueDpt14: number;
+  value: number;
 }
 export interface DPT15 {
   D6: number; // 0-9
@@ -78,17 +78,17 @@ export interface DPT16002 {
   hex: string; // Cadena hexadecimal (por ejemplo: "4A5F3C2E1AFF")
 }
 export interface DPT20 {
-  valueDpt20: number;
+  value: number;
 }
 export interface DPT27001 {
   mask: number; // valor entre 0 y 65535
   status: number; // valor entre 0 y 65535
 }
 export interface DPT28001 {
-  textDpt28001: string;
+  value: string;
 }
 export interface DPT29 {
-  valueDpt29: bigint;
+  value: bigint;
 }
 export interface DPT238600 {
   BF: 0 | 1;

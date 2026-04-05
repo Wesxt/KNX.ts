@@ -18,8 +18,8 @@ export class ExtendedControlField {
       if (this.buffer.length < 1) {
         this.buffer = Buffer.alloc(1, 0);
       }
-    } else if (typeof input === 'number') {
-      this.buffer = Buffer.alloc(1, input & 0xFF);
+    } else if (typeof input === "number") {
+      this.buffer = Buffer.alloc(1, input & 0xff);
     } else {
       this.buffer = Buffer.alloc(1, 0);
     }
@@ -36,7 +36,7 @@ export class ExtendedControlField {
    * Representación en hexadecimal (2 dígitos).
    */
   toHexString(): string {
-    return this.buffer[0].toString(16).padStart(2, '0').toUpperCase();
+    return this.buffer[0].toString(16).padStart(2, "0").toUpperCase();
   }
 
   /**
@@ -52,14 +52,14 @@ export class ExtendedControlField {
    *  - 1 => Group Address
    */
   get addressType(): AddressType {
-    return (this.buffer[0] & 0x80) ? AddressType.GROUP : AddressType.INDIVIDUAL;
+    return this.buffer[0] & 0x80 ? AddressType.GROUP : AddressType.INDIVIDUAL;
   }
 
   set addressType(type: AddressType) {
     if (type === AddressType.GROUP) {
-      this.buffer[0] |= 0x80;  // bit7 = 1
+      this.buffer[0] |= 0x80; // bit7 = 1
     } else {
-      this.buffer[0] &= 0x7F;  // bit7 = 0
+      this.buffer[0] &= 0x7f; // bit7 = 0
     }
   }
 
@@ -77,14 +77,14 @@ export class ExtendedControlField {
       throw new Error("HopCount debe estar entre 0..7");
     }
     // Preserva bit7 y bits3..0 => 0x8F => 1000 1111
-    this.buffer[0] = (this.buffer[0] & 0x8F) | ((value & 0x07) << 4);
+    this.buffer[0] = (this.buffer[0] & 0x8f) | ((value & 0x07) << 4);
   }
 
   /**
    * Extended Frame Format (bits 3..0) => 4 bits (0..15).
    */
   get eff(): ExtendedFrameFormat {
-    return (this.buffer[0] & 0x0F) as ExtendedFrameFormat;
+    return (this.buffer[0] & 0x0f) as ExtendedFrameFormat;
   }
 
   set eff(value: ExtendedFrameFormat) {
@@ -92,7 +92,7 @@ export class ExtendedControlField {
       throw new Error("EFF debe estar en el rango 0..15");
     }
     // Preserva bits7..4 => 0xF0 => 1111 0000
-    this.buffer[0] = (this.buffer[0] & 0xF0) | (value & 0x0F);
+    this.buffer[0] = (this.buffer[0] & 0xf0) | (value & 0x0f);
   }
 
   /**
@@ -105,8 +105,8 @@ export class ExtendedControlField {
       hex: `0x${this.toHexString()}`,
       addressType: this.addressType === AddressType.GROUP ? "GROUP(1)" : "INDIVIDUAL(0)",
       hopCount: this.hopCount,
-      eff: this.eff,
-      binary: val.toString(2).padStart(8, '0')
+      extendedFrameFormat: this.eff,
+      buffer: val,
     };
   }
 

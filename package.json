@@ -23,6 +23,7 @@
     "test:tpuart": "tsx src/test/tpuart_manual.test.ts",
     "test:controlField": "tsx src/test/controlField.test.ts",
     "test:emi": "tsx src/test/test_emi.test.ts",
+    "test:servers": "tsx src/test/servers_manual.test.ts",
     "pack:test": "npm pack",
     "release:patch": "npm version patch && npm publish",
     "release:minor": "npm version minor && npm publish",

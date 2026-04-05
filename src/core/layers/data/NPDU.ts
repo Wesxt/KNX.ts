@@ -19,7 +19,12 @@ export class NPDU implements ServiceMessage {
   public TPDU: TPDU; // Datos puros (payload del usuario)
   private _addressType: AddressType;
   public length: number = 0;
-  constructor(InstanceOfTPDU: TPDU = new TPDU(), addressType: AddressType = AddressType.GROUP, hopCount: number = 6, length?: number) {
+  constructor(
+    InstanceOfTPDU: TPDU = new TPDU(),
+    addressType: AddressType = AddressType.GROUP,
+    hopCount: number = 6,
+    length?: number,
+  ) {
     this._addressType = addressType;
     this.hopCount = hopCount; // Usa el setter para validar
     this.TPDU = InstanceOfTPDU;
@@ -71,6 +76,7 @@ export class NPDU implements ServiceMessage {
 
   describe() {
     return {
+      obj: this.constructor.name,
       layer: "Network Layer (NPDU)",
       addressType: AddressType[this.addressType],
       hopCount: this.hopCount,

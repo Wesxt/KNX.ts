@@ -51,6 +51,7 @@ export class TPDU implements ServiceMessage {
 
   describe() {
     return {
+      obj: this.constructor.name,
       layer: "Transport Layer (TPDU)",
       tpci: this.tpci.describe(),
       APDU: this.apdu.describe(),

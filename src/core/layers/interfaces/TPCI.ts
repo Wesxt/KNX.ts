@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-duplicate-enum-values */
 /**
  * Este enumerable se basa en el esquema numero 3 del titulo "2. TPDU" del documento "Transport Layer of the KNX System, Version 01.02.03"
  * @see {@link https://my.knx.org/es/shop/knx-specifications?product_type=knx-specifications} - "Transport Layer of the KNX System, Version 01.02.03"
@@ -157,13 +158,14 @@ export class TPCI {
    */
   describe() {
     return {
+      obj: this.constructor.name,
       buffer: this.toBuffer(),
       hex: this.toHex(),
       dataOrControlFlag: this.dataControlFlag ? "Control" : "Data",
       numbered: this.numberedFlag,
       sequenceNumber: this.sequenceNumber,
       firstTwoBitsFromAPCI: this.first2bitsOfAPCI,
-      TPCIType: this.mapTPCIType(this.getValue())
+      TPCIType: this.mapTPCIType(this.getValue()),
     };
   }
 
@@ -193,10 +195,10 @@ export class TPCI {
            * T_Data_Individual-PDU
            * T_Data_Connected-PDU
            */
-          const forceAnalysis = value & 0xFC;
+          const forceAnalysis = value & 0xfc;
           return this.mapTPCIType(forceAnalysis, true);
         } else {
-          return 'Unknown PDU';
+          return "Unknown PDU";
         }
     }
   }

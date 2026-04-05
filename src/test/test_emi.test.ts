@@ -11,7 +11,7 @@ import { CEMI } from "../core/CEMI";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 
 const controlField = new ControlField(0xbc);
-const value = KnxDataEncoder.encodeThis("5", { valueDpt5: 100 });
+const value = KnxDataEncoder.encodeThis("5", { value: 100 });
 const emi = new EMI.DataLinkLayerEMI["L_Data.req"](
   controlField,
   "0/0/1",

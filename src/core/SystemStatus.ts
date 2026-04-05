@@ -171,15 +171,16 @@ export class SystemStatus implements DescribeEstructure {
    */
   describe() {
     return {
-      PROG: `Programación: ${this.PROG ? "Activo" : "Inactivo (fijo a inactivo)"}`,
-      LLM: `Modo Busmonitor: ${this.LLM ? "Desactivado" : "Activado"}`, // 1 = disabled, 0 = enabled
-      TLE: `Capa de Transporte: ${this.TLE ? "Activado" : "Desactivado"}`,
-      ALE: `Capa de Aplicación: ${this.ALE ? "Activado" : "Desactivado"}`,
-      SE: `PEI: ${this.SE ? "Activado" : "Desactivado"}`,
-      UE: `Programa de Usuario: ${this.UE ? "Activado" : "Desactivado"}`,
-      DM: `DM: ${this.DM ? "Activo" : "Inactivo (fijo a inactivo)"}`, // 1 = enabled, 0 = disabled (fijo a 0)
-      PARITY: `Paridad: ${this.PARITY ? "Paridad par (activada)" : "Desactivada"}`,
-      rawValue: `Valor numérico: ${this.#value}`,
+      obj: this.constructor.name,
+      PROG: this.PROG,
+      LLM: this.LLM ? "disabled" : "enabled",
+      TLE: this.TLE,
+      ALE: this.ALE,
+      SE: this.SE,
+      UE: this.UE,
+      DM: this.DM,
+      PARITY: this.PARITY ? "even parity" : "disabled",
+      value: this.#value,
     };
   }
 
@@ -336,13 +337,14 @@ export class Status implements DescribeEstructure {
 
   describe() {
     return {
-      frameError: `Error de trama: ${this.frameError ? "Detectado" : "No detectado"}`,
-      bitError: `Error de bit: ${this.bitError ? "Detectado" : "No detectado"}`,
-      parityError: `Error de paridad: ${this.parityError ? "Detectado" : "No detectado"}`,
-      overflow: `Desbordamiento: ${this.overflow ? "Activado" : "Desactivado"}`,
-      lost: `Perdido: ${this.lost ? "Activado" : "Desactivado"}`,
-      sequenceNumber: `Número de secuencia: ${this.sequenceNumber}`,
-      rawValue: `Valor numérico: ${this.#value}`,
+      obj: this.constructor.name,
+      frameError: this.frameError,
+      bitError: this.bitError,
+      parityError: this.parityError,
+      overflow: this.overflow,
+      lost: this.lost,
+      sequenceNumber: this.sequenceNumber,
+      value: this.#value,
     };
   }
 

@@ -3,6 +3,8 @@ import { APCIEnum } from "../enum/APCIEnum";
 import { KNXService } from "../../connection/KNXService";
 import { KnxDataDecode } from "../data/KNXDataDecode";
 import { KnxDataEncoder } from "../data/KNXDataEncode";
+import { Router } from "../../connection/Router";
+import { IndicationRouterLink } from "../../@types/interfaces/connection";
 
 export interface CacheEntry {
   cemi: CEMIInstance;
@@ -199,21 +201,33 @@ export class GroupAddressCache {
    */
   public async readDirectAsync(
     address: string,
-    serviceContext: KNXService,
+    serviceContext: KNXService | Router,
     timeoutMs: number = 3000,
   ): Promise<CacheEntry | null> {
     return new Promise<CacheEntry | null>((resolve, reject) => {
       // eslint-disable-next-line prefer-const
       let timer: NodeJS.Timeout;
-
+      const isRouter = serviceContext instanceof Router;
       // Listener context reference to intercept indications specifically for this read call
-      const listener = (cemi: InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>) => {
-        if (cemi.controlField2?.addressType === 1 && cemi.destinationAddress === address) {
+      const listener = (
+        data: InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]> | IndicationRouterLink,
+      ) => {
+        const cemi = "msg" in data ? data.msg : data;
+        if (
+          "controlField2" in cemi &&
+          "TPDU" in cemi &&
+          cemi.controlField2?.addressType === 1 &&
+          cemi.destinationAddress === address
+        ) {
           const apciObj = cemi.TPDU.apdu.apci;
           if (apciObj && apciObj.value === APCIEnum.A_GroupValue_Response_Protocol_Data_Unit) {
             // Clean up
             clearTimeout(timer);
-            serviceContext.off("indication", listener);
+            if (isRouter) {
+              serviceContext.off("indication_link", listener);
+            } else {
+              serviceContext.off("indication", listener);
+            }
 
             // Ensure caching happens if not processed previously (if processCEMI wasn't hooked at higher layer for some reason)
             this.processCEMI(cemi);
@@ -246,19 +260,31 @@ export class GroupAddressCache {
         }
       };
 
-      // Set explicit listener on the service context
-      serviceContext.on("indication", listener);
+      if (isRouter) {
+        serviceContext.on("indication_link", listener);
+      } else {
+        // Set explicit listener on the service context
+        serviceContext.on("indication", listener);
+      }
 
       // Start the timer to abort request
       timer = setTimeout(() => {
-        serviceContext.off("indication", listener);
+        if (isRouter) {
+          serviceContext.off("indication_link", listener);
+        } else {
+          serviceContext.off("indication", listener);
+        }
         reject(new Error(`Timeout of ${timeoutMs}ms exceeded while waiting for GroupValue_Response on ${address}`));
       }, timeoutMs);
 
       // Issue the command to the bus
       serviceContext.read(address).catch((err) => {
         clearTimeout(timer);
-        serviceContext.off("indication", listener);
+        if (isRouter) {
+          serviceContext.off("indication_link", listener);
+        } else {
+          serviceContext.off("indication", listener);
+        }
         reject(err);
       });
     });

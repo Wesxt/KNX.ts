@@ -279,7 +279,6 @@ export class KnxDataDecode extends KNXData {
     const c = (raw >> 1) & 0x01; // Bit de control
     const v = raw & 0x01; // Bit de valor
 
-    // eslint-disable-next-line no-useless-assignment
     let description = "";
     // Según la combinación de bits, asignamos una descripción:
     // - c = 0: sin control.
@@ -332,7 +331,6 @@ export class KnxDataDecode extends KNXData {
     // Descripción basada en el valor de StepCode:
     // - Si StepCode es 0, se interpreta como "Break".
     // - Si StepCode es 1..7, se calcula el número de intervalos como 2^(stepCode - 1)
-    // eslint-disable-next-line no-useless-assignment
     let description = "";
     if (stepCode === 0) {
       description = "Break";
@@ -435,7 +433,6 @@ export class KnxDataDecode extends KNXData {
     // Extraer los últimos 3 bits (modo) de la primera posición
     const mode = buffer.readUInt8(0) & 0b111; // Usamos una máscara para obtener los últimos 3 bits
     // Asignar el modo (1: Modo 0, 2: Modo 1, 3: Modo 2)
-    // eslint-disable-next-line no-useless-assignment
     let modeText = "";
     switch (mode) {
       case 0b001:

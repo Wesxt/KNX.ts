@@ -1,6 +1,7 @@
 // KNXAddInfoTypes.ts
 import { Buffer } from "buffer";
 import { Status } from "./SystemStatus";
+import { DescribeEstructure } from "../@types/interfaces/ServiceMessage";
 
 /**
  * Interfaz base para todos los tipos de AddInfo.
@@ -22,7 +23,7 @@ interface IAddInfoType {
 /**
  * Clase base abstracta para ayudar a implementar IAddInfoType.
  */
-export abstract class AddInfoBase implements IAddInfoType {
+export abstract class AddInfoBase implements IAddInfoType, DescribeEstructure {
   protected _typeId: number;
   protected _dataLength: number; // Longitud de los datos (sin TypeID y Length byte)
 
@@ -44,6 +45,8 @@ export abstract class AddInfoBase implements IAddInfoType {
   }
 
   public abstract getBuffer(): Buffer;
+
+  public abstract describe(): ReturnType<DescribeEstructure["describe"]>;
 
   /**
    * Ayudante para parsear el header del buffer en los constructores hijos.
@@ -118,6 +121,15 @@ export class PLMediumInfo extends AddInfoBase {
     buffer.writeUInt8(this._domainAddress[0], 2);
     buffer.writeUInt8(this._domainAddress[1], 3);
     return buffer;
+  }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      domainAddress: this.domainAddress,
+    };
   }
 }
 
@@ -220,6 +232,22 @@ export class RFMediumInformation extends AddInfoBase {
 
     return buffer;
   }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      rfInfo: `0x${this._rfInfo.toString(16).padStart(2, "0")}`,
+      routeLastFlag: this.routeLastFlag,
+      rssi: this.rssi,
+      retransmitterRssi: this.retransmitterRssi,
+      batteryState: this.batteryState ? "Battery OK" : "Battery Low",
+      unidirFlag: this.unidirFlag ? "Unidirectional" : "Bidirectional",
+      serialNumberOrDoA: this.serialNumberOrDoA,
+      lfn: this.lfn,
+    };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -258,6 +286,15 @@ export class ExtendedRelativeTimestamp extends AddInfoBase {
     buffer.writeUInt8(this._dataLength, 1);
     buffer.writeUInt32BE(this._timestamp, 2);
     return buffer;
+  }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      timestamp: this.timestamp,
+    };
   }
 }
 
@@ -309,6 +346,16 @@ export class BiBatInformation extends AddInfoBase {
     buffer.writeUInt8(this._bibatCtrl, 2);
     buffer.writeUInt8(this._bibatBlock, 3);
     return buffer;
+  }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      bibatCtrl: this.bibatCtrl,
+      bibatBlock: this.bibatBlock,
+    };
   }
 }
 
@@ -390,6 +437,19 @@ export class RFMultiInformation extends AddInfoBase {
     buffer.writeUInt8(this._receptionFrequency, 5);
     return buffer;
   }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      transmissionFrequency: this.transmissionFrequency,
+      fastCallChannel: this.fastCallChannel,
+      slowCallChannel: this.slowCallChannel,
+      physicalAcknowledge: this.physicalAcknowledge,
+      receptionFrequency: this.receptionFrequency,
+    };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -438,6 +498,16 @@ export class PreambleAndPostamble extends AddInfoBase {
     buffer.writeUInt16BE(this._preambleLength, 2);
     buffer.writeUInt8(this._postambleLength, 4);
     return buffer;
+  }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      preambleLength: this.preambleLength,
+      postambleLength: this.postambleLength,
+    };
   }
 }
 
@@ -532,6 +602,15 @@ export class RFFastACKInformation extends AddInfoBase {
 
     return buffer;
   }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      fastAcks: this.getFastAcks(),
+    };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -624,6 +703,17 @@ export class ManufacturerSpecificData extends AddInfoBase {
 
     return buffer;
   }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      manufacturerId: this.manufacturerId,
+      subfunction: this.subfunction,
+      data: this.data,
+    };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -680,6 +770,15 @@ export class BusmonitorStatusInfo extends AddInfoBase {
     buffer.writeUInt8(this._status.value, 2);
     return buffer;
   }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      status: this.status.describe(),
+    };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -721,6 +820,15 @@ export class TimestampRelative extends AddInfoBase {
     buffer.writeUInt16BE(this._timestamp, 2);
     return buffer;
   }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      timestamp: this.timestamp,
+    };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -761,5 +869,14 @@ export class TimeDelayUntilSending extends AddInfoBase {
     buffer.writeUInt8(this._dataLength, 1);
     buffer.writeUInt16BE(this._delay, 2);
     return buffer;
+  }
+
+  public describe() {
+    return {
+      obj: this.constructor.name,
+      typeId: this.typeId,
+      dataLength: this.dataLength,
+      delay: this.delay,
+    };
   }
 }

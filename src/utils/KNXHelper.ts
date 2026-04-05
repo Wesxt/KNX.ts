@@ -63,7 +63,7 @@ export class KNXHelper {
     // 2. Caso Number: llamar recursivamente
     if (typeof addr === "number") {
       const buffer = Buffer.alloc(2);
-      buffer.writeUint16BE(addr & 0xFFFF);
+      buffer.writeUint16BE(addr & 0xffff);
       return this.GetAddress(buffer, separator, threeLevelAddressing) as string;
     }
 
@@ -115,7 +115,7 @@ export class KNXHelper {
    */
   static addressToBuffer(address: string, separator = ".", group = false, threeLevelAddressing = true): Buffer {
     const parts = address.split(separator).map(Number);
-    let addr = Buffer.alloc(2);
+    const addr = Buffer.alloc(2);
     if (parts.length < (threeLevelAddressing ? 3 : 2)) {
       throw new InvalidKnxAddressException("Invalid address. Incorrect format.");
     }
@@ -152,10 +152,10 @@ export class KNXHelper {
    */
   static GetAddress_(address: string) {
     try {
-      let addr = Buffer.alloc(2);
+      const addr = Buffer.alloc(2);
       let threeLevelAddressing = true;
       let parts;
-      let group = address.indexOf("/") !== -1;
+      const group = address.indexOf("/") !== -1;
       if (!group) {
         // individual address
         parts = address.split(".");
@@ -176,7 +176,7 @@ export class KNXHelper {
         addr[0] = (part << 3) & 255;
         part = parseInt(parts[1]);
         if (part > 2047) throw new InvalidKnxAddressException(address);
-        let part2 = Buffer.alloc(2);
+        const part2 = Buffer.alloc(2);
         part2.writeUInt16BE(part, 0);
         if (part2.length > 2) throw new InvalidKnxAddressException(address);
         addr[0] = (addr[0] | part2[0]) & 255;
@@ -193,6 +193,7 @@ export class KNXHelper {
         addr[1] = part & 255;
       }
       return addr;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       throw new InvalidKnxAddressException(address);
     }
@@ -281,7 +282,7 @@ export class KNXHelper {
 
     // ESTRATEGIA: Optimización "Short Data" (6 bits)
     // Si es 1 byte y el valor es pequeño (<= 0x3F), asumimos que es DPT1/2/3 y lo incrustamos.
-    if (data.length === 1 && data[0] <= 0x3f || isShort) {
+    if ((data.length === 1 && data[0] <= 0x3f) || isShort) {
       // Usamos OR para mezclar los 6 bits bajos con el comando existente en dataStart
       datagram[dataStart] = (datagram[dataStart] & 0xc0) | (data[0] & 0x3f);
       return;
@@ -291,7 +292,7 @@ export class KNXHelper {
     // Se escriben a partir del siguiente byte (dataStart + 1)
     datagram[dataStart] = datagram[dataStart] & 0xc0; // Limpiamos la parte de datos del byte de control
 
-    for (var i = 0; i < data.length; i++) {
+    for (let i = 0; i < data.length; i++) {
       datagram[dataStart + 1 + i] = data[i];
     }
   }

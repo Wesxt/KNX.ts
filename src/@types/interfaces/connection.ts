@@ -1,5 +1,6 @@
 import pino from "pino";
 import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
+import { CEMIInstance } from "../../core/CEMI";
 
 /**
  * Options for configuring a KNX Tunneling connection.
@@ -31,12 +32,30 @@ export interface KNXTunnelingOptions extends KNXnetIPOptions {
   maxQueueSize?: number;
 }
 
-export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip" | "port"> {
+export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip"> {
+  /**
+   * IP for Multicast
+   */
   ip?: string;
+  /**
+   * Port for listening to Tunneling clients
+   */
   port?: number;
+  /**
+   * Individual address for KNXnetIpServer
+   */
   individualAddress?: string;
+  /**
+   * MAC address for the KNXnetIP
+   */
   serialNumber?: Buffer;
+  /**
+   * The name displayed to other KNXnetIP devices or applications such as ETS.
+   */
   friendlyName?: string;
+  /**
+   * MAC address for the KNXnetIP
+   */
   macAddress?: string;
   /**
    * Defines the client address pool for KNXnet/IP Tunneling connections (e.g. "15.15.10:10" or "1.1.1:5").
@@ -70,15 +89,15 @@ export interface ExternalManagerOptions {
   /**
    * Optional configuration for a physical TPUART connection.
    */
-  tpuart?: TPUARTOptions;
+  tpuart?: { individualAddress?: string } & Omit<TPUARTOptions, "individualAddress">;
   /**
    * Optional list of outbound KNX IP Tunneling client connections.
    */
-  tunneling?: KNXTunnelingOptions[];
+  tunneling?: { individualAddress?: string } & Omit<KNXTunnelingOptions, "individualAddress">[];
   /**
    * Optional configuration for a physical KNX USB connection.
    */
-  usb?: KNXUSBOptions;
+  usb?: { individualAddress?: string } & Omit<KNXUSBOptions, "individualAddress">;
   /**
    * Pino logger configuration for the Router bridge.
    */
@@ -120,8 +139,14 @@ export interface KNXLoggerOptions extends pino.LoggerOptions {
 }
 
 export interface KNXnetIPOptions {
+  /**
+   * IP address of the KNXnetIP server
+   */
   ip: string;
-  port: number;
+  /**
+   * Port of the KNXnetIP server
+   */
+  port?: number;
   localIp?: string;
   localPort?: number;
   /**
@@ -212,4 +237,9 @@ export interface KNXDiscoveredDevice {
   routingMulticastAddress: string;
   macAddress: string;
   friendlyName: string;
+}
+
+export interface IndicationRouterLink {
+  src: string;
+  msg: CEMIInstance;
 }

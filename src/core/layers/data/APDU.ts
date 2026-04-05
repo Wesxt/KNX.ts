@@ -14,7 +14,7 @@ export class APDU implements ServiceMessage {
     tpci: TPCI = new TPCI(TPCIType.T_DATA_GROUP_PDU),
     apci: APCI = new APCI(APCIEnum.A_GroupValue_Write_Protocol_Data_Unit),
     data: Buffer = Buffer.alloc(0),
-    isShort: boolean = false
+    isShort: boolean = false,
   ) {
     this.tpci = tpci;
     this.apci = apci;
@@ -50,6 +50,7 @@ export class APDU implements ServiceMessage {
 
   describe() {
     return {
+      obj: this.constructor.name,
       layer: "Application Layer (APDU)",
       tpci: this.tpci.describe(),
       apci: this.apci.describe(),

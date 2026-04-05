@@ -1,7 +1,8 @@
 import { KNXService } from "../../connection/KNXService";
+import { Router } from "../../connection/Router";
 
 export interface MQTTGatewayOptions {
-  knxContext: KNXService;
+  knxContext: KNXService | Router;
 
   // Either spin up an internal Aedes broker
   embeddedBroker?: {
@@ -19,8 +20,9 @@ export interface MQTTGatewayOptions {
 }
 
 export interface WebSocketGatewayOptions {
+  host: string;
   port: number;
-  knxContext: KNXService;
+  knxContext: KNXService | Router;
 }
 
 export interface WSClientPayload {

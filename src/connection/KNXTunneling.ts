@@ -54,6 +54,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     if (!this.options.connectionType) {
       this.options.connectionType = ConnectionType.TUNNEL_CONNECTION;
     }
+    this.options.port = options.port || 3671;
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
     this.logger = this.logger.child({ module: "TunnelClient" });
   }
