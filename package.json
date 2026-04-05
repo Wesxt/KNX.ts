@@ -1,6 +1,6 @@
 {
   "name": "knx.ts",
-  "version": "1.0.13",
+  "version": "1.0.11",
   "description": "A high-performance KNXnet/IP server and client library in TypeScript, focused on ETS stability.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,9 +25,9 @@
     "test:emi": "tsx src/test/test_emi.test.ts",
     "test:servers": "tsx src/test/servers_manual.test.ts",
     "pack:test": "npm pack",
-    "release:patch": "npm version patch",
-    "release:minor": "npm version minor",
-    "release:major": "npm version major"
+    "release:patch": "npm version patch && git push --follow-tags",
+    "release:minor": "npm version minor && git push --follow-tags",
+    "release:major": "npm version major && git push --follow-tags"
   },
   "contributors": [
     {
