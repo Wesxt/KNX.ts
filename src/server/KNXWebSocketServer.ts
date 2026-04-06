@@ -81,7 +81,7 @@ export class KNXWebSocketGateway {
 
   private handleClientMessage(ws: WebSocket, payload: WSClientPayload) {
     const { action, groupAddress, value, dpt } = payload;
-    if (typeof value !== "object") this.sendError(ws, "The value is must be object");
+    if (value && typeof value !== "object") this.sendError(ws, "The value is must be object");
     if (!action) {
       this.sendError(ws, "Missing action in payload");
       return;
