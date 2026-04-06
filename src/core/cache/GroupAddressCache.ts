@@ -77,18 +77,17 @@ export class GroupAddressCache {
   public processCEMI(cemi: CEMIInstance): void {
     if (!("controlField2" in cemi) || !("TPDU" in cemi)) return;
     if (!this.enabled) return;
-
-    if (cemi.controlField2?.addressType !== 1) {
+    if (cemi.controlField2.addressType !== 1) {
       return; // Not a group address
     }
 
     const apciObj = cemi.TPDU.apdu.apci;
-    if (!apciObj) return;
 
     const apci = apciObj;
     if (
       apci.value !== APCIEnum.A_GroupValue_Read_Protocol_Data_Unit &&
-      apci.value !== APCIEnum.A_GroupValue_Response_Protocol_Data_Unit
+      apci.value !== APCIEnum.A_GroupValue_Response_Protocol_Data_Unit &&
+      apci.value !== APCIEnum.A_GroupValue_Write_Protocol_Data_Unit
     ) {
       return;
     }
