@@ -1,5 +1,7 @@
+import { SerialPortOptions } from "modbus-serial/ModbusRTU";
 import { KNXService } from "../../connection/KNXService";
 import { Router } from "../../connection/Router";
+import { KNXLoggerOptions } from "./connection";
 
 export type ModbusProtocol = "tcp" | "rtu";
 export type ModbusMode = "master" | "slave";
@@ -63,6 +65,7 @@ export interface ModbusMapping {
      */
     publishTemplate?: string;
   };
+  _lastValue?: any;
 }
 
 export interface SharedMQTTOptions {
@@ -93,10 +96,9 @@ export interface ModbusGatewayOptions {
   // Connection config: TCP
   host?: string;
   port?: number;
+  path: string;
 
-  // Connection config: RTU
-  path?: string; // e.g. COM3 or /dev/ttyUSB0
-  baudRate?: number;
+  serialPort: SerialPortOptions;
 
   /**
    * Modbus Unit ID (Slave ID).
@@ -124,4 +126,6 @@ export interface ModbusGatewayOptions {
    * Default: modbus/config/add_mapping
    */
   dynamicConfigTopic?: string;
+
+  logOptions?: KNXLoggerOptions;
 }

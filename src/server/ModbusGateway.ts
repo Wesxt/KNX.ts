@@ -4,9 +4,9 @@ import { CEMIInstance } from "../core/CEMI";
 import { Aedes } from "aedes";
 import { createServer, Server } from "aedes-server-factory";
 import * as mqtt from "mqtt";
-import { knxLogger } from "../utils/Logger";
+import { knxLogger, setupLogger } from "../utils/Logger";
 import pino from "pino";
-import ModbusRTU from "modbus-serial";
+import ModbusRTU, { ServerSerial, ServerTCP } from "modbus-serial";
 
 export class ModbusGateway {
   private options: ModbusGatewayOptions;
@@ -19,7 +19,8 @@ export class ModbusGateway {
 
   // Modbus
   private modbusClient: ModbusRTU | null = null; // Master
-  private modbusServer: any = null; // Slave
+  private modbusServer: ServerSerial | ServerTCP | null = null; // Slave
+  private isPolling = false;
   private memoryMap: {
     coils: Buffer;
     discrete: Buffer;
@@ -40,6 +41,9 @@ export class ModbusGateway {
     this.options = options;
     if (options.mappings) {
       this.mappings = [...options.mappings];
+    }
+    if (this.options.logOptions) {
+      setupLogger(this.options.logOptions);
     }
     this.logger = knxLogger.child({ module: "ModbusGateway" });
   }
@@ -73,7 +77,7 @@ export class ModbusGateway {
     this.pollingTimers = [];
 
     if (this.modbusClient) this.modbusClient.close();
-    if (this.modbusServer) this.modbusServer.close();
+    if (this.modbusServer) this.modbusServer.close((err) => this.logger.error(err));
   }
 
   // ============== MODBUS CLIENT (MASTER) ==============
@@ -93,11 +97,11 @@ export class ModbusGateway {
         });
       });
     } else {
-      if (!this.options.path || !this.options.baudRate) throw new Error("Missing path or baudRate for RTU mode");
+      if (!this.options.path) throw new Error("Missing path for RTU mode");
+      const serialPortOpts = this.options.serialPort;
       const path = this.options.path;
-      const baudRate = this.options.baudRate;
       await new Promise<void>((resolve, reject) => {
-        this.modbusClient!.connectRTU(path, { baudRate }, (err: any) => {
+        this.modbusClient!.connectRTU(path, serialPortOpts, (err: any) => {
           if (err) return reject(err);
           resolve();
         });
@@ -107,18 +111,12 @@ export class ModbusGateway {
 
   private startMasterPolling() {
     const defaultInterval = this.options.defaultPollingInterval || 1000;
+    this.isPolling = true;
 
-    // We can poll individually based on intervals.
-    // For optimization in real world, grouping continuous registers is preferred.
-    // Here we use single register polling for precise mapping implementation.
-    for (const mapping of this.mappings) {
-      const intervalMs = mapping.interval || defaultInterval;
+    const pollLoop = async () => {
+      if (!this.isPolling || !this.modbusClient?.isOpen) return;
 
-      let lastValue: any = null;
-
-      const timer = setInterval(async () => {
-        if (!this.modbusClient?.isOpen) return;
-
+      for (const mapping of this.mappings) {
         try {
           let value: number | boolean | null = null;
           const dataType = mapping.dataType || "uint16";
@@ -144,19 +142,25 @@ export class ModbusGateway {
             if (mapping.scale && typeof value === "number") {
               processedValue = value * mapping.scale;
             }
-
-            if (lastValue !== processedValue) {
-              lastValue = processedValue;
+            // Necesitarás guardar el lastValue en el propio objeto mapping o en un Map
+            if (mapping._lastValue !== processedValue) {
+              mapping._lastValue = processedValue;
               this.onModbusValueChanged(mapping, processedValue);
             }
           }
         } catch (e) {
-          this.logger.debug(e, "Error polling modbus register");
+          this.logger.debug(e, `Error polling address ${mapping.address}`);
         }
-      }, intervalMs);
 
-      this.pollingTimers.push(timer);
-    }
+        // Respiro obligatorio para el bus RS485 entre peticiones (ej. 20ms - 50ms)
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      // Volver a iniciar el ciclo completo respetando el intervalo general
+      setTimeout(pollLoop, defaultInterval);
+    };
+
+    pollLoop();
   }
 
   // ============== MODBUS SERVER (SLAVE) ==============
@@ -178,16 +182,16 @@ export class ModbusGateway {
     };
 
     if (this.options.protocol === "tcp") {
-      this.modbusServer = new (ModbusRTU as any).ServerTCP(vector, {
+      this.modbusServer = new ServerTCP(vector, {
         host: this.options.host || "0.0.0.0",
         port: this.options.port || 502,
         debug: false,
         unitID: this.options.modbusId || 1,
       });
     } else {
-      this.modbusServer = new (ModbusRTU as any).ServerSerial(vector, {
-        port: this.options.path,
-        baudRate: this.options.baudRate,
+      this.modbusServer = new ServerSerial(vector, {
+        path: this.options.path,
+        baudRate: this.options.serialPort.baudRate || 9600,
         debug: false,
         unitID: this.options.modbusId || 1,
       });
