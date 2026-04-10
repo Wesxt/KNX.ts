@@ -250,6 +250,102 @@ await mqttGateway.start();
   - Configurar DPT: `[prefijo]/command/config_dpt/[direccionDeGrupo]`
     - Carga útil: `{ "dpt": "9.001" }`
 
+### Pasarela Modbus (Bidireccional KNX/MQTT/Modbus)
+
+El `ModbusGateway` permite un mapeo bidireccional entre los registros Modbus (coils, discrete inputs, holding registers, input registers) y Direcciones de Grupo KNX o Tópicos MQTT.
+
+**Características Principales**:
+- Conéctese como un Maestro (Client) Modbus para leer desde dispositivos esclavos (vía TCP o RTU) y enviar su estado a KNX o MQTT.
+- Ejecútese como un Esclavo (Server) Modbus ofreciendo un mapa de memoria de registros para que los PLC o SCADAs puedan leer/escribir datos desde/hacia su red KNX/MQTT.
+- Soporte para registros compuestos de 32-bits (`float32`, `uint32`, `int32`) y sus equivalentes con orden de palabras invertido (Little Endian Word Swap).
+- Tópicos MQTT dinámicos y plantillas para las cargas útiles.
+- ¡Inyecte mapeos dinámicos en tiempo de ejecución a través de MQTT!
+
+#### Ejemplo Modo Maestro (Leyendo un medidor RS485 mapeado a KNX)
+
+```typescript
+import { ModbusGateway, Router } from "knx.ts";
+
+const myRouter = new Router();
+// Proporcione una conexión para myRouter...
+
+const gatewayMaster = new ModbusGateway({
+  mode: "master",
+  protocol: "rtu",
+  path: "COM3", // ej., "/dev/ttyUSB0" en Linux
+  baudRate: 9600,
+  modbusId: 1, // ID del esclavo destino
+  knxContext: myRouter,
+  defaultPollingInterval: 1000,
+  mappings: [
+    {
+      type: "holding",
+      address: 10,  // Registro Holding 10
+      scale: 0.1,   // Escala ej. 2250 a 225.0
+      knx: {
+        groupAddress: "1/1/1",
+        dpt: "9.020" // Milivoltios / Temperatura / etc.
+      }
+    }
+  ]
+});
+
+await gatewayMaster.start();
+```
+
+#### Ejemplo Modo Esclavo (Emulando un PLC TCP mapeado a MQTT)
+
+```typescript
+import { ModbusGateway } from "knx.ts";
+
+const gatewaySlave = new ModbusGateway({
+  mode: "slave",
+  protocol: "tcp",
+  host: "0.0.0.0",
+  port: 502,
+  modbusId: 10, // ID del Esclavo del Servidor
+  mqtt: {
+    brokerUrl: "mqtt://127.0.0.1:1883"
+  },
+  mappings: [
+    {
+      type: "coil",
+      address: 5,   // Bobina 5
+      mqtt: {
+        topic: "edificio/luces/piso1",
+        publishTemplate: "{\"state\": {{value}}}" 
+      }
+    }
+  ]
+});
+
+await gatewaySlave.start();
+```
+
+#### Mapeos Dinámicos en Ejecución (vía MQTT)
+
+Por defecto, si la Pasarela Modbus se ejecuta con una configuración `mqtt`, se suscribirá al tópico `modbus/config/add_mapping`.
+¡Puede enviar una carga útil JSON a este tópico para añadir un nuevo mapeo de registro dinámicamente durante la ejecución!
+
+**Tópico:** `modbus/config/add_mapping`
+**Payload:**
+```json
+{
+  "type": "holding",
+  "address": 100,
+  "dataType": "float32",
+  "interval": 2000,
+  "knx": {
+    "groupAddress": "2/2/2",
+    "dpt": "5.001"
+  },
+  "mqtt": {
+    "topic": "edificio/temp/salon",
+    "publishTemplate": "{\"temp\": {{value}}}"
+  }
+}
+```
+
 ## 📝 Registros (Logging)
 
 La librería utiliza un registrador único global basado en [Pino](https://getpino.io/). Puedes configurarlo al comienzo de tu aplicación usando `setupLogger`.

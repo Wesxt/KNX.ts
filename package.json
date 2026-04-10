@@ -28,6 +28,7 @@
     "test:controlField": "tsx src/test/controlField.test.ts",
     "test:emi": "tsx src/test/test_emi.test.ts",
     "test:servers": "tsx src/test/servers_manual.test.ts",
+    "test:modbus": "tsx src/test/modbus_manual.test.ts",
     "pack:test": "npm pack",
     "release:patch": "npm version patch && git push --follow-tags",
     "release:minor": "npm version minor && git push --follow-tags",
@@ -76,5 +77,8 @@
     "pino-roll": "^4.0.0",
     "serialport": "^13.0.0",
     "ws": "^8.20.0"
+  },
+  "optionalDependencies": {
+    "modbus-serial": "^8.0.25"
   }
 }

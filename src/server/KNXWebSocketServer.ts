@@ -14,6 +14,7 @@ export class KNXWebSocketGateway {
 
   constructor(options: WebSocketGatewayOptions) {
     this.options = options;
+    this.options.submitACompleteCEMI = this.options.submitACompleteCEMI ?? false;
     // Enable the cache singleton
     GroupAddressCache.getInstance().setEnabled(true);
   }
@@ -153,7 +154,11 @@ export class KNXWebSocketGateway {
     const msg = JSON.stringify({
       action: "event",
       groupAddress: address,
-      cemi: cemi.describe(),
+      cemi: this.options.submitACompleteCEMI
+        ? cemi.describe()
+        : "TPDU" in cemi
+          ? cemi.TPDU?.apdu?.data?.toString("hex")
+          : null,
       decodedValue: decodedValue ?? null,
       sourceLinkKey,
     });

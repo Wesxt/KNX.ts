@@ -255,6 +255,102 @@ await mqttGateway.start();
   - Configure DPT: `[prefix]/command/config_dpt/[groupAddress]`
     - Payload: `{ "dpt": "9.001" }`
 
+### Modbus Gateway (Bidirectional KNX/MQTT/Modbus)
+
+The `ModbusGateway` allows bidirectional mapping between Modbus registers (coils, discrete inputs, holding registers, input registers) and KNX Group Addresses or MQTT Topics.
+
+**Features Options**:
+- Connect as a Modbus Master (Client) to read from slave devices (via TCP or RTU) and push state via KNX or MQTT.
+- Run as a Modbus Slave (Server) offering a register memory map so PLCs or SCADAs can read/write data from/to your KNX/MQTT network.
+- Support for 32-bit composite registers (`float32`, `uint32`, `int32`) and their little-endian word-swapped equivalents.
+- Dynamic MQTT topics and payload templating.
+- Inject dynamic mappings at runtime via MQTT!
+
+#### Master Mode Example (Reading RS485 Meter mapped to KNX)
+
+```typescript
+import { ModbusGateway, Router } from "knx.ts";
+
+const myRouter = new Router();
+// Provide a connection to myRouter...
+
+const gatewayMaster = new ModbusGateway({
+  mode: "master",
+  protocol: "rtu",
+  path: "COM3", // e.g., "/dev/ttyUSB0" on Linux
+  baudRate: 9600,
+  modbusId: 1, // Target slave ID
+  knxContext: myRouter,
+  defaultPollingInterval: 1000,
+  mappings: [
+    {
+      type: "holding",
+      address: 10,  // Holding Register 10
+      scale: 0.1,   // Scales e.g. 2250 to 225.0
+      knx: {
+        groupAddress: "1/1/1",
+        dpt: "9.020" // Millivolt / Temperature / etc.
+      }
+    }
+  ]
+});
+
+await gatewayMaster.start();
+```
+
+#### Slave Mode Example (Emulating a TCP PLC mapped to MQTT)
+
+```typescript
+import { ModbusGateway } from "knx.ts";
+
+const gatewaySlave = new ModbusGateway({
+  mode: "slave",
+  protocol: "tcp",
+  host: "0.0.0.0",
+  port: 502,
+  modbusId: 10, // My Server's Slave ID
+  mqtt: {
+    brokerUrl: "mqtt://127.0.0.1:1883"
+  },
+  mappings: [
+    {
+      type: "coil",
+      address: 5,   // Coil 5
+      mqtt: {
+        topic: "building/lights/floor1",
+        publishTemplate: "{\"state\": {{value}}}" 
+      }
+    }
+  ]
+});
+
+await gatewaySlave.start();
+```
+
+#### Dynamic Runtime Mappings (via MQTT)
+
+By default, if the Modbus Gateway is running with an `mqtt` config, it will subscribe to the `modbus/config/add_mapping` topic.
+You can send a JSON payload to this topic to add a new register mapping dynamically during execution!
+
+**Topic:** `modbus/config/add_mapping`
+**Payload:**
+```json
+{
+  "type": "holding",
+  "address": 100,
+  "dataType": "float32",
+  "interval": 2000,
+  "knx": {
+    "groupAddress": "2/2/2",
+    "dpt": "5.001"
+  },
+  "mqtt": {
+    "topic": "building/temp/livingroom",
+    "publishTemplate": "{\"temp\": {{value}}}"
+  }
+}
+```
+
 ## 📝 Logging
 
 The library uses a single global logger based on [Pino](https://getpino.io/). You can configure it at the beginning of your application using `setupLogger`.

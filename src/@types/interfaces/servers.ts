@@ -23,6 +23,10 @@ export interface WebSocketGatewayOptions {
   host: string;
   port: number;
   knxContext: KNXService | Router;
+  /**
+   * Submit a complete CEMI message instead of just the decoded value and apdu data.
+   */
+  submitACompleteCEMI?: boolean;
 }
 
 export interface WSClientPayload {
