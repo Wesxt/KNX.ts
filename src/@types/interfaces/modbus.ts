@@ -13,9 +13,9 @@ export type ModbusDataType =
   | "uint32" // 32-bit unsigned (Big Endian)
   | "int32" // 32-bit signed (Big Endian)
   | "float32" // 32-bit IEEE 754 Float (Big Endian - AB CD)
-  | "float32_swapped" // 32-bit IEEE 754 Float (Little Endian Word Swap - CD AB)
-  | "uint32_swapped" // 32-bit unsigned (Little Endian Word Swap - CD AB)
-  | "int32_swapped"; // 32-bit signed (Little Endian Word Swap - CD AB)
+  | "float32_LE" // 32-bit IEEE 754 Float (Little Endian Word Swap - CD AB)
+  | "uint32_LE" // 32-bit unsigned (Little Endian Word Swap - CD AB)
+  | "int32_LE"; // 32-bit signed (Little Endian Word Swap - CD AB)
 
 export interface ModbusMapping {
   /**
@@ -46,11 +46,27 @@ export interface ModbusMapping {
   debounceMs?: number;
 
   /**
+   * Used in Master mode. If defined, overrides the Gateway's default slave ID.
+   */
+  slaveId?: number;
+
+  /**
+   * Optional bitmask mappings. Maps a logical key to a numeric mask (e.g. { "statusFlag": 0x01 }).
+   * The value extracted will be shifted down up to the first non-zero bit of the mask.
+   */
+  masks?: Record<string, number>;
+
+  /**
    * If provided, the gateway will sync this Modbus register with this KNX Group Address.
    */
   knx?: {
     groupAddress: string;
     dpt: string | number;
+    /**
+     * Required object template for KNX encoding (compatible with KNXDataEncoder.encodeThis payload).
+     * Strings '{{value}}' or '{{<key>}}' (where key is a key from masks) will be replaced dynamically.
+     */
+    valueTemplate: any;
   };
 
   /**

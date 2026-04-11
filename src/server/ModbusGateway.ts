@@ -27,11 +27,11 @@ export class ModbusGateway {
     holding: Buffer;
     input: Buffer;
   } = {
-    coils: Buffer.alloc(10000), // simplistic memory map up to 10000 registers
-    discrete: Buffer.alloc(10000),
-    holding: Buffer.alloc(20000), // 2 bytes per holding
-    input: Buffer.alloc(20000),
-  };
+      coils: Buffer.alloc(10000), // simplistic memory map up to 10000 registers
+      discrete: Buffer.alloc(10000),
+      holding: Buffer.alloc(20000), // 2 bytes per holding
+      input: Buffer.alloc(20000),
+    };
 
   private pollingTimers: NodeJS.Timeout[] = [];
   private notifyDebouncers: Map<string, NodeJS.Timeout> = new Map();
@@ -46,6 +46,28 @@ export class ModbusGateway {
       setupLogger(this.options.logOptions);
     }
     this.logger = knxLogger.child({ module: "ModbusGateway" });
+  }
+
+  public addMapping(mapping: ModbusMapping) {
+    this.mappings.push(mapping);
+    if (mapping.mqtt?.topic && this.mqttClient?.connected) {
+      this.mqttClient.subscribe(`${mapping.mqtt.topic}/set`);
+    }
+  }
+
+  public removeMappingByAddress(address: number, type: ModbusMapping["type"]) {
+    this.mappings = this.mappings.filter(m => !(m.address === address && m.type === type));
+  }
+
+  public setMappings(mappings: ModbusMapping[]) {
+    this.mappings = [...mappings];
+    if (this.mqttClient?.connected) {
+      for (const m of this.mappings) {
+        if (m.mqtt?.topic) {
+          this.mqttClient.subscribe(`${m.mqtt.topic}/set`);
+        }
+      }
+    }
   }
 
   public async start(): Promise<void> {
@@ -119,6 +141,11 @@ export class ModbusGateway {
 
       for (const mapping of this.mappings) {
         try {
+          if (this.modbusClient) {
+            const targetId = mapping.slaveId ?? this.options.modbusId ?? 1;
+            this.modbusClient.setID(targetId);
+          }
+
           let value: number | boolean | null = null;
           const dataType = mapping.dataType || "uint16";
           const is32Bit = dataType.includes("32");
@@ -220,7 +247,7 @@ export class ModbusGateway {
     const timer = setTimeout(() => {
       this.notifyDebouncers.delete(key);
 
-      let processedValue: any = rawValue;
+      let processedValue = rawValue;
 
       const is32Bit = mapping.dataType?.includes("32");
       if (is32Bit && mapping.type === "holding") {
@@ -246,11 +273,69 @@ export class ModbusGateway {
 
   // ============== DATA FLOW: MODBUS -> OTHERS ==============
 
-  private onModbusValueChanged(mapping: ModbusMapping, value: any) {
+  private onModbusValueChanged(mapping: ModbusMapping, value: number | boolean) {
+    // calculate masks
+    const maskValues: Record<string, number> = {};
+    if (mapping.masks && typeof value === 'number') {
+      for (const [key, mask] of Object.entries(mapping.masks)) {
+        let masked = value & mask;
+        let shift = 0;
+        let tempMask = mask;
+        if (tempMask > 0) {
+          while ((tempMask & 1) === 0) {
+            shift++;
+            tempMask >>= 1;
+          }
+          masked >>= shift;
+        }
+        maskValues[key] = masked;
+      }
+    }
+
     // 1. Send to KNX if configured
     if (mapping.knx && this.options.knxContext) {
       if (mapping.knx.dpt === "config_dpt") return; // Edge case
-      this.options.knxContext.write(mapping.knx.groupAddress, mapping.knx.dpt as any, { value } as any).catch((e) => {
+
+      let knxPayload: any = { value };
+      if (mapping.knx.valueTemplate) {
+        knxPayload = JSON.parse(JSON.stringify(mapping.knx.valueTemplate));
+
+        const replaceValues = (obj: any) => {
+          for (const k of Object.keys(obj)) {
+            if (typeof obj[k] === 'string') {
+              const str = obj[k] as string;
+              if (str === '{{value}}') {
+                obj[k] = value;
+              } else {
+                let matchedMask = false;
+                for (const [mKey, mVal] of Object.entries(maskValues)) {
+                  if (str === `{{${mKey}}}`) {
+                    obj[k] = mVal;
+                    matchedMask = true;
+                    break;
+                  }
+                }
+                if (!matchedMask && str.includes('{{')) {
+                  let newStr = str.replace(/\{\{\s*value\s*\}\}/g, String(value));
+                  for (const [mKey, mVal] of Object.entries(maskValues)) {
+                    const reg = new RegExp(`\\{\\{\\s*${mKey}\\s*\\}\\}`, 'g');
+                    newStr = newStr.replace(reg, String(mVal));
+                  }
+                  obj[k] = newStr;
+                }
+              }
+            } else if (typeof obj[k] === 'object' && obj[k] !== null) {
+              replaceValues(obj[k]);
+            }
+          }
+        };
+        replaceValues(knxPayload);
+      } else {
+        // Fallback if no template provided, though it's forced by typing now
+        knxPayload = { value };
+      }
+
+      this.options.knxContext.write(mapping.knx.groupAddress, mapping.knx.dpt as any, knxPayload).catch((e) => {
         this.logger.debug(e, "Error writing to KNX context");
       });
     }
@@ -258,20 +343,69 @@ export class ModbusGateway {
     // 2. Send to MQTT if configured
     if (mapping.mqtt && this.mqttClient?.connected) {
       const topic = mapping.mqtt.topic;
-      let payload = JSON.stringify({ value });
+      let payload = JSON.stringify({ value, ...maskValues });
       if (mapping.mqtt.publishTemplate) {
-        payload = mapping.mqtt.publishTemplate.replace("{{value}}", String(value));
+        payload = mapping.mqtt.publishTemplate.replace(/\{\{\s*value\s*\}\}/g, String(value));
+        for (const [mKey, mVal] of Object.entries(maskValues)) {
+          const reg = new RegExp(`\\{\\{\\s*${mKey}\\s*\\}\\}`, 'g');
+          payload = payload.replace(reg, String(mVal));
+        }
       }
       this.mqttClient.publish(topic, payload, { retain: true });
     }
   }
 
   // ============== DATA FLOW: OTHERS -> MODBUS ==============
-
+  /**
+   * @warning This method is not tested yet
+   * @param mapping 
+   * @param value 
+   */
   private async writeToModbus(mapping: ModbusMapping, value: any) {
     let targetRawValue = value;
-    if (mapping.scale && typeof value === "number") {
-      targetRawValue = value / mapping.scale; // Reverse scale
+
+    if (mapping.knx?.valueTemplate && typeof value === 'object' && value !== null) {
+      let resolvedModbusValue: number | undefined;
+
+      const extractFromTemplate = (template: any, knxObj: any) => {
+        for (const k of Object.keys(template)) {
+          if (typeof template[k] === 'string') {
+            if (template[k] === '{{value}}') {
+              resolvedModbusValue = Number(knxObj[k]);
+            } else if (mapping.masks) {
+              for (const [mKey, mVal] of Object.entries(mapping.masks)) {
+                if (template[k] === `{{${mKey}}}`) {
+                  if (resolvedModbusValue === undefined) {
+                    resolvedModbusValue = Number(mapping._lastValue || 0); // Start from last known
+                  }
+                  let shift = 0;
+                  let tempMask = mVal;
+                  if (tempMask > 0) {
+                    while ((tempMask & 1) === 0) {
+                      shift++;
+                      tempMask >>= 1;
+                    }
+                  }
+                  const partValue = (Number(knxObj[k]) << shift) & mVal;
+                  resolvedModbusValue = (resolvedModbusValue & ~mVal) | partValue;
+                }
+              }
+            }
+          } else if (typeof template[k] === 'object' && template[k] !== null) {
+            if (knxObj[k] !== undefined) extractFromTemplate(template[k], knxObj[k]);
+          }
+        }
+      };
+
+      extractFromTemplate(mapping.knx.valueTemplate, value);
+
+      if (resolvedModbusValue !== undefined) {
+        targetRawValue = resolvedModbusValue;
+      }
+    }
+
+    if (mapping.scale && typeof targetRawValue === "number") {
+      targetRawValue = targetRawValue / mapping.scale; // Reverse scale
       // Note: we don't round immediately because we might be writing a float32!
     }
 
@@ -280,6 +414,9 @@ export class ModbusGateway {
 
     if (this.options.mode === "master" && this.modbusClient?.isOpen) {
       try {
+        const targetId = mapping.slaveId ?? this.options.modbusId ?? 1;
+        this.modbusClient.setID(targetId);
+
         if (mapping.type === "coil") {
           await this.modbusClient.writeCoil(mapping.address, !!targetRawValue);
         } else if (mapping.type === "holding") {
@@ -334,14 +471,14 @@ export class ModbusGateway {
 
     // Swapped means CD AB order (Little Endian words, but bytes inside words are still Big Endian)
     // Swap the first two bytes with the last two bytes
-    if (dataType.includes("swapped")) {
+    if (dataType.includes("LE")) {
       const swapped = Buffer.alloc(4);
       swapped.writeUInt16BE(buffer.readUInt16BE(2), 0);
       swapped.writeUInt16BE(buffer.readUInt16BE(0), 2);
 
-      if (dataType === "float32_swapped") return swapped.readFloatBE(0);
-      if (dataType === "uint32_swapped") return swapped.readUInt32BE(0);
-      if (dataType === "int32_swapped") return swapped.readInt32BE(0);
+      if (dataType === "float32_LE") return swapped.readFloatBE(0);
+      if (dataType === "uint32_LE") return swapped.readUInt32BE(0);
+      if (dataType === "int32_LE") return swapped.readInt32BE(0);
     }
 
     return buffer.readUInt16BE(0);
@@ -351,9 +488,9 @@ export class ModbusGateway {
     const buffer = Buffer.alloc(4);
 
     // Default or non-swapped
-    if (dataType === "float32" || dataType === "float32_swapped") buffer.writeFloatBE(value, 0);
-    else if (dataType === "uint32" || dataType === "uint32_swapped") buffer.writeUInt32BE(value, 0);
-    else if (dataType === "int32" || dataType === "int32_swapped") buffer.writeInt32BE(value, 0);
+    if (dataType === "float32" || dataType === "float32_LE") buffer.writeFloatBE(value, 0);
+    else if (dataType === "uint32" || dataType === "uint32_LE") buffer.writeUInt32BE(value, 0);
+    else if (dataType === "int32" || dataType === "int32_LE") buffer.writeInt32BE(value, 0);
     else buffer.writeUInt32BE(value, 0);
 
     const word1 = buffer.readUInt16BE(0);
@@ -450,10 +587,7 @@ export class ModbusGateway {
         if (topic === dynamicTopic) {
           try {
             const newMapping: ModbusMapping = JSON.parse(message.toString());
-            this.mappings.push(newMapping);
-            if (newMapping.mqtt?.topic) {
-              this.mqttClient?.subscribe(`${newMapping.mqtt.topic}/set`);
-            }
+            this.addMapping(newMapping);
           } catch (err) {
             this.logger.debug(err, "Error parsing dynamic mapping");
           }

@@ -255,11 +255,11 @@ await mqttGateway.start();
 El `ModbusGateway` permite un mapeo bidireccional entre los registros Modbus (coils, discrete inputs, holding registers, input registers) y Direcciones de Grupo KNX o Tópicos MQTT.
 
 **Características Principales**:
-- Conéctese como un Maestro (Client) Modbus para leer desde dispositivos esclavos (vía TCP o RTU) y enviar su estado a KNX o MQTT.
+- Conéctese como un Maestro (Client) Modbus para leer desde dispositivos esclavos (vía TCP o RTU) y enviar su estado a KNX o MQTT. ¡Posee asignación explícita de `slaveId` a nivel de mapeo!
 - Ejecútese como un Esclavo (Server) Modbus ofreciendo un mapa de memoria de registros para que los PLC o SCADAs puedan leer/escribir datos desde/hacia su red KNX/MQTT.
 - Soporte para registros compuestos de 32-bits (`float32`, `uint32`, `int32`) y sus equivalentes con orden de palabras invertido (Little Endian Word Swap).
-- Tópicos MQTT dinámicos y plantillas para las cargas útiles.
-- ¡Inyecte mapeos dinámicos en tiempo de ejecución a través de MQTT!
+- Uso avanzado de interpolaciones y plantillas de carga útil `{{value}}`, junto a un sistema de Máscaras de Bits y corrimiento (Bitmasks) que rellena sub-atributos parametrizados como `{{<claveDeMascara>}}` sobre el `valueTemplate` obligatorio del KNX o en el `publishTemplate` del MQTT.
+- ¡Gestione e inyecte mapeos dinámicos en tiempo de ejecución a través de MQTT o código programático (`addMapping` / `setMappings`)!
 
 #### Ejemplo Modo Maestro (Leyendo un medidor RS485 mapeado a KNX)
 
@@ -280,11 +280,14 @@ const gatewayMaster = new ModbusGateway({
   mappings: [
     {
       type: "holding",
-      address: 10,  // Registro Holding 10
-      scale: 0.1,   // Escala ej. 2250 a 225.0
+      address: 10,   // Registro Holding 10
+      scale: 0.1,    // Escala ej. 2250 a 225.0
+      slaveId: 1,    // Reemplaza el ID de lectura objetivo por defecto para él
       knx: {
         groupAddress: "1/1/1",
-        dpt: "9.020" // Milivoltios / Temperatura / etc.
+        dpt: "9.020", // Milivoltios / Temperatura / etc.
+        // Es obligatorio proporcionar un template de objeto que respete KnxDataEncoder.encodeThis()
+        valueTemplate: { value: "{{value}}" }
       }
     }
   ]
@@ -333,15 +336,21 @@ Por defecto, si la Pasarela Modbus se ejecuta con una configuración `mqtt`, se 
 {
   "type": "holding",
   "address": 100,
-  "dataType": "float32",
+  "dataType": "uint16",
   "interval": 2000,
+  "slaveId": 2,
+  "masks": {
+    "status": 248,
+    "mode": 7
+  },
   "knx": {
     "groupAddress": "2/2/2",
-    "dpt": "5.001"
+    "dpt": "6020",
+    "valueTemplate": { "status": "{{status}}", "mode": "{{mode}}" }
   },
   "mqtt": {
-    "topic": "edificio/temp/salon",
-    "publishTemplate": "{\"temp\": {{value}}}"
+    "topic": "edificio/aire/salon",
+    "publishTemplate": "{\"raw\": {{value}}, \"mode\": {{mode}}}"
   }
 }
 ```

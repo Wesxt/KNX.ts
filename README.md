@@ -260,11 +260,11 @@ await mqttGateway.start();
 The `ModbusGateway` allows bidirectional mapping between Modbus registers (coils, discrete inputs, holding registers, input registers) and KNX Group Addresses or MQTT Topics.
 
 **Features Options**:
-- Connect as a Modbus Master (Client) to read from slave devices (via TCP or RTU) and push state via KNX or MQTT.
+- Connect as a Modbus Master (Client) to read from slave devices (via TCP or RTU) and push state via KNX or MQTT. You can define specific target slaves (`slaveId`) per mapping!
 - Run as a Modbus Slave (Server) offering a register memory map so PLCs or SCADAs can read/write data from/to your KNX/MQTT network.
 - Support for 32-bit composite registers (`float32`, `uint32`, `int32`) and their little-endian word-swapped equivalents.
-- Dynamic MQTT topics and payload templating.
-- Inject dynamic mappings at runtime via MQTT!
+- Advanced payload templating using variable interpolation such as `{{value}}` and multiple logical extractions based on bitmasks configurations `{{<maskKey>}}` for both KNX `valueTemplate` and MQTT `publishTemplate`.
+- Inject dynamic mappings at runtime via MQTT or programmatic methods (`addMapping` / `setMappings`).
 
 #### Master Mode Example (Reading RS485 Meter mapped to KNX)
 
@@ -285,11 +285,14 @@ const gatewayMaster = new ModbusGateway({
   mappings: [
     {
       type: "holding",
-      address: 10,  // Holding Register 10
-      scale: 0.1,   // Scales e.g. 2250 to 225.0
+      address: 10,   // Holding Register 10
+      scale: 0.1,    // Scales e.g. 2250 to 225.0
+      slaveId: 1,    // Can override default target ID per mapping
       knx: {
         groupAddress: "1/1/1",
-        dpt: "9.020" // Millivolt / Temperature / etc.
+        dpt: "9.020", // Millivolt / Temperature / etc.
+        // Needs an object template compliant with KnxDataEncoder.encodeThis()
+        valueTemplate: { value: "{{value}}" } 
       }
     }
   ]
@@ -338,15 +341,21 @@ You can send a JSON payload to this topic to add a new register mapping dynamica
 {
   "type": "holding",
   "address": 100,
-  "dataType": "float32",
+  "dataType": "uint16",
   "interval": 2000,
+  "slaveId": 2,
+  "masks": {
+    "status": 248,
+    "mode": 7
+  },
   "knx": {
     "groupAddress": "2/2/2",
-    "dpt": "5.001"
+    "dpt": "6020",
+    "valueTemplate": { "status": "{{status}}", "mode": "{{mode}}" }
   },
   "mqtt": {
-    "topic": "building/temp/livingroom",
-    "publishTemplate": "{\"temp\": {{value}}}"
+    "topic": "building/air/livingroom",
+    "publishTemplate": "{\"raw\": {{value}}, \"mode\": {{mode}}}"
   }
 }
 ```
