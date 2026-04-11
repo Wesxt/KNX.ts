@@ -83,9 +83,6 @@ export class ModbusGateway {
   // ============== MODBUS CLIENT (MASTER) ==============
 
   private async connectModbusClient() {
-    this.modbusClient!.setID(this.options.modbusId || 1);
-    this.modbusClient!.setTimeout(2000);
-
     if (this.options.protocol === "tcp") {
       if (!this.options.host || !this.options.port) throw new Error("Missing host or port for TCP mode");
       const host = this.options.host;
@@ -95,6 +92,8 @@ export class ModbusGateway {
           if (err) return reject(err);
           resolve();
         });
+        this.modbusClient!.setID(this.options.modbusId || 1);
+        this.modbusClient!.setTimeout(2000);
       });
     } else {
       if (!this.options.path) throw new Error("Missing path for RTU mode");
@@ -105,6 +104,8 @@ export class ModbusGateway {
           if (err) return reject(err);
           resolve();
         });
+        this.modbusClient!.setID(this.options.modbusId || 1);
+        this.modbusClient!.setTimeout(2000);
       });
     }
   }
