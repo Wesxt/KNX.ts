@@ -6,39 +6,36 @@ import { KNXLoggerOptions } from "../@types/interfaces/connection";
 /**
  * Creates a configured pino logger instance.
  * Completely configurable via options, no environment variable dependencies.
- * Production mode (JSON) is only active if NOT in a test environment.
+ * Logs asynchronously to prevent blocking the event loop.
  */
 export const createKNXLogger = (options?: KNXLoggerOptions): pino.Logger => {
-  const targets: (
-    | pino.TransportTargetOptions<Record<string, any>>
-    | pino.TransportPipelineOptions<Record<string, any>>
-  )[] = [];
+  const defaultOptions: any = {
+    level: options?.level || "info",
+    timestamp: () => `,"time":"${new Date(Date.now()).toISOString()}"`,
+    enabled: options?.enabled ?? true,
+    ...options,
+  };
 
-  // 1. Console Transport
-  if (!options?.pretty) {
-    targets.push({
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        messageFormat: "[{module}] {msg}",
-        translateTime: "SYS:HH:MM:ss.l",
-        ignore: "pid,hostname,module",
-        customColors: "info:blue,warn:yellow,error:red,debug:magenta",
-      },
-    });
-  } else if (options?.logToFile) {
-    // In production with file logging, we must explicitly add stdout if we want it
-    targets.push({
-      target: "pino/file",
-      options: { destination: 1 }, // 1 = stdout
-    });
+  if (!defaultOptions.formatters) {
+    defaultOptions.formatters = {
+      level: (label: string) => ({ level: label }),
+      ...options?.formatters,
+    };
   }
 
-  // 2. File Transport (pino-roll)
+  const streams: pino.StreamEntry[] = [];
+
+  // Default stdout stream (asynchronous)
+  streams.push({
+    level: defaultOptions.level,
+    stream: pino.destination({ dest: 1, sync: false }),
+  });
+
+  // File logging (asynchronous)
   if (options?.logToFile) {
     const logDir = options.logDir || "./logs";
-
     let logFile = options.logFilename;
+
     if (!logFile || logFile.trim() === "") {
       const now = new Date();
       const dateStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
@@ -49,39 +46,16 @@ export const createKNXLogger = (options?: KNXLoggerOptions): pino.Logger => {
       fs.mkdirSync(logDir, { recursive: true });
     }
 
-    targets.push({
-      target: "pino-roll",
-      options: {
-        file: path.join(logDir, logFile),
-        size: options.logSize || "10M",
-        interval: options.logInterval || "1d",
-        limit: {
-          count: options.logKeepCount || 7,
-        },
-        mkdir: true,
-      },
+    streams.push({
+      level: defaultOptions.level,
+      stream: pino.destination({
+        dest: path.join(logDir, logFile),
+        sync: false,
+      }),
     });
   }
 
-  const transportConfig = targets.length > 0 ? ({ targets } as pino.TransportMultiOptions) : undefined;
-
-  const defaultOptions: any = {
-    level: options?.level || "info",
-    timestamp: () => `,"time":"${new Date(Date.now()).toISOString()}"`,
-    enabled: options?.enabled ?? true,
-    transport: options?.transport || transportConfig,
-    ...options,
-  };
-
-  // Pino does not allow custom level formatters when using transports with targets
-  if (!defaultOptions.transport) {
-    defaultOptions.formatters = {
-      level: (label: string) => ({ level: label }),
-      ...options?.formatters,
-    };
-  }
-
-  return pino(defaultOptions);
+  return pino(defaultOptions, pino.multistream(streams));
 };
 
 /**

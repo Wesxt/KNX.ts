@@ -196,7 +196,7 @@ The messages API payloads are exported as `WSClientPayload`, `WSServerPayload`, 
 
 ### WebSocket Gateway
 
-The `KNXWebSocketGateway` provides a simple, JSON-based bidirectional API over WebSockets.
+The `KNXWebSocketGateway` provides a simple, JSON-based bidirectional API over WebSockets, only if you install the dependency or don´t use "--noOptional".
 
 ```typescript
 import { KNXWebSocketGateway } from "knx.ts/server";
@@ -229,7 +229,7 @@ wsGateway.start();
 
 ### MQTT Gateway
 
-The `KNXMQTTGateway` connects to an existing MQTT broker or sets up an embedded one using `aedes`.
+The `KNXMQTTGateway` connects to an existing MQTT broker or sets up an embedded one using `aedes`, only if you install the dependency or don´t use "--noOptional".
 
 ```typescript
 import { KNXMQTTGateway } from "knx.ts/server";
@@ -257,7 +257,7 @@ await mqttGateway.start();
 
 ### Modbus Gateway (Bidirectional KNX/MQTT/Modbus)
 
-The `ModbusGateway` allows bidirectional mapping between Modbus registers (coils, discrete inputs, holding registers, input registers) and KNX Group Addresses or MQTT Topics.
+The `ModbusGateway` allows bidirectional mapping between Modbus registers (coils, discrete inputs, holding registers, input registers) and KNX Group Addresses or MQTT Topics, only if you install the dependency or don´t use "--noOptional".
 
 **Features Options**:
 - Connect as a Modbus Master (Client) to read from slave devices (via TCP or RTU) and push state via KNX or MQTT. You can define specific target slaves (`slaveId`) per mapping!

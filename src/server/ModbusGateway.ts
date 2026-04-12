@@ -27,11 +27,11 @@ export class ModbusGateway {
     holding: Buffer;
     input: Buffer;
   } = {
-      coils: Buffer.alloc(10000), // simplistic memory map up to 10000 registers
-      discrete: Buffer.alloc(10000),
-      holding: Buffer.alloc(20000), // 2 bytes per holding
-      input: Buffer.alloc(20000),
-    };
+    coils: Buffer.alloc(10000), // simplistic memory map up to 10000 registers
+    discrete: Buffer.alloc(10000),
+    holding: Buffer.alloc(20000), // 2 bytes per holding
+    input: Buffer.alloc(20000),
+  };
 
   private pollingTimers: NodeJS.Timeout[] = [];
   private notifyDebouncers: Map<string, NodeJS.Timeout> = new Map();
@@ -56,7 +56,7 @@ export class ModbusGateway {
   }
 
   public removeMappingByAddress(address: number, type: ModbusMapping["type"]) {
-    this.mappings = this.mappings.filter(m => !(m.address === address && m.type === type));
+    this.mappings = this.mappings.filter((m) => !(m.address === address && m.type === type));
   }
 
   public setMappings(mappings: ModbusMapping[]) {
@@ -276,7 +276,7 @@ export class ModbusGateway {
   private onModbusValueChanged(mapping: ModbusMapping, value: number | boolean) {
     // calculate masks
     const maskValues: Record<string, number> = {};
-    if (mapping.masks && typeof value === 'number') {
+    if (mapping.masks && typeof value === "number") {
       for (const [key, mask] of Object.entries(mapping.masks)) {
         let masked = value & mask;
         let shift = 0;
@@ -302,9 +302,9 @@ export class ModbusGateway {
 
         const replaceValues = (obj: any) => {
           for (const k of Object.keys(obj)) {
-            if (typeof obj[k] === 'string') {
+            if (typeof obj[k] === "string") {
               const str = obj[k] as string;
-              if (str === '{{value}}') {
+              if (str === "{{value}}") {
                 obj[k] = value;
               } else {
                 let matchedMask = false;
@@ -315,16 +315,16 @@ export class ModbusGateway {
                     break;
                   }
                 }
-                if (!matchedMask && str.includes('{{')) {
+                if (!matchedMask && str.includes("{{")) {
                   let newStr = str.replace(/\{\{\s*value\s*\}\}/g, String(value));
                   for (const [mKey, mVal] of Object.entries(maskValues)) {
-                    const reg = new RegExp(`\\{\\{\\s*${mKey}\\s*\\}\\}`, 'g');
+                    const reg = new RegExp(`\\{\\{\\s*${mKey}\\s*\\}\\}`, "g");
                     newStr = newStr.replace(reg, String(mVal));
                   }
                   obj[k] = newStr;
                 }
               }
-            } else if (typeof obj[k] === 'object' && obj[k] !== null) {
+            } else if (typeof obj[k] === "object" && obj[k] !== null) {
               replaceValues(obj[k]);
             }
           }
@@ -347,7 +347,7 @@ export class ModbusGateway {
       if (mapping.mqtt.publishTemplate) {
         payload = mapping.mqtt.publishTemplate.replace(/\{\{\s*value\s*\}\}/g, String(value));
         for (const [mKey, mVal] of Object.entries(maskValues)) {
-          const reg = new RegExp(`\\{\\{\\s*${mKey}\\s*\\}\\}`, 'g');
+          const reg = new RegExp(`\\{\\{\\s*${mKey}\\s*\\}\\}`, "g");
           payload = payload.replace(reg, String(mVal));
         }
       }
@@ -358,19 +358,19 @@ export class ModbusGateway {
   // ============== DATA FLOW: OTHERS -> MODBUS ==============
   /**
    * @warning This method is not tested yet
-   * @param mapping 
-   * @param value 
+   * @param mapping
+   * @param value
    */
   private async writeToModbus(mapping: ModbusMapping, value: any) {
     let targetRawValue = value;
 
-    if (mapping.knx?.valueTemplate && typeof value === 'object' && value !== null) {
+    if (mapping.knx?.valueTemplate && typeof value === "object" && value !== null) {
       let resolvedModbusValue: number | undefined;
 
       const extractFromTemplate = (template: any, knxObj: any) => {
         for (const k of Object.keys(template)) {
-          if (typeof template[k] === 'string') {
-            if (template[k] === '{{value}}') {
+          if (typeof template[k] === "string") {
+            if (template[k] === "{{value}}") {
               resolvedModbusValue = Number(knxObj[k]);
             } else if (mapping.masks) {
               for (const [mKey, mVal] of Object.entries(mapping.masks)) {
@@ -391,7 +391,7 @@ export class ModbusGateway {
                 }
               }
             }
-          } else if (typeof template[k] === 'object' && template[k] !== null) {
+          } else if (typeof template[k] === "object" && template[k] !== null) {
             if (knxObj[k] !== undefined) extractFromTemplate(template[k], knxObj[k]);
           }
         }

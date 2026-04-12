@@ -191,7 +191,7 @@ Las cargas útiles (payloads) de mensajes de esta API están exportadas como int
 
 ### Pasarela WebSocket
 
-El `KNXWebSocketGateway` proporciona una API bidireccional sencilla basada en JSON a través de WebSockets.
+El `KNXWebSocketGateway` proporciona una API bidireccional sencilla basada en JSON a través de WebSockets, solo si instalas la dependencia o no usas "--noOptional".
 
 ```typescript
 import { KNXWebSocketGateway } from "knx.ts/server";
@@ -224,7 +224,7 @@ wsGateway.start();
 
 ### Pasarela MQTT
 
-El `KNXMQTTGateway` se conecta a un broker MQTT existente o arranca uno embebido dentro del Node usando `aedes`.
+El `KNXMQTTGateway` se conecta a un broker MQTT existente o arranca uno embebido dentro del Node usando `aedes`, solo si instalas la dependencia o no usas "--noOptional".
 
 ```typescript
 import { KNXMQTTGateway } from "knx.ts/server";
@@ -252,7 +252,7 @@ await mqttGateway.start();
 
 ### Pasarela Modbus (Bidireccional KNX/MQTT/Modbus)
 
-El `ModbusGateway` permite un mapeo bidireccional entre los registros Modbus (coils, discrete inputs, holding registers, input registers) y Direcciones de Grupo KNX o Tópicos MQTT.
+El `ModbusGateway` permite un mapeo bidireccional entre los registros Modbus (coils, discrete inputs, holding registers, input registers) y Direcciones de Grupo KNX o Tópicos MQTT, solo si instalas la dependencia o no usas "--noOptional".
 
 **Características Principales**:
 - Conéctese como un Maestro (Client) Modbus para leer desde dispositivos esclavos (vía TCP o RTU) y enviar su estado a KNX o MQTT. ¡Posee asignación explícita de `slaveId` a nivel de mapeo!
