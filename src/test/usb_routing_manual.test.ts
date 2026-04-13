@@ -2,12 +2,13 @@ import { KNXnetIPServer } from "../connection/KNXnetIPServer";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { getLocalIP } from "../utils/localIp";
 import { CEMI } from "../core/CEMI";
+import { Router } from "../connection/Router";
 
 // Configuración estándar para KNXnet/IP Routing
 const MULTICAST_IP = "224.0.23.12";
 const PORT = 3671;
 
-let routing: KNXnetIPServer;
+let routing: Router;
 
 async function testUSBRouting() {
   console.log(`
@@ -19,29 +20,26 @@ async function testUSBRouting() {
   const localIp = getLocalIP();
   console.log(`[Red] Vinculando a la IP Local: ${localIp}`);
 
-  const client = new KNXnetIPServer({
-    ip: MULTICAST_IP,
-    port: PORT,
-    localIp: localIp,
-    friendlyName: "KNX-USB-Bridge",
-    // Asignamos un pool para los clientes IP que hagan tunneling hacia el USB
-    clientAddrs: "15.15.100:5",
-    // La dirección física de este enrutador en la topología KNX
-    individualAddress: "15.15.0",
-    externals: {
-      usb: {
-        // En la mayoría de implementaciones, dejar esto vacío fuerza a la librería
-        // a auto-detectar el primer dispositivo KNX USB conectado.
-        // Si tienes múltiples dispositivos USB, aquí deberías pasar el vendorId/productId.
-      },
+  const client = new Router({
+    routerAddress: "1.1.0",
+    knxNetIpServer: {
+      ip: MULTICAST_IP,
+      port: PORT,
+      localIp: localIp,
+      friendlyName: "KNX-USB-Bridge",
+      // Asignamos un pool para los clientes IP que hagan tunneling hacia el USB
+      clientAddrs: "15.15.100:5",
+      // La dirección física de este enrutador en la topología KNX
+      individualAddress: "15.15.0",
+      useAllInterfaces: false,
+      logOptions: { level: "debug" }, // Crucial: Queremos ver el ruido interno del Router
     },
-    useAllInterfaces: false,
-    logOptions: { level: "debug" }, // Crucial: Queremos ver el ruido interno del Router
+    usb: {}
   });
 
   routing = client;
 
-  client.externalManager?.on("indication_link", (data: { src: string; msg: ServiceMessage }) => {
+  client.on("indication_link", (data: { src: string; msg: ServiceMessage }) => {
     console.log("Router", data.src);
   });
   client.on("connected", () => {

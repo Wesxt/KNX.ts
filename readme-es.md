@@ -42,7 +42,7 @@ npm install knx.ts
 
 Esta librería depende de algunos módulos clave, tanto externos como nativos, para habilitar toda su funcionalidad:
 
-- **[Pino](https://getpino.io/)**: Utilizado como motor de registro (logging) central. Es altamente eficiente y la librería exporta un registrador único (singleton) para que tu aplicación pueda compartir la misma instancia sin sobrecarga.
+- **Logger Personalizado Integrado**: Un sistema de registro propio altamente eficiente, construido con `worker_threads` para escrituras asíncronas no bloqueantes, con reloleo diario de archivos de log, etiquetado por módulos y salidas de consola coloreadas.
 - **[node-hid](https://github.com/node-hid/node-hid)**: Utilizado por `KNXUSBConnection` para interactuar de forma nativa con interfaces USB KNX. Ten en cuenta que los módulos nativos pueden requerir herramientas de compilación en ciertos sistemas operativos.
 - **[serialport](https://serialport.io/)**: Utilizado por `TPUARTConnection` para comunicación directa por UART. Al igual que `node-hid`, este es un módulo nativo.
 
@@ -357,9 +357,9 @@ Por defecto, si la Pasarela Modbus se ejecuta con una configuración `mqtt`, se 
 
 ## 📝 Registros (Logging)
 
-La librería utiliza un registrador único global basado en [Pino](https://getpino.io/). Puedes configurarlo al comienzo de tu aplicación usando `setupLogger`.
+La librería utiliza un registrador único global y personalizado que ejecuta sus operaciones de escritura en archivos mediante `worker_threads` para evitar bloqueos en el bucle de eventos. Puedes configurarlo al comienzo de tu aplicación usando `setupLogger`.
 
-Esto es crucial porque no necesitas instanciar Pino tú mismo; el `knxLogger` interno gestiona su estado para evitar la sobrecarga de rendimiento de múltiples instancias.
+Esto es crucial porque no necesitas instanciar el logger tú mismo; el `knxLogger` interno gestiona su estado, el reloleo diario de archivos y el etiquetado semántico de módulos.
 
 ```typescript
 import { setupLogger, knxLogger } from "knx.ts";

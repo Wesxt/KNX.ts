@@ -1,4 +1,3 @@
-import pino from "pino";
 import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
 import { CEMIInstance } from "../../core/CEMI";
 
@@ -103,17 +102,18 @@ export interface ExternalManagerOptions {
    */
   logOptions?: KNXLoggerOptions;
 }
-export interface KNXLoggerOptions extends pino.LoggerOptions {
+export interface KNXLoggerOptions {
   /**
-   * Use pino-pretty but it's slow
+   * Log level. Defaults to 'info'. 'noLog' disables logging.
    */
-  pretty?: boolean;
+  level?: "info" | "warn" | "error" | "debug" | "noLog";
   /**
    * Enable or disable logging. Defaults to true.
    */
   enabled?: boolean;
   /**
-   * If true, logs will be written to a file using pino-roll.
+   * If true, logs will be written to a file using an asynchronous Worker Thread.
+   * The files will be rolled daily.
    */
   logToFile?: boolean;
   /**
@@ -121,21 +121,10 @@ export interface KNXLoggerOptions extends pino.LoggerOptions {
    */
   logDir?: string;
   /**
-   * Filename for the log file. If not provided, it defaults to YYYY-MM-DD.log.
+   * Base filename for the log file. If not provided, it defaults to the date (YYYY-MM-DD.log).
+   * If provided, the date will be prepended to the filename.
    */
   logFilename?: string;
-  /**
-   * Max size of a single log file before rotation (e.g., '10M', '1G').
-   */
-  logSize?: string;
-  /**
-   * Rotation interval (e.g., '1d', '1h').
-   */
-  logInterval?: string;
-  /**
-   * Number of rotated log files to keep.
-   */
-  logKeepCount?: number;
 }
 
 export interface KNXnetIPOptions {

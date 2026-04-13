@@ -69,14 +69,13 @@
   },
   "dependencies": {
     "node-hid": "^3.3.0",
-    "pino": "^10.3.1",
     "serialport": "^13.0.0"
   },
   "optionalDependencies": {
     "aedes": "^1.0.2",
     "aedes-server-factory": "^0.2.1",
+    "modbus-serial": "^8.0.25",
     "mqtt": "^5.15.1",
-    "ws": "^8.20.0",
-    "modbus-serial": "^8.0.25"
+    "ws": "^8.20.0"
   }
 }

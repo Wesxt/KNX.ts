@@ -4,8 +4,7 @@ import { CEMIInstance } from "../core/CEMI";
 import { Aedes } from "aedes";
 import { createServer, Server } from "aedes-server-factory";
 import * as mqtt from "mqtt";
-import { knxLogger, setupLogger } from "../utils/Logger";
-import pino from "pino";
+import { knxLogger, setupLogger, Logger } from "../utils/Logger";
 import ModbusRTU, { ServerSerial, ServerTCP } from "modbus-serial";
 
 export class ModbusGateway {
@@ -35,7 +34,7 @@ export class ModbusGateway {
 
   private pollingTimers: NodeJS.Timeout[] = [];
   private notifyDebouncers: Map<string, NodeJS.Timeout> = new Map();
-  private logger: pino.Logger<never, boolean>;
+  private logger: Logger;
 
   constructor(options: ModbusGatewayOptions) {
     this.options = options;

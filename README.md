@@ -44,7 +44,7 @@ npm install knx.ts
 
 This library depends on a few key modules, both external and native, to enable its full functionality:
 
-- **[Pino](https://getpino.io/)**: Used as the central logging engine. It is highly efficient, and the library exports a singleton logger so your application can share the same instance without overhead.
+- **Built-in Custom Logger**: A highly efficient, custom-built logger using `worker_threads` for asynchronous, non-blocking daily file rolling, module tagging, and ANSI colored console outputs.
 - **[node-hid](https://github.com/node-hid/node-hid)**: Used by `KNXUSBConnection` to interact natively with KNX USB interfaces. Keep in mind that native modules may require build tools on some operating systems.
 - **[serialport](https://serialport.io/)**: Used by `TPUARTConnection` for direct UART communication. Like `node-hid`, this is a native module.
 
@@ -362,9 +362,9 @@ You can send a JSON payload to this topic to add a new register mapping dynamica
 
 ## 📝 Logging
 
-The library uses a single global logger based on [Pino](https://getpino.io/). You can configure it at the beginning of your application using `setupLogger`.
+The library uses a single global custom logger running its I/O file operations via `worker_threads` to prevent event-loop blocking. You can configure it at the beginning of your application using `setupLogger`.
 
-This is important because you do not need to instantiate Pino yourself; the internal `knxLogger` manages its state to avoid the performance overhead of multiple instances.
+This is important because you do not need to instantiate a logger yourself; the internal `knxLogger` manages its state, daily file rolling, and semantic module tagging.
 
 ```typescript
 import { setupLogger, knxLogger } from "knx.ts";

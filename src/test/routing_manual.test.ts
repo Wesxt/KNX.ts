@@ -27,6 +27,12 @@ async function testRouting() {
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
     useAllInterfaces: false,
+    logOptions: {
+      logDir: "./logs",
+      level: "debug",
+      logToFile: true,
+      enabled: true
+    }
   });
 
   routing = client;

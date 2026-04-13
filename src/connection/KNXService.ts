@@ -14,8 +14,7 @@ import { APCIEnum } from "../core/enum/APCIEnum";
 import { AllDpts } from "../@types/types/AllDpts";
 import { AllConnectionOptions } from "../@types/interfaces/connection";
 
-import { Logger } from "pino";
-import { knxLogger, setupLogger } from "../utils/Logger";
+import { knxLogger, setupLogger, Logger } from "../utils/Logger";
 
 export abstract class KNXService<TOptions extends AllConnectionOptions = AllConnectionOptions> extends EventEmitter {
   protected socket: dgram.Socket | net.Socket | null = null;

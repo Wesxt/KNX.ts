@@ -3,7 +3,7 @@ import { HPAI } from "../core/KNXnetIPStructures";
 import { KNXnetIPHeader } from "../core/KNXnetIPHeader";
 import { KNXnetIPServiceType, KNXnetIPErrorCodes, KNXLayer } from "../core/enum/KNXnetIPEnum";
 
-import { Logger } from "pino";
+import { Logger } from "../utils/Logger";
 
 /**
  * Encapsulates a single KNXnet/IP Tunnelling or Management connection state.
