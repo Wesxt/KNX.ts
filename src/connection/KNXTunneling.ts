@@ -117,7 +117,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       });
 
       (this.socket as net.Socket).on("data", (data) => {
-        this.tcpBuffer = Buffer.concat([this.tcpBuffer, data]);
+        this.tcpBuffer = Buffer.concat([this.tcpBuffer, typeof data === "string" ? Buffer.from(data) : data]);
         while (this.tcpBuffer.length >= 6) {
           const totalLength = this.tcpBuffer.readUInt16BE(4);
           if (this.tcpBuffer.length >= totalLength) {

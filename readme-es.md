@@ -46,6 +46,10 @@ Esta librería depende de algunos módulos clave, tanto externos como nativos, p
 - **[node-hid](https://github.com/node-hid/node-hid)**: Utilizado por `KNXUSBConnection` para interactuar de forma nativa con interfaces USB KNX. Ten en cuenta que los módulos nativos pueden requerir herramientas de compilación en ciertos sistemas operativos.
 - **[serialport](https://serialport.io/)**: Utilizado por `TPUARTConnection` para comunicación directa por UART. Al igual que `node-hid`, este es un módulo nativo.
 
+## Pasarelas
+
+Si busca una pasarela para conectar su red KNX con una interfaz web o una plataforma IoT busque el repo `GatewaySources`, puede usar `KNXWebSocketGateway` o `KNXMQTTGateway`. Si busca una pasarela para conectar su red KNX con una red Modbus, puede usar `ModbusGateway`.
+
 ## 📚 Referencia de la API (Lo que se exporta)
 
 La librería expone un conjunto rico de clases y utilidades que permiten tanto el uso de alto nivel como la manipulación del protocolo a bajo nivel:
@@ -143,7 +147,7 @@ tunnel.connect().then(() => {
 });
 ```
 
-## 🌐 Pasarelas WebSocket y MQTT (API)
+## 🌐 (API)
 
 ### GroupAddressCache (Caché Integrada)
 
@@ -183,176 +187,6 @@ usb.on("1/1/1", (cemi: CEMIInstance) => { // <--- no se activa
   console.log("Nuevos datos en 1/1/1:", cemi.TPDU.apdu.data); // Datos crudos del APDU
   console.log("Datos decodificados:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Valor de javascript convertido
 });
-```
-
-La librería proporciona servidores pasarela integrados que permiten una fácil integración con interfaces web, tableros o plataformas IoT. Ambas pasarelas actúan como puente sobre un `Router` existente o una instancia `KNXService` (como `KNXnetIPServer` o `KNXUSBConnection`).
-
-Las cargas útiles (payloads) de mensajes de esta API están exportadas como interfaces `WSClientPayload`, `WSServerPayload`, `MQTTCommandPayload` y `MQTTStatePayload` para que puedas usarlas directamente en tus proyectos de TypeScript.
-
-### Pasarela WebSocket
-
-El `KNXWebSocketGateway` proporciona una API bidireccional sencilla basada en JSON a través de WebSockets, solo si instalas la dependencia o no usas "--noOptional".
-
-```typescript
-import { KNXWebSocketGateway } from "knx.ts/server";
-// O usar: import { KNXWebSocketGateway } from 'knx.ts' si se exporta desde la raíz.
-
-const wsGateway = new KNXWebSocketGateway({
-  port: 8080,
-  knxContext: router, // Proporciona un Router o cualquier instancia de KNXService
-});
-
-wsGateway.start();
-```
-
-**Cargas útiles JSON de la API WebSocket:**
-
-- **Leer / Consultar**: Solicitar lectura desde el bus KNX o consultar valores almacenados en caché.
-  - Solicitud: `{ "action": "read", "groupAddress": "1/2/3" }`
-  - Respuesta: `{ "action": "read_result", "groupAddress": "1/2/3", "data": ... }`
-  - Consultar Caché: `{ "action": "query", "groupAddress": "1/2/3", "onlyLatest": true }`
-
-- **Escribir**: Enviar telegramas al bus KNX.
-  - Comando: `{ "action": "write", "groupAddress": "1/2/3", "value": 22.5, "dpt": "9.001" }`
-
-- **Suscribirse / Desuscribirse**: Escuchar eventos del bus.
-  - Suscribir: `{ "action": "subscribe", "groupAddress": "1/2/3" }` (Usa `"*"` para escuchar todas las direcciones).
-  - Evento (Respuesta): `{ "action": "event", "groupAddress": "1/2/3", "decodedValue": ... }`
-
-- **Configurar DPT**: Informar a la caché de un `DPT` correspondiente a una dirección de grupo.
-  - Comando: `{ "action": "config_dpt", "groupAddress": "1/2/3", "dpt": "1.001" }`
-
-### Pasarela MQTT
-
-El `KNXMQTTGateway` se conecta a un broker MQTT existente o arranca uno embebido dentro del Node usando `aedes`, solo si instalas la dependencia o no usas "--noOptional".
-
-```typescript
-import { KNXMQTTGateway } from "knx.ts/server";
-
-const mqttGateway = new KNXMQTTGateway({
-  embeddedBroker: { port: 1883 }, // O usa brokerUrl: "mqtt://tu-broker:1883"
-  knxContext: router,
-  topicPrefix: "knx", // El prefijo por defecto es "knx"
-});
-
-await mqttGateway.start();
-```
-
-**Estructura de la API MQTT:**
-
-- **Actualizaciones de Estado**: Cada vez que el bus intercepta datos, la pasarela publica la carga útil decodificada en:
-  `[prefijo]/state/[direccionDeGrupo]` (ej. `knx/state/1/2/3`) como un mensaje con la bandera _retained_ y el JSON: `{ "decodedValue": ... }`.
-
-- **Comandos (Escribir / Leer / Configurar DPT)**: Envía mensajes con carga JSON a los siguientes tópicos:
-  - Comando Escribir (Write): `[prefijo]/command/write/[direccionDeGrupo]`
-    - Carga útil: `{ "value": 22.5, "dpt": "9.001" }` o un valor primitivo si el DPT fue configurado localmente.
-  - Comando Leer (Read): `[prefijo]/command/read/[direccionDeGrupo]`
-  - Configurar DPT: `[prefijo]/command/config_dpt/[direccionDeGrupo]`
-    - Carga útil: `{ "dpt": "9.001" }`
-
-### Pasarela Modbus (Bidireccional KNX/MQTT/Modbus)
-
-El `ModbusGateway` permite un mapeo bidireccional entre los registros Modbus (coils, discrete inputs, holding registers, input registers) y Direcciones de Grupo KNX o Tópicos MQTT, solo si instalas la dependencia o no usas "--noOptional".
-
-**Características Principales**:
-- Conéctese como un Maestro (Client) Modbus para leer desde dispositivos esclavos (vía TCP o RTU) y enviar su estado a KNX o MQTT. ¡Posee asignación explícita de `slaveId` a nivel de mapeo!
-- Ejecútese como un Esclavo (Server) Modbus ofreciendo un mapa de memoria de registros para que los PLC o SCADAs puedan leer/escribir datos desde/hacia su red KNX/MQTT.
-- Soporte para registros compuestos de 32-bits (`float32`, `uint32`, `int32`) y sus equivalentes con orden de palabras invertido (Little Endian Word Swap).
-- Uso avanzado de interpolaciones y plantillas de carga útil `{{value}}`, junto a un sistema de Máscaras de Bits y corrimiento (Bitmasks) que rellena sub-atributos parametrizados como `{{<claveDeMascara>}}` sobre el `valueTemplate` obligatorio del KNX o en el `publishTemplate` del MQTT.
-- ¡Gestione e inyecte mapeos dinámicos en tiempo de ejecución a través de MQTT o código programático (`addMapping` / `setMappings`)!
-
-#### Ejemplo Modo Maestro (Leyendo un medidor RS485 mapeado a KNX)
-
-```typescript
-import { ModbusGateway, Router } from "knx.ts";
-
-const myRouter = new Router();
-// Proporcione una conexión para myRouter...
-
-const gatewayMaster = new ModbusGateway({
-  mode: "master",
-  protocol: "rtu",
-  path: "COM3", // ej., "/dev/ttyUSB0" en Linux
-  baudRate: 9600,
-  modbusId: 1, // ID del esclavo destino
-  knxContext: myRouter,
-  defaultPollingInterval: 1000,
-  mappings: [
-    {
-      type: "holding",
-      address: 10,   // Registro Holding 10
-      scale: 0.1,    // Escala ej. 2250 a 225.0
-      slaveId: 1,    // Reemplaza el ID de lectura objetivo por defecto para él
-      knx: {
-        groupAddress: "1/1/1",
-        dpt: "9.020", // Milivoltios / Temperatura / etc.
-        // Es obligatorio proporcionar un template de objeto que respete KnxDataEncoder.encodeThis()
-        valueTemplate: { value: "{{value}}" }
-      }
-    }
-  ]
-});
-
-await gatewayMaster.start();
-```
-
-#### Ejemplo Modo Esclavo (Emulando un PLC TCP mapeado a MQTT)
-
-```typescript
-import { ModbusGateway } from "knx.ts";
-
-const gatewaySlave = new ModbusGateway({
-  mode: "slave",
-  protocol: "tcp",
-  host: "0.0.0.0",
-  port: 502,
-  modbusId: 10, // ID del Esclavo del Servidor
-  mqtt: {
-    brokerUrl: "mqtt://127.0.0.1:1883"
-  },
-  mappings: [
-    {
-      type: "coil",
-      address: 5,   // Bobina 5
-      mqtt: {
-        topic: "edificio/luces/piso1",
-        publishTemplate: "{\"state\": {{value}}}" 
-      }
-    }
-  ]
-});
-
-await gatewaySlave.start();
-```
-
-#### Mapeos Dinámicos en Ejecución (vía MQTT)
-
-Por defecto, si la Pasarela Modbus se ejecuta con una configuración `mqtt`, se suscribirá al tópico `modbus/config/add_mapping`.
-¡Puede enviar una carga útil JSON a este tópico para añadir un nuevo mapeo de registro dinámicamente durante la ejecución!
-
-**Tópico:** `modbus/config/add_mapping`
-**Payload:**
-```json
-{
-  "type": "holding",
-  "address": 100,
-  "dataType": "uint16",
-  "interval": 2000,
-  "slaveId": 2,
-  "masks": {
-    "status": 248,
-    "mode": 7
-  },
-  "knx": {
-    "groupAddress": "2/2/2",
-    "dpt": "6020",
-    "valueTemplate": { "status": "{{status}}", "mode": "{{mode}}" }
-  },
-  "mqtt": {
-    "topic": "edificio/aire/salon",
-    "publishTemplate": "{\"raw\": {{value}}, \"mode\": {{mode}}}"
-  }
-}
 ```
 
 ## 📝 Registros (Logging)
