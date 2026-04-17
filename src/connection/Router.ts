@@ -56,23 +56,25 @@ export class Router extends EventEmitter {
     if (options.knxNetIpServer) {
       options.knxNetIpServer.individualAddress = this.routerAddress;
       const ipServer = new KNXnetIPServer(options.knxNetIpServer);
-      this.registerLink(`IP KNXnet/IP Server: ${ipServer.options.localIp}:${ipServer.options.port}`, ipServer);
+      this.addLink(ipServer);
     }
     if (options.tpuart) {
       options.tpuart.individualAddress = this.routerAddress;
-      this.registerLink("TPUART", new TPUARTConnection(options.tpuart as TPUARTOptions));
+      const link = new TPUARTConnection(options.tpuart as TPUARTOptions);
+      this.addLink(link);
     }
     if (options.tunneling) {
       options.tunneling.forEach((c) => {
         // * Tunneling doesn't support individualAddress, is assigned by the tunnel connection
         // c.individualAddress = this.routerAddress;
         const client = new KNXTunneling(c);
-        this.registerLink(`IP Tunneling: ${client.options.ip}:${client.options.port}`, client);
+        this.addLink(client);
       });
     }
     if (options.usb) {
       options.usb.individualAddress = this.routerAddress;
-      this.registerLink("KNXUSB", new KNXUSBConnection(options.usb as KNXUSBOptions));
+      const link = new KNXUSBConnection(options.usb as KNXUSBOptions);
+      this.registerLink("KNXUSB", link);
     }
 
     this.logger.info(`Router initialized at ${this.routerAddress}`);
@@ -81,8 +83,15 @@ export class Router extends EventEmitter {
     this.gcInterval = setInterval(() => this.gcDestinationAddress(), 1000);
   }
 
-  public registerLink(key: string, link: KNXService) {
-    if (this.links.has(key)) return;
+  private registerLink(key: string, link: KNXService) {
+    // ** If the key already exists, it will be overwritten.
+    if (this.links.has(key)) {
+      this.logger.info(
+        `This link (${key}) already exist, the link register it will be disconnect to start the new link`,
+      );
+      const l = this.links.get(key) as KNXService;
+      l.disconnect();
+    }
     link.isCacheDelegated = true;
     link.isEventsDelegated = true;
     this.links.set(key, link);
@@ -104,8 +113,33 @@ export class Router extends EventEmitter {
     });
   }
 
+  /**
+   * Add the link and return his key
+   * @param link Link soported for the Router
+   * @returns Key of the link
+   */
+  public addLink(link: KNXService) {
+    let key = "";
+    if (link instanceof KNXnetIPServer) {
+      key = `IP KNXnet/IP Server: ${link.options.localIp}:${link.options.port}`;
+      this.registerLink(key, link);
+    } else if (link instanceof KNXTunneling) {
+      key = `IP Tunneling: ${link.options.ip}:${link.options.port}`;
+      this.registerLink(key, link);
+    } else if (link instanceof TPUARTConnection) {
+      key = "TPUART";
+      this.registerLink(key, link);
+    } else if (link instanceof KNXUSBConnection) {
+      key = "KNXUSB";
+      this.registerLink(key, link);
+    } else {
+      throw new TypeError(`This link is not supported`);
+    }
+    return key;
+  }
+
   public unregisterLink(key: string | "TPUART" | "KNXUSB") {
-    if (!this.links.has(key)) return;
+    if (!this.links.has(key)) throw new Error(`This key is not yet registered: ${key}`);
 
     // Cleanup routing table
     for (const [addr, l] of this.addressTable.entries()) {
