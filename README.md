@@ -228,6 +228,7 @@ All connection classes (`KNXnetIPServer`, `KNXTunneling`, `KNXUSBConnection`, `T
 | ---------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `connected`      | Connection established and hardware/socket ready.                                         | `void` (Server/USB/TPUART) / `{ channelId }` (Tunnel) |
 | `disconnected`   | Connection lost or explicitly closed.                                                     | `void`                                                |
+| `disconnected_client`   | The connection was lost or explicitly closed from a tunnel client in KNXNetIPServer.                                                     | `number` (ChannelId)                                                |
 | `error`          | A fatal error occurred during operation.                                                  | `err: Error`                                          |
 | `indication`     | Any incoming standard KNX telegram (cEMI / L_Data.ind).                                   | `cemi: CEMIInstance`                                  |
 | `raw_indication` | The raw `Buffer` before parsing (EMI/cEMI/payload).                                       | `data: Buffer`                                        |

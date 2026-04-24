@@ -208,6 +208,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       this.socket = null;
     }
     this.clearTimers();
+    this.emit("disconnected");
   }
 
   /**
@@ -935,7 +936,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       }
 
       this._tunnelConnections.delete(channelId);
-      this.emit("disconnected", channelId);
+      this.emit("disconnected_client", channelId);
     }
   }
 
