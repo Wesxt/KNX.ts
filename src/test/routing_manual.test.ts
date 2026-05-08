@@ -5,7 +5,7 @@ import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 // Configuration for KNX Routing
 // Standard Multicast Address for KNXnet/IP Routing
 const MULTICAST_IP = "224.0.23.12";
-const PORT = 3672;
+const PORT = 3671;
 
 let routing: KNXnetIPServer;
 

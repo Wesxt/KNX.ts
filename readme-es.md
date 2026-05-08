@@ -102,8 +102,17 @@ const server = new KNXnetIPServer({
   clientAddrs: "1.1.10:5", // Proporciona 5 ranuras de túnel comenzando desde 1.1.10
 });
 
+server.on("error", (err) => {
+  console.error(err)
+})
+
 server.connect().then(() => {
   console.log("El servidor KNXnet/IP está en funcionamiento");
+});
+
+server.on("indication", (cemi: CEMIInstance) => {
+  console.log("New data:", cemi.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
 });
 
 // Escucha específica para una Dirección de Grupo
@@ -129,6 +138,10 @@ usb.connect().then(() => {
 usb.on("indication", (cemi) => {
   console.log("Origen del telegrama USB:", cemi.sourceAddress);
 });
+
+usb.on("error", (err) => {
+  console.error(err)
+})
 ```
 
 ### Cliente de Túnel (Tunneling)
@@ -144,6 +157,20 @@ const tunnel = new KNXTunneling({
 
 tunnel.connect().then(() => {
   console.log("Conectado al bus KNX");
+});
+
+tunnel.on("error", (err) => {
+  console.error(err)
+})
+
+tunnel.on("indication", (cemi: CEMIInstance) => {
+  console.log("New data:", cemi.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
+});
+
+tunnel.on("1/1/1", (cemi: CEMIInstance) => {
+  console.log("New data on 1/1/1:", cemi.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
 });
 ```
 
@@ -177,6 +204,16 @@ const router = new Router();
 const usb = new KNXUSBConnection();
 // El enrutador se encargará de la gestión de la caché y emitirá eventos de direcciones de destino en lugar del enlace.
 router.addLink(usb);
+
+router.on("error", (err) => {
+  console.error(err)
+})
+
+router.on("indication_link", (data: { src: string, msg: CEMIInstance }) => {
+  console.log("Source:", data.src);
+  console.log("New data:", data.msg.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", data.msg.TPDU.apdu.data)); // Converted JavaScript value
+});
 
 router.on("1/1/1", (cemi: CEMIInstance) => { // <--- se activa
   console.log("Nuevos datos en 1/1/1:", cemi.TPDU.apdu.data); // Datos crudos del APDU

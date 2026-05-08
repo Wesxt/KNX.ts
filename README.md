@@ -108,6 +108,15 @@ server.connect().then(() => {
   console.log("The KNXnet/IP server is running");
 });
 
+server.on("error",(err)=>{
+  console.error(err)
+})
+
+server.on("indication", (cemi: CEMIInstance) => {
+  console.log("New data:", cemi.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
+});
+
 // Specific listener for a Group Address
 server.on("1/1/1", (cemi: CEMIInstance) => {
   console.log("New data on 1/1/1:", cemi.TPDU.apdu.data); // Raw APDU data
@@ -128,6 +137,10 @@ usb.connect().then(() => {
   console.log("Connected directly to the KNX USB interface");
 });
 
+usb.on("error", (err) => {
+  console.error(err)
+})
+
 usb.on("indication", (cemi) => {
   console.log("USB telegram source:", cemi.sourceAddress);
 });
@@ -146,6 +159,20 @@ const tunnel = new KNXTunneling({
 
 tunnel.connect().then(() => {
   console.log("Connected to the KNX bus");
+});
+
+tunnel.on("error", (err) => {
+  console.error(err)
+})
+
+tunnel.on("indication", (cemi: CEMIInstance) => {
+  console.log("New data:", cemi.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
+});
+
+tunnel.on("1/1/1", (cemi: CEMIInstance) => {
+  console.log("New data on 1/1/1:", cemi.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
 });
 ```
 
@@ -180,6 +207,11 @@ const router = new Router();
 const usb = new KNXUSBConnection();
 // The router will manage the link address cache and events related to destination addresses, rather than the link itself.
 router.addLink(usb);
+
+router.on("indication_link", (msg: { src: string, msg: CEMIInstance }) => {
+  console.log("New data:", msg.msg.TPDU.apdu.data); // Raw APDU data
+  console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", msg.msg.TPDU.apdu.data)); // Converted JavaScript value
+});
 
 router.on("1/1/1", (cemi: CEMIInstance) => {
   // <--- it activates
