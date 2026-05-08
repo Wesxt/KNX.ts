@@ -1540,69 +1540,77 @@ export class CEMI {
     // ---------------------------------------------------------------------
     // M_Reset
     // ---------------------------------------------------------------------
-    // "M_Reset.req": class M_Reset_req implements ServiceMessage {
-    //   constructor(additionalInfo: AddInfoBase[] | null = null) {
-    //     if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
-    //   }
-    //   messageCode = MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value; // 0xF1
-    //   additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+    "M_Reset.req": class M_Reset_req implements ServiceMessage {
+      constructor(additionalInfo: AddInfoBase[] | null = null) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+      }
+      messageCode = MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value; // 0xF1
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
 
-    //   toBuffer(): Buffer {
-    //     const baseOffset = 2 + this.additionalInfo.length;
-    //     const buffer = Buffer.alloc(baseOffset);
-    //     buffer.writeUInt8(this.messageCode, 0);
-    //     buffer.writeUInt8(this.additionalInfo.length, 1);
-    //     if (this.additionalInfo.length > 0) {
-    //       this.additionalInfo.toBuffer().copy(buffer, 2);
-    //     }
-    //     return buffer;
-    //   }
-    //   describe() {
-    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo.describe() };
-    //   }
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+        return buffer;
+      }
+      describe() {
+        return {
+          obj: this.constructor.name,
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo.describe(),
+        };
+      }
 
-    //   static fromBuffer(buffer: Buffer): M_Reset_req {
-    //     const messageCode = buffer.readUInt8(0);
-    //     if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value) throw new Error("Invalid MC for M_Reset.req");
-    //     // Parse AddInfo Logic similiar to others...
-    //     const addInfoLength = buffer.readUInt8(1);
-    //     const baseOffset = 2 + addInfoLength;
-    //     let addInfo: AdditionalInformationField | null = null;
-    //     if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
-    //     return new M_Reset_req(addInfo?.items ?? null);
-    //   }
-    // },
-    // "M_Reset.ind": class M_Reset_ind implements ServiceMessage {
-    //   constructor(additionalInfo: AddInfoBase[] | null = null) {
-    //     if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
-    //   }
-    //   messageCode = MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value; // 0xF0
-    //   additionalInfo: AdditionalInformationField = new AdditionalInformationField();
+      static fromBuffer(buffer: Buffer): M_Reset_req {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value) throw new Error("Invalid MC for M_Reset.req");
+        // Parse AddInfo Logic similiar to others...
+        const addInfoLength = buffer.readUInt8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        return new M_Reset_req(addInfo?.items ?? null);
+      }
+    },
+    "M_Reset.ind": class M_Reset_ind implements ServiceMessage {
+      constructor(additionalInfo: AddInfoBase[] | null = null) {
+        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
+      }
+      messageCode = MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value; // 0xF0
+      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
 
-    //   toBuffer(): Buffer {
-    //     const baseOffset = 2 + this.additionalInfo.length;
-    //     const buffer = Buffer.alloc(baseOffset);
-    //     buffer.writeUInt8(this.messageCode, 0);
-    //     buffer.writeUInt8(this.additionalInfo.length, 1);
-    //     if (this.additionalInfo.length > 0) {
-    //       this.additionalInfo.toBuffer().copy(buffer, 2);
-    //     }
-    //     return buffer;
-    //   }
-    //   describe() {
-    //     return { messageCode: this.messageCode, additionalInfo: this.additionalInfo.describe() };
-    //   }
+      toBuffer(): Buffer {
+        const baseOffset = 2 + this.additionalInfo.length;
+        const buffer = Buffer.alloc(baseOffset);
+        buffer.writeUInt8(this.messageCode, 0);
+        buffer.writeUInt8(this.additionalInfo.length, 1);
+        if (this.additionalInfo.length > 0) {
+          this.additionalInfo.toBuffer().copy(buffer, 2);
+        }
+        return buffer;
+      }
+      describe() {
+        return {
+          obj: this.constructor.name,
+          messageCode: this.messageCode,
+          additionalInfo: this.additionalInfo.describe(),
+        };
+      }
 
-    //   static fromBuffer(buffer: Buffer): M_Reset_ind {
-    //     const messageCode = buffer.readUInt8(0);
-    //     if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value) throw new Error("Invalid MC for M_Reset.ind");
-    //     const addInfoLength = buffer.readUInt8(1);
-    //     const baseOffset = 2 + addInfoLength;
-    //     let addInfo: AdditionalInformationField | null = null;
-    //     if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
-    //     return new M_Reset_ind(addInfo?.items ?? null);
-    //   }
-    // },
+      static fromBuffer(buffer: Buffer): M_Reset_ind {
+        const messageCode = buffer.readUInt8(0);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value) throw new Error("Invalid MC for M_Reset.ind");
+        const addInfoLength = buffer.readUInt8(1);
+        const baseOffset = 2 + addInfoLength;
+        let addInfo: AdditionalInformationField | null = null;
+        if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
+        return new M_Reset_ind(addInfo?.items ?? null);
+      }
+    },
   } as const;
 }
 

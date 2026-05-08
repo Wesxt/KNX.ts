@@ -58,8 +58,7 @@ export class MessageCodeTranslator {
 
     // Verificación de tipo segura
     if (targetStandard && to in targetStandard) {
-      // @ts-ignore: TypeScript puede quejarse del acceso dinámico, pero la lógica es sólida
-      return targetStandard[to]?.value ?? null;
+      return (targetStandard as any)[to]?.value ?? null;
     }
 
     return null;
@@ -79,5 +78,9 @@ export class MessageCodeTranslator {
       default:
         return null;
     }
+  }
+
+  public static isDataLinkLayerMessage(serviceName: string): boolean {
+    return serviceName === "L_Data.ind" || serviceName === "L_Data.con" || serviceName === "L_Data.req";
   }
 }

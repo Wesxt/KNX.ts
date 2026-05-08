@@ -241,17 +241,15 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
           /* empty */
         }
 
-        if (cemiObj && "destinationAddress" in cemiObj && "sourceAddress" in cemiObj) {
+        if (cemiObj) {
           if (!this.isCacheDelegated) {
             try {
-              GroupAddressCache.getInstance().processCEMI(
-                cemiObj as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
-              );
+              GroupAddressCache.getInstance().processCEMI(cemiObj);
             } catch {
               /* empty */
             }
           }
-          if (!this.isEventsDelegated && cemiObj.destinationAddress) {
+          if (!this.isEventsDelegated && "destinationAddress" in cemiObj) {
             this.emit(cemiObj.destinationAddress, cemiObj);
           }
         }

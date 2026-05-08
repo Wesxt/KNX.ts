@@ -4,7 +4,7 @@ import { TPUARTConnection } from "./TPUART";
 import { KNXTunneling } from "./KNXTunneling";
 import { KNXUSBConnection } from "./KNXUSBConnection";
 import { KNXUSBOptions, RouterConnOptions, TPUARTOptions } from "../@types/interfaces/connection";
-import { knxLogger, Logger } from "../utils/Logger";
+import { knxLogger, Logger, setupLogger } from "../utils/Logger";
 import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXnetIPServer } from "./KNXnetIPServer";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
@@ -44,6 +44,9 @@ export class Router extends EventEmitter {
   public readonly toLocalFilter: RouterConnOptions["toLocalFilter"] = {};
   constructor(options: RouterConnOptions) {
     super();
+    if (options.logOptions) {
+      this.logger = setupLogger(options.logOptions);
+    }
     this.logger = knxLogger.child({ module: "Router" });
 
     if (options.routerAddress) this.routerAddress = options.routerAddress;
@@ -74,7 +77,7 @@ export class Router extends EventEmitter {
     if (options.usb) {
       options.usb.individualAddress = this.routerAddress;
       const link = new KNXUSBConnection(options.usb as KNXUSBOptions);
-      this.registerLink("KNXUSB", link);
+      this.addLink(link);
     }
 
     this.logger.info(`Router initialized at ${this.routerAddress}`);
@@ -98,6 +101,7 @@ export class Router extends EventEmitter {
     this.logger.info(`Link registered: ${key}`);
 
     link.on("indication", (cemi: CEMIInstance) => {
+      console.log("Indication", cemi, link, key);
       this.processIncoming(cemi, link, key);
     });
 
@@ -155,6 +159,7 @@ export class Router extends EventEmitter {
    * Based on knxd's Router::recv_L_Data and Router::trigger_cb logic.
    */
   private processIncoming(cemi: CEMIInstance, source: KNXService, keySource: string | "TPUART" | "KNXUSB") {
+    console.log("Process Incoming", cemi, source, keySource);
     if (!("sourceAddress" in cemi)) return;
     GroupAddressCache.getInstance().processCEMI(cemi);
 
@@ -213,6 +218,7 @@ export class Router extends EventEmitter {
   }
 
   private route(data: CEMIInstance, source: KNXService, keySource: string | "TPUART" | "KNXUSB") {
+    console.log("Route", data, source, keySource);
     if (!("controlField2" in data)) return;
     // Hop Count Management (Protect the whole network)
     if (data.controlField2 && typeof data.controlField2.hopCount === "number") {
@@ -238,7 +244,7 @@ export class Router extends EventEmitter {
     }
 
     // Selective Routing (IA)
-    if (!isGroup && dest && dest !== "0.0.0" && dest !== "15.15.255") {
+    if (!isGroup && dest) {
       const target = this.addressTable.get(dest);
       if (target) {
         if (target.key !== keySource) {

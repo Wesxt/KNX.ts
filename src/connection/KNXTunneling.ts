@@ -57,6 +57,9 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     this.options.port = options.port || 3671;
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
     this.logger = this.logger.child({ module: "TunnelClient" });
+    this.logger.info(
+      `Tunneling initialized with ip: ${options.ip} and port: ${options.port} and transport: ${this._transport}`,
+    );
   }
 
   async connect(): Promise<void> {
@@ -224,16 +227,14 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       cemiObj = cemi;
     }
 
-    if (cemiObj && "destinationAddress" in cemiObj && "sourceAddress" in cemiObj) {
-      if (!this.isCacheDelegated) {
-        try {
-          GroupAddressCache.getInstance().processCEMI(
-            cemiObj as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
-          );
-        } catch {
-          /* empty */
-        }
+    if (!this.isCacheDelegated && cemiObj) {
+      try {
+        GroupAddressCache.getInstance().processCEMI(cemiObj);
+      } catch {
+        /* empty */
       }
+    }
+    if (cemiObj && "destinationAddress" in cemiObj) {
       if (!this.isEventsDelegated && cemiObj.destinationAddress) {
         this.emit(cemiObj.destinationAddress, cemiObj);
       }
@@ -477,17 +478,14 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         const data = body.subarray(len);
         const cemi = CEMI.fromBuffer(data);
         this.emit("indication", cemi);
-        if (!this.isCacheDelegated && "destinationAddress" in cemi && "sourceAddress" in cemi) {
+        if (!this.isCacheDelegated && cemi) {
           try {
-            GroupAddressCache.getInstance().processCEMI(
-              cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
-            );
+            GroupAddressCache.getInstance().processCEMI(cemi);
           } catch {
             /* empty */
           }
         }
-        if (!("destinationAddress" in cemi)) return;
-        if (!this.isEventsDelegated) {
+        if (!this.isEventsDelegated && "destinationAddress" in cemi) {
           this.emit(cemi.destinationAddress, cemi);
         }
         this.emit("raw_indication", data);

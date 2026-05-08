@@ -46,6 +46,7 @@ if (!isMainThread && parentPort) {
 
       if (logStream) {
         // Strip ANSI codes before writing to file
+        // eslint-disable-next-line no-control-regex
         const cleanMsg = msg.payload.replace(/\x1b\[[0-9;]*m/g, "");
         logStream.write(cleanMsg + "\n");
       }
@@ -84,9 +85,7 @@ export class Logger {
   private initWorker() {
     const workerFile = __filename;
     Logger.workerInstance = new Worker(workerFile, {
-      execArgv: workerFile.endsWith(".ts")
-        ? ["--require", "tsx"]
-        : undefined,
+      execArgv: workerFile.endsWith(".ts") ? ["--require", "tsx"] : undefined,
     });
 
     Logger.workerInstance.unref();
@@ -110,7 +109,7 @@ export class Logger {
   /**
    * Similar to pino's child() usage in the legacy code.
    */
-  public child(bindings: { module?: string; component?: string;[key: string]: any }): Logger {
+  public child(bindings: { module?: string; component?: string; [key: string]: any }): Logger {
     return this.module(bindings.module || bindings.component || this.moduleName);
   }
 
@@ -121,7 +120,7 @@ export class Logger {
 
   private formatMessage(level: LogLevel, ...args: any[]): { colored: string; raw: string } {
     const nowISO = new Date().toISOString();
-    const joinedArgs = args.map(arg => (typeof arg === "object" ? JSON.stringify(arg) : String(arg))).join(" ");
+    const joinedArgs = args.map((arg) => (typeof arg === "object" ? JSON.stringify(arg) : String(arg))).join(" ");
 
     const color = COLORS[level as keyof typeof COLORS] || COLORS.reset;
     const prefixCol = `${color}${nowISO} [${this.moduleName}] [${level.toUpperCase()}]${COLORS.reset}`;

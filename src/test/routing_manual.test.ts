@@ -1,14 +1,11 @@
 import { KNXnetIPServer } from "../connection/KNXnetIPServer";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
-import { MessageCodeTranslator } from "../utils/MessageCodeTranslator";
-import { CEMI } from "../core/CEMI";
-import { KnxDataDecode } from "../core/data/KNXDataDecode";
 // import { getLocalIP } from "../utils/localIp";
 
 // Configuration for KNX Routing
 // Standard Multicast Address for KNXnet/IP Routing
 const MULTICAST_IP = "224.0.23.12";
-const PORT = 3671;
+const PORT = 3672;
 
 let routing: KNXnetIPServer;
 
@@ -28,11 +25,9 @@ async function testRouting() {
     individualAddress: "1.15.1",
     useAllInterfaces: false,
     logOptions: {
-      logDir: "./logs",
       level: "debug",
-      logToFile: true,
-      enabled: true
-    }
+      enabled: true,
+    },
   });
 
   routing = client;
@@ -47,20 +42,11 @@ async function testRouting() {
 
   client.on("indication", (msg: ServiceMessage) => {
     // If you want to see the raw data:
-    console.log("[CEMI]", msg.constructor.name, msg.toBuffer());
-  });
-
-  client.on("0/0/2", (cemi: ServiceMessage) => {
-    const data = (cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.req"]>).TPDU.apdu.data;
-    try {
-      console.log("[Listen in 0/0/2]:", KnxDataDecode.decodeThis(16, data));
-    } catch (e) {
-      console.error(e);
-    }
+    console.log("[CEMI]", msg);
   });
 
   client.on("raw_indication", (msg: Buffer) => {
-    console.log("[RAWI]", MessageCodeTranslator.getServiceName(msg.readUint8(0), "CEMI"), msg);
+    console.log("[RAWI]", msg);
   });
 
   client.on("routing_busy", (busy: any) => {

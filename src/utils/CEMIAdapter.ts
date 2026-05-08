@@ -49,7 +49,8 @@ export class CEMIAdapter {
     dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(4, 6), npdu.addressType === 1 ? "/" : ".");
     // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
     const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
-    if (cemiCode === null) return null;
+    const serviceName = MessageCodeTranslator.getServiceName(messageCode, "EMI2/IMI2");
+    if (cemiCode === null || !serviceName || !MessageCodeTranslator.isDataLinkLayerMessage(serviceName)) return null;
 
     // Construct the appropriate cEMI class using CEMI.fromBuffer or directly
     // Since we already parsed components, we might want to find the class
@@ -57,7 +58,7 @@ export class CEMIAdapter {
     // Or just instantiate the specific class.
     // Given the structure of CEMI.ts, it's better to use the constructors if possible or fromBuffer with a temporary buffer.
 
-    const tempCemi = new CEMI.DataLinkLayerCEMI["L_Data.ind"](
+    const tempCemi = new CEMI.DataLinkLayerCEMI[serviceName as "L_Data.ind" | "L_Data.con" | "L_Data.req"](
       null,
       controlField1,
       controlField2,

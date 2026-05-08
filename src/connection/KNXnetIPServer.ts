@@ -380,6 +380,12 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       cemiBuffer = data;
       try {
         cemi = CEMI.fromBuffer(data);
+        if ("controlField2" in cemi) {
+          const cf2 = cemi.controlField2 as ExtendedControlField;
+          const hopCount = cf2.hopCount;
+          if (hopCount === 0) return;
+          if (hopCount < 7) cf2.hopCount = hopCount - 1;
+        }
       } catch (e: any) {
         this.logger.debug("Error parsing CEMI buffer" + e.message);
       }
@@ -394,16 +400,16 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       cemiBuffer = data.toBuffer();
     }
 
-    if (cemi && "destinationAddress" in cemi && "sourceAddress" in cemi) {
+    if (cemi) {
       this.emit("send", cemi);
       if (!this.isCacheDelegated) {
         GroupAddressCache.getInstance().processCEMI(cemi);
       }
-      if (!this.isEventsDelegated && cemi.destinationAddress) {
+      if (!this.isEventsDelegated && "destinationAddress" in cemi) {
         this.emit(cemi.destinationAddress, cemi);
       }
       const body = cemiBuffer;
-      const srcIAStr = cemi.sourceAddress;
+      const srcIAStr = "sourceAddress" in cemi ? cemi.sourceAddress : "";
       let busmonBody: Buffer | null = null;
       this._tunnelConnections.forEach((conn) => {
         // Echo cancellation: Don't forward back to the client that originated this message
@@ -435,13 +441,13 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     } catch (e: any) {
       this.logger.debug("Error parsing CEMI buffer" + e.message);
     }
-    if (!cemi || !("destinationAddress" in cemi) || !("sourceAddress" in cemi)) return;
+    if (!cemi) return;
     this.emit("send", cemi);
-    if (!this.isEventsDelegated && cemi.destinationAddress) {
+    if (!this.isEventsDelegated && "destinationAddress" in cemi) {
       this.emit(cemi.destinationAddress, cemi);
     }
     const body = cemiBuffer;
-    const srcIAStr = cemi.sourceAddress;
+    const srcIAStr = "sourceAddress" in cemi ? cemi.sourceAddress : "";
     let busmonBody: Buffer | null = null;
     this._tunnelConnections.forEach((conn) => {
       // Echo cancellation: Don't forward back to the client that originated this message
@@ -557,7 +563,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
       // Filtro Anti-Eco inicial por IP/Puerto
       if (rinfo.address === this.options.localIp && rinfo.port === ourAddress.port) return;
-
+      this.logger.debug(
+        `Received message from ${rinfo.address}:${rinfo.port} with service type ${header.serviceType} => ${KNXnetIPServiceType[header.serviceType]}`,
+      );
       switch (header.serviceType) {
         case KNXnetIPServiceType.ROUTING_INDICATION: {
           // [MEJORA] Filtro Anti-Eco Seguro leyendo la Individual Address (IA) origen del CEMI
@@ -571,15 +579,14 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           this.emit("raw_indication", body);
           try {
             const cemi = CEMI.fromBuffer(body);
-            if (!("destinationAddress" in cemi) || !("sourceAddress" in cemi)) return;
             this.emit("indication", cemi);
             if (!this.isCacheDelegated) {
               GroupAddressCache.getInstance().processCEMI(
                 cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
               );
             }
-            this.emit(cemi.destinationAddress, cemi);
-            const srcIAStr = cemi.sourceAddress;
+            if ("destinationAddress" in cemi) this.emit(cemi.destinationAddress, cemi);
+            const srcIAStr = "sourceAddress" in cemi ? cemi.sourceAddress : "";
             let busmonBody: Buffer | null = null;
             this._tunnelConnections.forEach((conn) => {
               // Echo cancellation: Don't forward back to the client that originated this message
@@ -595,9 +602,8 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
                 conn.enqueue(body, KNXnetIPServiceType.TUNNELLING_REQUEST);
               }
             });
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
           } catch (e) {
-            /* empty */
+            this.logger.error(e);
           }
           break;
         }
@@ -1042,7 +1048,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       routingCemiBuffer = Buffer.from(cemiBuffer);
       routingCemiBuffer[0] = 0x2d;
     }
-
+    this.emit("indication", CEMI.fromBuffer(routingCemiBuffer));
     this.sendRaw(routingCemiBuffer);
 
     if (msgCode === 0x11 || msgCode === 0x10) {
