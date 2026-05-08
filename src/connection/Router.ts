@@ -101,7 +101,6 @@ export class Router extends EventEmitter {
     this.logger.info(`Link registered: ${key}`);
 
     link.on("indication", (cemi: CEMIInstance) => {
-      console.log("Indication", cemi, link, key);
       this.processIncoming(cemi, link, key);
     });
 
@@ -159,7 +158,6 @@ export class Router extends EventEmitter {
    * Based on knxd's Router::recv_L_Data and Router::trigger_cb logic.
    */
   private processIncoming(cemi: CEMIInstance, source: KNXService, keySource: string | "TPUART" | "KNXUSB") {
-    console.log("Process Incoming", cemi, source, keySource);
     if (!("sourceAddress" in cemi)) return;
     GroupAddressCache.getInstance().processCEMI(cemi);
 
@@ -209,16 +207,13 @@ export class Router extends EventEmitter {
 
   private learnAddress(src: string, source: KNXService, keySource: string) {
     // knxd pattern: don't learn 0.0.0 or special 15.15.255 (0xFFFF) addresses
-    if (src !== "0.0.0" && src !== "15.15.255") {
-      if (this.addressTable.get(src)?.key !== keySource) {
-        this.addressTable.set(src, { link: source, key: keySource });
-        this.logger.debug(`Learned IA ${src} on link ${keySource}`);
-      }
+    if (this.addressTable.get(src)?.key !== keySource) {
+      this.addressTable.set(src, { link: source, key: keySource });
+      this.logger.debug(`Learned IA ${src} on link ${keySource}`);
     }
   }
 
   private route(data: CEMIInstance, source: KNXService, keySource: string | "TPUART" | "KNXUSB") {
-    console.log("Route", data, source, keySource);
     if (!("controlField2" in data)) return;
     // Hop Count Management (Protect the whole network)
     if (data.controlField2 && typeof data.controlField2.hopCount === "number") {
