@@ -49,7 +49,7 @@ export class Router extends EventEmitter {
     }
     this.logger = knxLogger.child({ module: "Router" });
 
-    if (options.routerAddress) this.routerAddress = options.routerAddress;
+    // if (options.routerAddress) this.routerAddress = options.routerAddress;
     if (options.toIpFilter) {
       this.toIPFilter = options.toIpFilter;
     }
@@ -57,12 +57,12 @@ export class Router extends EventEmitter {
       this.toLocalFilter = options.toLocalFilter;
     }
     if (options.knxNetIpServer) {
-      options.knxNetIpServer.individualAddress = this.routerAddress;
+      // options.knxNetIpServer.individualAddress = this.routerAddress;
       const ipServer = new KNXnetIPServer(options.knxNetIpServer);
       this.addLink(ipServer);
     }
     if (options.tpuart) {
-      options.tpuart.individualAddress = this.routerAddress;
+      // options.tpuart.individualAddress = this.routerAddress;
       const link = new TPUARTConnection(options.tpuart as TPUARTOptions);
       this.addLink(link);
     }
@@ -75,7 +75,7 @@ export class Router extends EventEmitter {
       });
     }
     if (options.usb) {
-      options.usb.individualAddress = this.routerAddress;
+      // options.usb.individualAddress = this.routerAddress;
       const link = new KNXUSBConnection(options.usb as KNXUSBOptions);
       this.addLink(link);
     }
@@ -232,11 +232,11 @@ export class Router extends EventEmitter {
     const dest = data.destinationAddress;
 
     // If packet is destined for the router itself, consume it and don't route
-    if (!isGroup && dest === this.routerAddress) {
-      this.logger.debug({ src: data.sourceAddress }, "Packet consumed by router local address");
-      this.emit("indication_link", { src: keySource, msg: data });
-      return;
-    }
+    // if (!isGroup && dest === this.routerAddress) {
+    //   this.logger.debug({ src: data.sourceAddress }, "Packet consumed by router local address");
+    //   this.emit("indication_link", { src: keySource, msg: data });
+    //   return;
+    // }
 
     // Selective Routing (IA)
     if (!isGroup && dest) {
@@ -259,18 +259,17 @@ export class Router extends EventEmitter {
       if (key === keySource) continue;
 
       // Avoid looping back to the physical source address if known via another route
-      if (this.addressTable.get(data.sourceAddress)?.key === keySource) continue;
+      // if (this.addressTable.get(data.sourceAddress)?.key === keySource) continue;
 
       // Check if the link should filter this message
       const shouldSend = this.evaluateFilter(dest, isGroup, isSourceIP);
       if (!shouldSend) continue;
 
+      // Notify upper layers
+      this.emit("indication_link", { src: keySource, msg: data });
       // Send to link
       this.sendToLink(link, data);
     }
-
-    // Notify upper layers
-    this.emit("indication_link", { src: keySource, msg: data });
   }
 
   /**
@@ -314,6 +313,12 @@ export class Router extends EventEmitter {
    * Sends data to a link with error handling.
    */
   private sendToLink(link: KNXService, data: CEMIInstance): void {
+    if ("sourceAddress" in data) {
+      data.sourceAddress =
+        "individualAddress" in link.options
+          ? (link.options.individualAddress ?? link.individualAddress)
+          : link.individualAddress;
+    }
     link.send(data).catch((err: any) => {
       this.logger.debug({ link: link.constructor.name, err: err.message }, "Flooding routing failed for link");
     });

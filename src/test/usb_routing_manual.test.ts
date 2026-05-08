@@ -1,7 +1,4 @@
-import { KNXnetIPServer } from "../connection/KNXnetIPServer";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
-import { getLocalIP } from "../utils/localIp";
-import { CEMI } from "../core/CEMI";
 import { Router } from "../connection/Router";
 
 // Configuración estándar para KNXnet/IP Routing
@@ -17,30 +14,32 @@ async function testUSBRouting() {
 ---------------------------------------------------------`);
 
   // Intenta obtener la IP local dinámicamente, o cámbiala por la tuya (ej. 192.168.0.x)
-  const localIp = getLocalIP();
+  const localIp = "192.168.0.238";
   console.log(`[Red] Vinculando a la IP Local: ${localIp}`);
 
   const client = new Router({
-    routerAddress: "1.1.0",
     knxNetIpServer: {
       ip: MULTICAST_IP,
       port: PORT,
       localIp: localIp,
-      friendlyName: "KNX-USB-Bridge",
-      // Asignamos un pool para los clientes IP que hagan tunneling hacia el USB
-      clientAddrs: "15.15.100:5",
-      // La dirección física de este enrutador en la topología KNX
+      friendlyName: "Arnold",
       individualAddress: "15.15.0",
+      clientAddrs: "15.15.1:5",
       useAllInterfaces: false,
       logOptions: { level: "debug" }, // Crucial: Queremos ver el ruido interno del Router
     },
-    usb: {}
+    usb: {
+      individualAddress: "1.1.250",
+      logOptions: {
+        level: "debug",
+      },
+    },
   });
 
   routing = client;
 
   client.on("indication_link", (data: { src: string; msg: ServiceMessage }) => {
-    console.log("Router", data.src);
+    console.log("Router", data);
   });
   client.on("connected", () => {
     console.log("\n[Estado] ¡Servidor IP levantado y en el grupo Multicast!");
@@ -52,20 +51,20 @@ async function testUSBRouting() {
     console.error("[Fallo Fatal] Error en el servidor o interfaz USB:", err.message);
   });
 
-  // Escuchamos CUALQUIER indicación que pase por el servidor
-  client.on("indication", (msg: ServiceMessage) => {
-    const msgAny = msg as any;
-    const src = msgAny.sourceAddress || "Desconocido";
-    const dst = msgAny.destinationAddress || "Desconocido";
+  // // Escuchamos CUALQUIER indicación que pase por el servidor
+  // client.on("indication", (msg: ServiceMessage) => {
+  //   const msgAny = msg as any;
+  //   const src = msgAny.sourceAddress || "Desconocido";
+  //   const dst = msgAny.destinationAddress || "Desconocido";
 
-    console.log(`[Telegrama Enrutado] Origen: ${src} -> Destino: ${dst}`);
-    console.log(`[CEMI Hex]`, (msg as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.req"]>).TPDU.apdu.data);
-  });
+  //   console.log(`[Telegrama Enrutado] Origen: ${src} -> Destino: ${dst}`);
+  //   console.log(`[CEMI Hex]`, (msg as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.req"]>).TPDU.apdu.data);
+  // });
 
   // Listener específico para monitorear una dirección de grupo de prueba (ej. una luz)
-  client.on("1/0/1", (cemi: ServiceMessage) => {
-    console.log("\n>>> [Match 1/1/1] Telegrama detectado en el grupo de prueba <<<", cemi.toBuffer());
-  });
+  // client.on("1/0/1", (cemi: ServiceMessage) => {
+  //   console.log("\n>>> [Match 1/1/1] Telegrama detectado en el grupo de prueba <<<", cemi.toBuffer());
+  // });
 
   try {
     console.log("[Sistema] Iniciando conexiones y montando enlaces en el Router...");

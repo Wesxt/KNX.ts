@@ -1285,6 +1285,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropWrite_con {
+        console.trace(buffer);
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value)
           throw new Error(`Invalid Message Code for M_PropWrite.con: expected 0xF5, got 0x${messageCode.toString(16)}`);
@@ -1363,6 +1364,8 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropInfo_ind {
+        console.trace(buffer);
+
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropInfo.ind"].CEMI.value)
           throw new Error(`Invalid Message Code for M_PropInfo.ind: expected 0xF7, got 0x${messageCode.toString(16)}`);
@@ -1602,6 +1605,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_Reset_ind {
+        console.trace(buffer);
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value) throw new Error("Invalid MC for M_Reset.ind");
         const addInfoLength = buffer.readUInt8(1);

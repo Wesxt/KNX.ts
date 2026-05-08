@@ -88,15 +88,15 @@ export interface ExternalManagerOptions {
   /**
    * Optional configuration for a physical TPUART connection.
    */
-  tpuart?: { individualAddress?: string } & Omit<TPUARTOptions, "individualAddress">;
+  tpuart?: TPUARTOptions;
   /**
    * Optional list of outbound KNX IP Tunneling client connections.
    */
-  tunneling?: { individualAddress?: string } & Omit<KNXTunnelingOptions, "individualAddress">[];
+  tunneling?: KNXTunnelingOptions[];
   /**
    * Optional configuration for a physical KNX USB connection.
    */
-  usb?: { individualAddress?: string } & Omit<KNXUSBOptions, "individualAddress">;
+  usb?: KNXUSBOptions;
   /**
    * Pino logger configuration for the Router bridge.
    */
@@ -168,7 +168,7 @@ export interface TPUARTOptions {
 }
 
 export interface RouterConnOptions extends ExternalManagerOptions {
-  routerAddress: string;
+  // routerAddress: string;
   /**
    * Filtering IP addresses from KNXnetIP to other interfaces such as TPUART or USB
    */
