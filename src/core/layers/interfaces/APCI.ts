@@ -96,7 +96,7 @@ export class APCI {
     return {
       obj: this.constructor.name,
       command: this.command,
-      value: `${this.toHex()} (Buffer: ${this.toBuffer().toString("hex").toUpperCase()})`
+      value: `${this.toHex()} (Buffer: ${this.toBuffer().toString("hex").toUpperCase()})`,
     };
   }
 }

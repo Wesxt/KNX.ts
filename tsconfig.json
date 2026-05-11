@@ -17,13 +17,18 @@
     ],
     "declaration": true,
     "incremental": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "types": [
+      "node",
+      "jest"
+    ]
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "test/",
+    "manual-tests"
   ],
   "exclude": [
     "node_modules",
-    "src/test"
   ]
 }

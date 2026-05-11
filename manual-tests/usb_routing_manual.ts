@@ -1,5 +1,4 @@
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
-import { Router } from "../connection/Router";
+import { Router, ServiceMessage } from "../src";
 
 // Configuración estándar para KNXnet/IP Routing
 const MULTICAST_IP = "224.0.23.12";

@@ -1,4 +1,4 @@
-import { CEMI } from "../core/CEMI";
+import { CEMI } from "../src/core/CEMI";
 
 describe("CEMI Decoding and Encoding Reproduction", () => {
   test("should decode and encode L_Data.ind DeviceDescriptorResponse correctly", () => {

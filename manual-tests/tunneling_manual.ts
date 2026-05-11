@@ -1,9 +1,6 @@
-import { KNXTunneling } from "../connection/KNXTunneling";
-import { ConnectionType } from "../core/enum/KNXnetIPEnum";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
-import { KNXTunnelingOptions } from "../@types/interfaces/connection";
-import { getLocalIP } from "../utils/localIp";
-import { CEMI } from "../core/CEMI";
+import { CEMI, KNXTunneling, KNXTunnelingOptions, ServiceMessage } from "../src";
+import { ConnectionType } from "../src/core/enum/KNXnetIPEnum";
+import { getLocalIP } from "../src/utils/localIp";
 
 // Configuration for local knxd
 const ip = "192.168.0.172"; // Change if knxd is on another machine

@@ -67,9 +67,8 @@ export class APDU implements ServiceMessage {
 
     // 1. Reconstruir el APCI (10 bits)
     // Byte 0: [T T T T T T A9 A8]  -> Nos interesan los últimos 2 bits
-    // Byte 1: [A7 A6 A5 A4 D D D D] -> Nos interesan los primeros 4 bits (normalmente)
-    // OJO: La máscara depende del comando, pero para GroupValueWrite/Read estándar (0x80, 0x00),
-    // el APCI ocupa los 4 bits altos del segundo byte.
+    // Byte 1 puede contener los 8 bits bajos del APCI en servicios extendidos
+    // o solo los 4 bits altos del APCI en servicios optimizados con datos cortos.
 
     const byte0 = buffer.readUInt8(0);
     let byte1 = 0;
@@ -85,14 +84,10 @@ export class APDU implements ServiceMessage {
     // Parte Alta APCI (2 bits): Byte 0 & 0000 0011
     const apciHigh = byte0 & 0x03;
 
-    // Parte Baja APCI (4 bits): Byte 1 & 1100 0000 (0xC0)
-    // Nota: Aunque APCI son 10 bits, los comandos estándar usan los bits altos.
-    // El resto del byte 1 son datos para payloads cortos (Short Frame).
-    const apciLow = byte1 & 0xc0;
-
-    // Reconstruimos el valor completo del APCI Enum
-    // (A9 A8) << 8 | (A7 A6 A5 A4 0 0 0 0)
-    const apciValue = (apciHigh << 8) | apciLow;
+    const fullApciValue = (apciHigh << 8) | byte1;
+    const shortApciValue = (apciHigh << 8) | (byte1 & 0xc0);
+    const hasFullApciCommand = APCIEnum[fullApciValue] !== undefined;
+    const apciValue = buffer.length > 2 || hasFullApciCommand ? fullApciValue : shortApciValue;
 
     const apci = new APCI(apciValue);
 
@@ -109,6 +104,9 @@ export class APDU implements ServiceMessage {
       // Ejemplo: Escribir un flotante (4 bytes) -> buffer total 1 + 1 + 4 = 6 bytes.
       // Los datos empiezan en el índice 2.
       data = buffer.subarray(2);
+      isShort = false;
+    } else if (hasFullApciCommand && fullApciValue !== shortApciValue) {
+      data = Buffer.alloc(0);
       isShort = false;
     } else {
       // Caso: Datos cortos (<= 6 bits)

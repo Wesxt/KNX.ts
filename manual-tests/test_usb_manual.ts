@@ -1,11 +1,10 @@
 import { inspect } from "node:util";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
-import { KNXUSBConnection } from "../connection/KNXUSBConnection";
+import { KNXUSBConnection, ServiceMessage } from "../src";
 
 let usb: KNXUSBConnection;
 
 async function testUsb() {
-  usb = new KNXUSBConnection({ path: "/dev/hidraw1" });
+  usb = new KNXUSBConnection({ path: "/dev/hidraw1", individualAddress: "1.1.250" });
 
   usb.on("connected", (msg) => console.log("connected", msg));
 

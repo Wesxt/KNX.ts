@@ -1,6 +1,4 @@
-import { KNXnetIPServer } from "../connection/KNXnetIPServer";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
-// import { getLocalIP } from "../utils/localIp";
+import { KNXnetIPServer, ServiceMessage } from "../src";
 
 // Configuration for KNX Routing
 // Standard Multicast Address for KNXnet/IP Routing

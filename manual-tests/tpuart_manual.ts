@@ -1,5 +1,4 @@
-import { TPUARTConnection } from "../connection/TPUART";
-import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
+import { ServiceMessage, TPUARTConnection } from "../src";
 
 async function testTPUART() {
   console.log("--- Testing TPUART ---");
