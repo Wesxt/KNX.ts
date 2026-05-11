@@ -334,7 +334,6 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
             const cemiMsg = CEMI.fromBuffer(payload);
             if (cemiMsg) {
               this.emit("indication", cemiMsg);
-              console.trace(cemiMsg);
               if (!this.isCacheDelegated && "destinationAddress" in cemiMsg && "sourceAddress" in cemiMsg) {
                 try {
                   GroupAddressCache.getInstance().processCEMI(
@@ -357,15 +356,13 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
               }
             }
           } catch (e: any) {
-            console.error(e);
-            this.logger.debug(`Error parsing incoming USB cEMI data: ${e.message}`);
+            this.logger.debug(`Error parsing incoming USB cEMI data: `, e);
           }
         } else {
           // EMI1 / EMI2
           try {
             const cemiMsg = CEMIAdapter.emiToCemi(payload);
             if (cemiMsg) {
-              console.trace(cemiMsg);
               this.emit("indication", cemiMsg);
               if (!this.isCacheDelegated && "destinationAddress" in cemiMsg && "sourceAddress" in cemiMsg) {
                 try {

@@ -35,21 +35,24 @@ export class Router extends EventEmitter {
   private recentDestinationAddress: Map<string, number> = new Map();
   private readonly MAX_SIGNATURES_SIZE = 10000;
 
-  public routerAddress: string = "15.15.0"; // Default, should be configurable
-
+  public readonly individualAddress: string = "15.15.0"; // Default, should be configurable
+  private isUseSingleIA = true;
   private logger: Logger;
   private gcInterval: NodeJS.Timeout;
+  private handleHopCount = false;
 
   public readonly toIPFilter: RouterConnOptions["toIpFilter"] = {};
   public readonly toLocalFilter: RouterConnOptions["toLocalFilter"] = {};
   constructor(options: RouterConnOptions) {
     super();
+    this.handleHopCount = options.handleHopCount ?? false;
     if (options.logOptions) {
       this.logger = setupLogger(options.logOptions);
     }
     this.logger = knxLogger.child({ module: "Router" });
 
-    // if (options.routerAddress) this.routerAddress = options.routerAddress;
+    if (options.individualAddress) this.individualAddress = options.individualAddress;
+    if (options.isUseSingleIA !== undefined) this.isUseSingleIA = options.isUseSingleIA;
     if (options.toIpFilter) {
       this.toIPFilter = options.toIpFilter;
     }
@@ -57,12 +60,12 @@ export class Router extends EventEmitter {
       this.toLocalFilter = options.toLocalFilter;
     }
     if (options.knxNetIpServer) {
-      // options.knxNetIpServer.individualAddress = this.routerAddress;
+      if (this.isUseSingleIA) (options.knxNetIpServer as any).individualAddress = this.individualAddress;
       const ipServer = new KNXnetIPServer(options.knxNetIpServer);
       this.addLink(ipServer);
     }
     if (options.tpuart) {
-      // options.tpuart.individualAddress = this.routerAddress;
+      if (this.isUseSingleIA) (options.tpuart as any).individualAddress = this.individualAddress;
       const link = new TPUARTConnection(options.tpuart as TPUARTOptions);
       this.addLink(link);
     }
@@ -75,12 +78,12 @@ export class Router extends EventEmitter {
       });
     }
     if (options.usb) {
-      // options.usb.individualAddress = this.routerAddress;
+      if (this.isUseSingleIA) (options.usb as any).individualAddress = this.individualAddress;
       const link = new KNXUSBConnection(options.usb as KNXUSBOptions);
       this.addLink(link);
     }
 
-    this.logger.info(`Router initialized at ${this.routerAddress}`);
+    this.logger.info(`Router initialized`);
 
     // Periodically clean the signature cache (knxd pattern)
     this.gcInterval = setInterval(() => this.gcDestinationAddress(), 1000);
@@ -105,8 +108,8 @@ export class Router extends EventEmitter {
     });
 
     link.on("error", (err) => {
-      this.logger.error({ link: key, err: err.message }, "Link error");
-      this.emit("error", { link, error: err });
+      this.logger.error({ link: key, err: err }, "Link error");
+      this.emit("error", { link: key, error: err });
     });
 
     // knxd pattern: cleanup when link goes down
@@ -158,18 +161,19 @@ export class Router extends EventEmitter {
    * Based on knxd's Router::recv_L_Data and Router::trigger_cb logic.
    */
   private processIncoming(cemi: CEMIInstance, source: KNXService, keySource: string | "TPUART" | "KNXUSB") {
-    if (!("sourceAddress" in cemi)) return;
     GroupAddressCache.getInstance().processCEMI(cemi);
 
-    const src = cemi.sourceAddress;
+    const src = "sourceAddress" in cemi ? cemi.sourceAddress : "";
+    const msgCode = "messageCode" in cemi ? cemi.messageCode : undefined;
+    const isConfirmation = msgCode === 0x2e || msgCode === 0x2f;
 
     // 1. Source Validation (knxd pattern):
     // If we know this IA is on another link, discard to prevent loops/spoofing.
-    if (src && src !== "0.0.0") {
-      if (src === this.routerAddress) {
-        // We shouldn't receive a packet claiming to be us from the outside.
-        return;
-      }
+    if (!isConfirmation && src && src !== "0.0.0") {
+      // if (src === this.routerAddress) {
+      //   // We shouldn't receive a packet claiming to be us from the outside.
+      //   return;
+      // }
       const existingLink = this.addressTable.get(src);
       if (existingLink && existingLink.key !== keySource) {
         return; // Ignore packet from "wrong" interface
@@ -177,13 +181,15 @@ export class Router extends EventEmitter {
     }
 
     // 2. IA Learning
-    this.learnAddress(src, source, keySource);
+    if (!isConfirmation) {
+      this.learnAddress(src, source, keySource);
+    }
 
     // 3. Loop Prevention (knxd strict pattern)
 
     // KNX Standard: Repeat bit is bit 5 (0x20). Active LOW (0 = repeated frame).
-    const isRepeated = !cemi.controlField1.repeat;
-    const destinationAddress = cemi.destinationAddress;
+    const isRepeated = "controlField1" in cemi ? !cemi.controlField1.repeat : false;
+    const destinationAddress = "destinationAddress" in cemi ? cemi.destinationAddress : "";
 
     if (isRepeated) {
       if (this.recentDestinationAddress.has(destinationAddress)) {
@@ -207,16 +213,17 @@ export class Router extends EventEmitter {
 
   private learnAddress(src: string, source: KNXService, keySource: string) {
     // knxd pattern: don't learn 0.0.0 or special 15.15.255 (0xFFFF) addresses
-    if (this.addressTable.get(src)?.key !== keySource) {
-      this.addressTable.set(src, { link: source, key: keySource });
-      this.logger.debug(`Learned IA ${src} on link ${keySource}`);
+    if (src !== "0.0.0" && src !== "15.15.255") {
+      if (this.addressTable.get(src)?.key !== keySource) {
+        this.addressTable.set(src, { link: source, key: keySource });
+        this.logger.debug(`Learned IA ${src} on link ${keySource}`);
+      }
     }
   }
 
   private route(data: CEMIInstance, source: KNXService, keySource: string | "TPUART" | "KNXUSB") {
-    if (!("controlField2" in data)) return;
     // Hop Count Management (Protect the whole network)
-    if (data.controlField2 && typeof data.controlField2.hopCount === "number") {
+    if ("controlField2" in data && data.controlField2 && this.handleHopCount) {
       const hops = data.controlField2.hopCount;
       if (hops === 0) {
         this.logger.debug(
@@ -225,21 +232,14 @@ export class Router extends EventEmitter {
         );
         return; // Drop packet
       }
-      if (hops < 7) data.controlField2.hopCount = hops - 1;
+      if (hops < 7 && hops > 0) data.controlField2.hopCount = hops - 1;
     }
 
-    const isGroup = data.controlField2?.addressType === 1;
-    const dest = data.destinationAddress;
-
-    // If packet is destined for the router itself, consume it and don't route
-    // if (!isGroup && dest === this.routerAddress) {
-    //   this.logger.debug({ src: data.sourceAddress }, "Packet consumed by router local address");
-    //   this.emit("indication_link", { src: keySource, msg: data });
-    //   return;
-    // }
+    const isGroup = "controlField2" in data ? data.controlField2?.addressType === 1 : false;
+    const dest = "destinationAddress" in data ? data.destinationAddress : "";
 
     // Selective Routing (IA)
-    if (!isGroup && dest) {
+    if (!isGroup && dest && dest !== "0.0.0" && dest !== "15.15.255") {
       const target = this.addressTable.get(dest);
       if (target) {
         if (target.key !== keySource) {
@@ -313,12 +313,6 @@ export class Router extends EventEmitter {
    * Sends data to a link with error handling.
    */
   private sendToLink(link: KNXService, data: CEMIInstance): void {
-    if ("sourceAddress" in data) {
-      data.sourceAddress =
-        "individualAddress" in link.options
-          ? (link.options.individualAddress ?? link.individualAddress)
-          : link.individualAddress;
-    }
     link.send(data).catch((err: any) => {
       this.logger.debug({ link: link.constructor.name, err: err.message }, "Flooding routing failed for link");
     });
@@ -327,8 +321,11 @@ export class Router extends EventEmitter {
   /**
    * Broadcasts a CEMI message to all registered links.
    */
-  public async send(cemi: CEMIInstance): Promise<void> {
+  public async send(cemi: CEMIInstance, replaceIA = false): Promise<void> {
     const promises = Array.from(this.links.entries()).map(async ([key, link]) => {
+      if (replaceIA && "sourceAddress" in cemi) {
+        cemi.sourceAddress = link.individualAddress;
+      }
       try {
         await link.send(cemi);
       } catch (err: any) {
@@ -405,10 +402,10 @@ export class Router extends EventEmitter {
       data,
     );
 
-    const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, this.routerAddress, destination, tpdu);
+    const cemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, "0.0.0", destination, tpdu);
     this.logger.debug({ service: cemi.constructor.name }, "Sending GroupValue_Write");
 
-    return this.send(cemi);
+    return this.send(cemi, true);
   }
 
   private gcDestinationAddress() {

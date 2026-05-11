@@ -176,6 +176,75 @@ tunnel.on("1/1/1", (cemi: CEMIInstance) => {
 });
 ```
 
+### Link Router
+
+If you want to combine different KNX connections supported by the library and route their messages, you can instantiate them using the `Router` class. Each instance is optional, so various combinations are possible.
+
+```typescript
+import { Router } from "knx.ts";
+
+const router = new Router({
+    knxNetIpServer: {
+      ip: MULTICAST_IP,
+      port: PORT,
+      localIp: "192.168.0.200",
+      friendlyName: "Test",
+      individualAddress: "15.15.0",
+      clientAddrs: "15.15.1:5",
+      useAllInterfaces: true,
+      logOptions: { level: "info" },
+    },
+    usb: {
+      individualAddress: "1.1.250",
+      logOptions: {
+        level: "debug",
+      },
+    },
+    tpuart: {
+      individualAddress: "1.1.50",
+      path: "/dev/ttyAMA0"
+    },
+    tunneling: [
+      {
+        ip: "192.168.0.10"
+      },
+      {
+        ip: "192.168.0.50"
+      }
+    ],
+    toIpFilter: { // (Optional) Filter addresses towards Tunneling and KNXnetIPServer connections
+      groupAddress: {
+        addresses: [],
+        groupAddressToIpFilterPolicie: "accept only"
+      },
+      individualAddress: {
+        addresses: [],
+        individualAddressToIpFilterPolicie: "discard all"
+      }
+    },
+    toLocalFilter: { // (Optional) Filter addresses towards TPUART and KNXUSB connections
+      groupAddress: {
+        addresses: [],
+        groupAddressToLocalFilterPolicie: "discard all"
+      },
+      individualAddress: {
+        addresses: [],
+        individualAddressToLocalFilterPolicie: "accept only"
+      }
+    },
+    logOptions: { // The router can also be configured to log data
+      level: "debug",
+    },
+  });
+
+  router.connect()
+
+  router.on("indication_link", (msg: {src: string, msg: CEMIInstance}) => {
+    // Here you can capture all the messages from the links
+    console.log(msg)
+  })
+```
+
 ## 🌐 (API)
 
 ### GroupAddressCache (Integrated Caching)
@@ -203,8 +272,10 @@ If you create an instance of a router and register links with it, the router wil
 ```typescript
 import { Router, KNXUSBConnection } from "knx.ts";
 
-const router = new Router();
-const usb = new KNXUSBConnection();
+const router = new Router({});
+const usb = new KNXUSBConnection({
+  individualAddress: "1.1.250"
+});
 // The router will manage the link address cache and events related to destination addresses, rather than the link itself.
 router.addLink(usb);
 
@@ -442,6 +513,9 @@ cemi.additionalInfo = addInfo;
 #### 5. EMI (External Message Interface)
 
 `EMI` is also not used as a generic instance with `new EMI()`. The class acts as a service container and parser (`EMI.fromBuffer(...)`). In connections such as `KNXUSBConnection`, the library automatically converts a cEMI `CEMIInstance` to EMI when needed.
+
+> [!NOTE]
+> EMI code is relatively old, but not obsolete; the arguments of EMI object class constructors may be redundant or arbitrary compared to those of CEMI (this refers only to the style of the code, not its specification).
 
 ### Final Assembly and Sending Example
 

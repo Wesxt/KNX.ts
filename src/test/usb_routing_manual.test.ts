@@ -18,23 +18,35 @@ async function testUSBRouting() {
   console.log(`[Red] Vinculando a la IP Local: ${localIp}`);
 
   const client = new Router({
+    individualAddress: "1.1.250",
     knxNetIpServer: {
       ip: MULTICAST_IP,
       port: PORT,
       localIp: localIp,
       friendlyName: "Arnold",
-      individualAddress: "15.15.0",
-      clientAddrs: "15.15.1:5",
-      useAllInterfaces: false,
-      logOptions: { level: "debug" }, // Crucial: Queremos ver el ruido interno del Router
+      // individualAddress: "15.15.0",
+      clientAddrs: "1.1.250:5",
+      useAllInterfaces: true,
+      logOptions: { level: "info" }, // Crucial: Queremos ver el ruido interno del Router
     },
     usb: {
-      individualAddress: "1.1.250",
+      // individualAddress: "1.1.250",
       logOptions: {
         level: "debug",
       },
     },
+    logOptions: {
+      level: "debug",
+    },
   });
+
+  // const usb = client.links.get("KNXUSB");
+
+  // if (usb) {
+  //   usb.on("send", (any) => {
+  //     console.trace(CEMI.fromBuffer(any).describe());
+  //   });
+  // }
 
   routing = client;
 
@@ -48,7 +60,7 @@ async function testUSBRouting() {
   });
 
   client.on("error", (err: any) => {
-    console.error("[Fallo Fatal] Error en el servidor o interfaz USB:", err.message);
+    console.error("[Fallo Fatal] Error en el Router:", err);
   });
 
   // // Escuchamos CUALQUIER indicación que pase por el servidor

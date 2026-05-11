@@ -1089,6 +1089,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropRead_req {
+        if (buffer.length < 7) throw new Error("Buffer too short for M_PropRead.req");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropRead.req"].CEMI.value)
           throw new Error(`Invalid Message Code for M_PropRead.req: expected 0xFC, got 0x${messageCode.toString(16)}`);
@@ -1098,7 +1099,7 @@ export class CEMI {
         const propertyId = buffer.readUInt8(4);
         const byte5 = buffer.readUInt16BE(5);
         const startIndex = byte5 & 0x0fff;
-        const numberOfElements = byte5 & 0xf000;
+        const numberOfElements = (byte5 >> 12) & 0x0f;
 
         return new M_PropRead_req(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex);
       }
@@ -1120,13 +1121,13 @@ export class CEMI {
         this.data = data;
       }
 
-      messageCode = MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value; // 0xFC
+      messageCode = MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value; // 0xFB
       interfaceObjectType: number = 0;
       objectInstance: number = 0;
       propertyId: number = 0;
       numberOfElements: number = 1;
       startIndex: number = 1;
-      data: Buffer = Buffer.alloc(1);
+      data: Buffer = Buffer.alloc(0);
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.data.length);
@@ -1152,6 +1153,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropRead_con {
+        if (buffer.length < 7) throw new Error("Buffer too short for M_PropRead.con");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropRead.con"].CEMI.value)
           throw new Error(`Invalid Message Code for M_PropRead.con: expected 0xFB, got 0x${messageCode.toString(16)}`);
@@ -1161,8 +1163,8 @@ export class CEMI {
         const propertyId = buffer.readUInt8(4);
         const byte5 = buffer.readUInt16BE(5);
         const startIndex = byte5 & 0x0fff;
-        const numberOfElements = byte5 & 0xf000;
-        const data = buffer.subarray(7, buffer.length - 1);
+        const numberOfElements = (byte5 >> 12) & 0x0f;
+        const data = buffer.subarray(7);
 
         return new M_PropRead_con(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex, data);
       }
@@ -1188,13 +1190,13 @@ export class CEMI {
         this.data = data;
       }
 
-      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value; // 0xFC
+      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value; // 0xF6
       interfaceObjectType: number = 0;
       objectInstance: number = 0;
       propertyId: number = 0;
       numberOfElements: number = 1;
       startIndex: number = 1;
-      data: Buffer = Buffer.alloc(1);
+      data: Buffer = Buffer.alloc(0);
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.data.length);
@@ -1220,6 +1222,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropWrite_req {
+        if (buffer.length < 7) throw new Error("Buffer too short for M_PropWrite.req");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropWrite.req"].CEMI.value)
           throw new Error(`Invalid Message Code for M_PropWrite.req: expected 0xF6, got 0x${messageCode.toString(16)}`);
@@ -1229,8 +1232,8 @@ export class CEMI {
         const propertyId = buffer.readUInt8(4);
         const byte5 = buffer.readUInt16BE(5);
         const startIndex = byte5 & 0x0fff;
-        const numberOfElements = byte5 & 0xf000;
-        const data = buffer.subarray(7, buffer.length - 1);
+        const numberOfElements = (byte5 >> 12) & 0x0f;
+        const data = buffer.subarray(7);
 
         return new M_PropWrite_req(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex, data);
       }
@@ -1243,7 +1246,7 @@ export class CEMI {
         propertyId: number,
         numberOfElements: number,
         startIndex: number,
-        errorInfo: ErrorCodeSet,
+        errorInfo: ErrorCodeSet = ErrorCodeSet.Unspecified_Error,
       ) {
         this.interfaceObjectType = interfaceObjectType;
         this.objectInstance = objectInstance;
@@ -1253,22 +1256,24 @@ export class CEMI {
         this.errorInfo = errorInfo;
       }
 
-      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value; // 0xFC
+      messageCode = MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value; // 0xF5
       interfaceObjectType: number = 0;
       objectInstance: number = 0;
       propertyId: number = 0;
       numberOfElements: number = 1;
       startIndex: number = 1;
-      errorInfo: number;
+      errorInfo: number = 0;
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8);
+        const buffer = Buffer.alloc(this.numberOfElements === 0 ? 8 : 7);
         buffer.writeUInt8(this.messageCode, 0);
         buffer.writeUInt16BE(this.interfaceObjectType, 1);
         buffer.writeUInt8(this.objectInstance, 3);
         buffer.writeUInt8(this.propertyId, 4);
         buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
-        buffer.writeUint8(this.errorInfo, 7);
+        if (this.numberOfElements === 0) {
+          buffer.writeUint8(this.errorInfo, 7);
+        }
         return buffer;
       }
 
@@ -1285,7 +1290,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropWrite_con {
-        console.trace(buffer);
+        if (buffer.length < 7) throw new Error("Buffer too short for M_PropWrite.con");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropWrite.con"].CEMI.value)
           throw new Error(`Invalid Message Code for M_PropWrite.con: expected 0xF5, got 0x${messageCode.toString(16)}`);
@@ -1295,8 +1300,12 @@ export class CEMI {
         const propertyId = buffer.readUInt8(4);
         const byte5 = buffer.readUInt16BE(5);
         const startIndex = byte5 & 0x0fff;
-        const numberOfElements = byte5 & 0xf000;
-        const errorInfo = buffer.subarray(7).readUint8();
+        const numberOfElements = (byte5 >> 12) & 0x0f;
+
+        let errorInfo = ErrorCodeSet.Unspecified_Error;
+        if (numberOfElements === 0 && buffer.length >= 8) {
+          errorInfo = buffer.readUint8(7);
+        }
 
         return new M_PropWrite_con(
           interfaceObjectType,
@@ -1334,19 +1343,16 @@ export class CEMI {
       propertyId: number = 0;
       numberOfElements: number = 1;
       startIndex: number = 1;
-      data: Buffer = Buffer.alloc(1);
+      data: Buffer = Buffer.alloc(0);
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.data.length);
-
         buffer.writeUInt8(this.messageCode, 0);
-
         buffer.writeUInt16BE(this.interfaceObjectType, 1);
         buffer.writeUInt8(this.objectInstance, 3);
         buffer.writeUInt8(this.propertyId, 4);
         buffer.writeUInt16BE((this.startIndex & 0x0fff) | ((this.numberOfElements & 0x0f) << 12), 5);
         this.data.copy(buffer, 7);
-
         return buffer;
       }
 
@@ -1364,7 +1370,7 @@ export class CEMI {
       }
 
       static fromBuffer(buffer: Buffer): M_PropInfo_ind {
-        console.trace(buffer);
+        if (buffer.length < 7) throw new Error("Buffer too short for M_PropInfo.ind");
 
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_PropInfo.ind"].CEMI.value)
@@ -1375,7 +1381,7 @@ export class CEMI {
         const propertyId = buffer.readUInt8(4);
         const byte5 = buffer.readUInt16BE(5);
         const startIndex = byte5 & 0x0fff;
-        const numberOfElements = byte5 & 0xf000;
+        const numberOfElements = (byte5 >> 12) & 0x0f;
         const data = buffer.subarray(7);
 
         return new M_PropInfo_ind(interfaceObjectType, objectInstance, propertyId, numberOfElements, startIndex, data);
@@ -1393,11 +1399,11 @@ export class CEMI {
         this.data = data;
       }
 
-      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value;
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value; // 0xF8
       interfaceObjectType: number = 0;
       objectInstance: number = 0;
       propertyId: number = 0;
-      data: Buffer = Buffer.alloc(1);
+      data: Buffer = Buffer.alloc(0);
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(5 + this.data.length);
@@ -1416,10 +1422,12 @@ export class CEMI {
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
           propertyId: this.propertyId,
+          data: this.data,
         };
       }
 
       static fromBuffer(buffer: Buffer) {
+        if (buffer.length < 5) throw new Error("Buffer too short for M_FuncPropCommand.req");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_FuncPropCommand.req"].CEMI.value)
           throw new Error(
@@ -1448,12 +1456,12 @@ export class CEMI {
         this.data = data;
       }
 
-      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value;
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value; // 0xFA
       interfaceObjectType: number = 0;
       objectInstance: number = 0;
       propertyId: number = 0;
       return_code: number = 0;
-      data: Buffer = Buffer.alloc(1);
+      data: Buffer = Buffer.alloc(0);
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(6 + this.data.length);
@@ -1474,10 +1482,12 @@ export class CEMI {
           objectInstance: this.objectInstance,
           propertyId: this.propertyId,
           return_code: this.return_code,
+          data: this.data,
         };
       }
 
       static fromBuffer(buffer: Buffer) {
+        if (buffer.length < 6) throw new Error("Buffer too short for M_FuncPropCommand.con");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_FuncPropCommand.con"].CEMI.value)
           throw new Error(
@@ -1492,7 +1502,7 @@ export class CEMI {
         return new M_FuncPropCommand_con(interfaceObjectType, objectInstance, propertyId, return_code, data);
       }
     },
-    "M_FuncPropStateRead.req": class M_FuncPropCommand_con implements ServiceMessage {
+    "M_FuncPropStateRead.req": class M_FuncPropStateRead_req implements ServiceMessage {
       constructor(interfaceObjectType: number, objectInstance: number, propertyIndentifier: number, data: Buffer) {
         this.interfaceObjectType = interfaceObjectType;
         this.objectInstance = objectInstance;
@@ -1500,11 +1510,11 @@ export class CEMI {
         this.data = data;
       }
 
-      messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value;
+      messageCode = MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value; // 0xF9
       interfaceObjectType: number = 0;
       objectInstance: number = 0;
       propertyId: number = 0;
-      data: Buffer = Buffer.alloc(1);
+      data: Buffer = Buffer.alloc(0);
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(5 + this.data.length);
@@ -1523,10 +1533,12 @@ export class CEMI {
           interfaceObjectType: this.interfaceObjectType,
           objectInstance: this.objectInstance,
           propertyId: this.propertyId,
+          data: this.data,
         };
       }
 
       static fromBuffer(buffer: Buffer) {
+        if (buffer.length < 5) throw new Error("Buffer too short for M_FuncPropStateRead.req");
         const messageCode = buffer.readUInt8(0);
         if (messageCode !== MESSAGE_CODE_FIELD["M_FuncPropStateRead.req"].CEMI.value)
           throw new Error(
@@ -1537,82 +1549,56 @@ export class CEMI {
         const objectInstance = buffer.readUInt8(3);
         const propertyId = buffer.readUInt8(4);
         const data = buffer.subarray(5);
-        return new M_FuncPropCommand_con(interfaceObjectType, objectInstance, propertyId, data);
+        return new M_FuncPropStateRead_req(interfaceObjectType, objectInstance, propertyId, data);
       }
     },
     // ---------------------------------------------------------------------
     // M_Reset
     // ---------------------------------------------------------------------
     "M_Reset.req": class M_Reset_req implements ServiceMessage {
-      constructor(additionalInfo: AddInfoBase[] | null = null) {
-        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
-      }
       messageCode = MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value; // 0xF1
-      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
 
       toBuffer(): Buffer {
-        const baseOffset = 2 + this.additionalInfo.length;
-        const buffer = Buffer.alloc(baseOffset);
+        const buffer = Buffer.alloc(1);
         buffer.writeUInt8(this.messageCode, 0);
-        buffer.writeUInt8(this.additionalInfo.length, 1);
-        if (this.additionalInfo.length > 0) {
-          this.additionalInfo.toBuffer().copy(buffer, 2);
-        }
         return buffer;
       }
       describe() {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo.describe(),
         };
       }
 
       static fromBuffer(buffer: Buffer): M_Reset_req {
+        if (buffer.length < 1) throw new Error("Buffer too short for M_Reset.req");
         const messageCode = buffer.readUInt8(0);
-        if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value) throw new Error("Invalid MC for M_Reset.req");
-        // Parse AddInfo Logic similiar to others...
-        const addInfoLength = buffer.readUInt8(1);
-        const baseOffset = 2 + addInfoLength;
-        let addInfo: AdditionalInformationField | null = null;
-        if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
-        return new M_Reset_req(addInfo?.items ?? null);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.req"].CEMI.value)
+          throw new Error(`Invalid MC for M_Reset.req: 0x${messageCode.toString(16)}`);
+        return new M_Reset_req();
       }
     },
     "M_Reset.ind": class M_Reset_ind implements ServiceMessage {
-      constructor(additionalInfo: AddInfoBase[] | null = null) {
-        if (additionalInfo) this.additionalInfo = new AdditionalInformationField(additionalInfo);
-      }
       messageCode = MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value; // 0xF0
-      additionalInfo: AdditionalInformationField = new AdditionalInformationField();
 
       toBuffer(): Buffer {
-        const baseOffset = 2 + this.additionalInfo.length;
-        const buffer = Buffer.alloc(baseOffset);
+        const buffer = Buffer.alloc(1);
         buffer.writeUInt8(this.messageCode, 0);
-        buffer.writeUInt8(this.additionalInfo.length, 1);
-        if (this.additionalInfo.length > 0) {
-          this.additionalInfo.toBuffer().copy(buffer, 2);
-        }
         return buffer;
       }
       describe() {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode,
-          additionalInfo: this.additionalInfo.describe(),
         };
       }
 
       static fromBuffer(buffer: Buffer): M_Reset_ind {
-        console.trace(buffer);
+        if (buffer.length < 1) throw new Error("Buffer too short for M_Reset.ind");
         const messageCode = buffer.readUInt8(0);
-        if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value) throw new Error("Invalid MC for M_Reset.ind");
-        const addInfoLength = buffer.readUInt8(1);
-        const baseOffset = 2 + addInfoLength;
-        let addInfo: AdditionalInformationField | null = null;
-        if (addInfoLength > 0) addInfo = AdditionalInformationField.fromBuffer(buffer.subarray(2, baseOffset));
-        return new M_Reset_ind(addInfo?.items ?? null);
+        if (messageCode !== MESSAGE_CODE_FIELD["M_Reset.ind"].CEMI.value)
+          throw new Error(`Invalid MC for M_Reset.ind: 0x${messageCode.toString(16)}`);
+        return new M_Reset_ind();
       }
     },
   } as const;

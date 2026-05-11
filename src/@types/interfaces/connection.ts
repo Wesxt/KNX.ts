@@ -84,11 +84,11 @@ export interface ExternalManagerOptions {
   /**
    * Optional configuration for a KNXnetIPServer
    */
-  knxNetIpServer?: KNXnetIPServerOptions;
+  knxNetIpServer?: Omit<KNXnetIPServerOptions, "individualAddress">;
   /**
    * Optional configuration for a physical TPUART connection.
    */
-  tpuart?: TPUARTOptions;
+  tpuart?: Omit<TPUARTOptions, "individualAddress">;
   /**
    * Optional list of outbound KNX IP Tunneling client connections.
    */
@@ -96,7 +96,7 @@ export interface ExternalManagerOptions {
   /**
    * Optional configuration for a physical KNX USB connection.
    */
-  usb?: KNXUSBOptions;
+  usb?: Omit<KNXUSBOptions, "individualAddress">;
   /**
    * Pino logger configuration for the Router bridge.
    */
@@ -168,7 +168,20 @@ export interface TPUARTOptions {
 }
 
 export interface RouterConnOptions extends ExternalManagerOptions {
-  // routerAddress: string;
+  /**
+   * This is so that the router decrements the hop count each time it routes the message to other links. Logically, if the incoming message has 0 hop counts, the message is not routed. If enabled, it is no longer possible to program devices to the physical layer links (TPUART, KNXUSB). Default: false.
+   */
+  handleHopCount?: boolean;
+  /**
+   * This individual address will be assigned to all links, except tunneling links; this is done to enable programming devices through ETS.
+   * @warning This will obviously cause some links to be out of line.
+   */
+  individualAddress: string;
+  /**
+   * This is to assign the same individual address to all links except Tunneling links; default: true
+   * @warning This will obviously cause some links to be out of line.
+   */
+  isUseSingleIA?: boolean;
   /**
    * Filtering IP addresses from KNXnetIP to other interfaces such as TPUART or USB
    */

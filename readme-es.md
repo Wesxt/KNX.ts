@@ -174,6 +174,75 @@ tunnel.on("1/1/1", (cemi: CEMIInstance) => {
 });
 ```
 
+### Enrutador de enlaces (Router)
+
+Si deseas combinar distintas conexiones KNX que soporta la libreria y enrutar sus mensajes puedes instanciarlas atravez de la clase ``Router``, cada una es opcional por lo tanto se pueden hacer distintas combinaciones
+
+```typescript
+import { Router } from "knx.ts";
+
+const router = new Router({
+    knxNetIpServer: {
+      ip: MULTICAST_IP,
+      port: PORT,
+      localIp: "192.168.0.200",
+      friendlyName: "Test",
+      individualAddress: "15.15.0",
+      clientAddrs: "15.15.1:5",
+      useAllInterfaces: true,
+      logOptions: { level: "info" },
+    },
+    usb: {
+      individualAddress: "1.1.250",
+      logOptions: {
+        level: "debug",
+      },
+    },
+    tpuart: {
+      individualAddress: "1.1.50",
+      path: "/dev/ttyAMA0"
+    },
+    tunneling: [
+      {
+        ip: "192.168.0.10"
+      },
+      {
+        ip: "192.168.0.50"
+      }
+    ],
+    toIpFilter: { // (Opcional) Filtar direcciones hacia conexiones Tunneling y KNXnetIPServer
+      groupAddress: {
+        addresses: [],
+        groupAddressToIpFilterPolicie: "accept only"
+      },
+      individualAddress: {
+        addresses: [],
+        individualAddressToIpFilterPolicie: "discard all"
+      }
+    },
+    toLocalFilter: { // (Opcional) Filtar direcciones hacia conexiones TPUART y KNXUSB
+      groupAddress: {
+        addresses: [],
+        groupAddressToLocalFilterPolicie: "discard all"
+      },
+      individualAddress: {
+        addresses: [],
+        individualAddressToLocalFilterPolicie: "accept only"
+      }
+    },
+    logOptions: { // El Router tambien se le puede configurar el logger
+      level: "debug",
+    },
+  });
+
+  router.connect()
+
+  router.on("indication_link", (msg: {src: string, msg: CEMIInstance}) => {
+    // Aqui puedes capturar todos los mensajes de los enlaces
+    console.log(msg)
+  })
+```
+
 ## 🌐 (API)
 
 ### GroupAddressCache (Caché Integrada)
@@ -182,7 +251,7 @@ Las pasarelas dependen del `GroupAddressCache` interno de la librería para cono
 
 Todos los `KNXService` (tales como `KNXnetIPServer`, `Router`, etc.) integran un `GroupAddressCache`. Él escucha los telegramas de entrada y recuerda el último valor conocido junto con el histórico para las distintas herramientas de consulta en las APIs de WebSocket o lecturas internas locales.
 
-> **Importante**: La caché viene **deshabilitada por defecto** para ahorrar memoria en proyectos que no la requieran. 
+> **Importante**: La caché viene **deshabilitada por defecto** para ahorrar memoria en proyectos que no la requieran.
 > Para activarla (muy recomendado antes de usar `KNXWebSocketGateway` o `KNXMQTTGateway`), debes habilitarla globalmente así:
 
 ```typescript
@@ -200,8 +269,10 @@ Si creas una instancia de un enrutador y registras enlaces en él, el enrutador 
 ```typescript
 import { Router, KNXUSBConnection, CEMIInstance } from "knx.ts";
 
-const router = new Router();
-const usb = new KNXUSBConnection();
+const router = new Router({});
+const usb = new KNXUSBConnection({
+  individualAddress: "1.1.250"
+});
 // El enrutador se encargará de la gestión de la caché y emitirá eventos de direcciones de destino en lugar del enlace.
 router.addLink(usb);
 
@@ -441,7 +512,10 @@ cemi.additionalInfo = addInfo;
 
 #### 5. EMI (External Message Interface)
 
-`EMI` tampoco se usa como una instancia genérica con `new EMI()`. La clase actúa como contenedor de servicios y parser (`EMI.fromBuffer(...)`). En conexiones como `KNXUSBConnection`, la librería convierte automáticamente un `CEMIInstance` cEMI a EMI cuando hace falta.
+`EMI` tampoco se usa como una instancia genérica con `new EMI()`. La clase actúa como contenedor de servicios y parser (`EMI.fromBuffer(...)`). En conexiones como `KNXUSBConnection`, la librería convierte automáticamente un `CEMIInstance` cEMI a EMI cuando el KNX USB solo soporta EMI y no CEMI.
+
+> [!NOTE]
+> El código del EMI es relativamente antiguo, pero no obsoleto; los argumentos de los constructores de clases de objetos EMI pueden ser redundantes o arbitrarios en comparación con los de CEMI (esto se refiere únicamente al estilo del código, no a su especificación).
 
 ### Ejemplo de ensamblaje y envío final
 

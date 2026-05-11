@@ -1040,6 +1040,8 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       }
     }
 
+    this.emit("indication", CEMI.fromBuffer(cemiBuffer));
+
     let routingCemiBuffer = cemiBuffer;
     if (msgCode === 0x11) {
       routingCemiBuffer = Buffer.from(cemiBuffer);
@@ -1048,7 +1050,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       routingCemiBuffer = Buffer.from(cemiBuffer);
       routingCemiBuffer[0] = 0x2d;
     }
-    this.emit("indication", CEMI.fromBuffer(routingCemiBuffer));
     this.sendRaw(routingCemiBuffer);
 
     if (msgCode === 0x11 || msgCode === 0x10) {
