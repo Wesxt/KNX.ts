@@ -37,4 +37,13 @@ describe("CEMI Decoding and Encoding Reproduction", () => {
     const encoded = cemi.toBuffer();
     expect(encoded.toString("hex").toUpperCase()).toBe(raw.toString("hex").toUpperCase());
   });
+
+  test("should preserve short GroupValueWrite boolean true data", () => {
+    const raw = Buffer.from("1100B4E011FA0001010081", "hex");
+    const cemi = CEMI.fromBuffer(raw);
+
+    expect(cemi.TPDU.apdu.isShort).toBe(true);
+    expect(cemi.TPDU.apdu.data).toEqual(Buffer.from([0x01]));
+    expect(cemi.toBuffer().toString("hex").toUpperCase()).toBe(raw.toString("hex").toUpperCase());
+  });
 });
