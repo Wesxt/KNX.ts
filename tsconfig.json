@@ -20,13 +20,10 @@
     "isolatedModules": true,
     "types": [
       "node",
-      "jest"
     ]
   },
   "include": [
     "src/**/*.ts",
-    "test/",
-    "manual-tests"
   ],
   "exclude": [
     "node_modules",

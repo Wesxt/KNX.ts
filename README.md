@@ -12,6 +12,7 @@ This project focuses on protocol strictness, reading and sending any kind of **E
 - **KNXnet/IP Routing**: Supports multicast routing (only in the **KNXnet/IP** server).
 - **Discovery in the KNXnet/IP server**: Supports `SEARCH_REQUEST`, `SEARCH_REQUEST_EXTENDED`, `DESCRIPTION_REQUEST`, `CONNECT_REQUEST`, and `CONNECTIONSTATE_REQUEST` so applications such as ETS can discover it without manual configuration.
 - **Direct Hardware Interfaces**: Native support for **KNX USB interfaces** (via `node-hid`) and **TPUART** serial chips (via `serialport`).
+- **Program devices**: The library is now capable of fully programming KNX devices, including both the physical address and the program. *(This was tested with a router instance using the KNXnetIpServer and KNXUSB links. The KNXUSB was connected to the actual KNX bus. The device, a Zennio MAXinBOX 66, was deprogrammed and then fully programmed.)*
 - **Learning Bridge (Router)**: Advanced multi-interface routing with Loop Prevention, Signature Tracking, and Individual Address (IA) learning, allowing you to bridge multiple physical interfaces and tunnels simultaneously.
 - **Intuitive Address-Based Events**: Listen to specific telegrams using group addresses as event names (e.g., `server.on("1/1/1", ...)`).
 - **Echo Cancellation**: Automatically filters loopback messages to prevent telegram processing loops.
@@ -22,7 +23,6 @@ This project focuses on protocol strictness, reading and sending any kind of **E
 According to `TODO.md`, several features are currently **experimental** or under development:
 
 - **TCP Support**: The implementation is present, but testing is currently in an experimental phase.
-- **Device Parameterization**: Support for _Programming Mode_ (`progMode`) is planned to allow full device configuration through ETS.
 - **Source Filtering**: Filtering based on source addresses and selective routing is on the roadmap.
 - **Use of NPDU, TPDU, and APDU layers**: EMI still needs to use them for correct deserialization.
 
@@ -180,28 +180,28 @@ tunnel.on("1/1/1", (cemi: CEMIInstance) => {
 
 If you want to combine different KNX connections supported by the library and route their messages, you can instantiate them using the `Router` class. Each instance is optional, so various combinations are possible.
 
+You can program real KNX devices by maintaining a KNXnetIpServer link to connect to ETS and a link that can communicate through the KNX bus (TPUART, KNXUSB). To achieve this, set the `handleHopCount` option to false or leave it at its default value, and set the `isUseSingleIA` option to true or leave it at its default value.
+
 ```typescript
 import { Router } from "knx.ts";
 
 const router = new Router({
+  individualAddress: "1.1.250",
     knxNetIpServer: {
       ip: MULTICAST_IP,
       port: PORT,
       localIp: "192.168.0.200",
       friendlyName: "Test",
-      individualAddress: "15.15.0",
       clientAddrs: "15.15.1:5",
       useAllInterfaces: true,
       logOptions: { level: "info" },
     },
     usb: {
-      individualAddress: "1.1.250",
       logOptions: {
         level: "debug",
       },
     },
     tpuart: {
-      individualAddress: "1.1.50",
       path: "/dev/ttyAMA0"
     },
     tunneling: [

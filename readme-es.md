@@ -10,6 +10,7 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 - **Enrutamiento KNXnet/IP (Routing)**: Soporta enrutamiento multicast (Solo en el servidor **KNXnet/IP**).
 - **Descubrimiento en el servidor KNXnet/IP**: Soporta `SEARCH_REQUEST`, `SEARCH_REQUEST_EXTENDED`, `DESCRIPTION_REQUEST`, `CONNECT_REQUEST` y `CONNECTIONSTATE_REQUEST` para que aplicaciones como ETS pueda descubrirlo sin necesidad de especificarselo.
 - **Interfaces de Hardware Directas**: Soporte nativo para **interfaces USB KNX** (vía `node-hid`) y chips serie **TPUART** (vía `serialport`).
+- **Programar dispositivos**: Ahora la librería es capaz de programar dispositivos KNX completamente, tanto la dirección fisica como el programa. Esto está probado con una instancia de Router con los enlaces KNXnetIpServer y KNXUSB, el KNXUSB está conectado al bus KNX real, se desprogramó y luego se programó completamente el dispositivo KNX el cual era un MAXinBOX 66 del fabricante Zennio.
 - **Puente de Aprendizaje (Router)**: Enrutamiento avanzado multi-interfaz con Prevención de Bucles, Seguimiento de Firmas y Aprendizaje de Direcciones Individuales (IA), permitiéndote puentear varias interfaces físicas y túneles simultáneamente.
 - **Eventos Intuitivos Basados en Direcciones**: Escucha telegramas específicos usando direcciones de grupo como nombres de eventos (ej., `server.on("1/1/1", ...)`).
 - **Cancelación de Eco**: Filtra automáticamente los mensajes de bucle invertido (loopback) para evitar bucles de procesamiento de telegramas.
@@ -178,28 +179,28 @@ tunnel.on("1/1/1", (cemi: CEMIInstance) => {
 
 Si deseas combinar distintas conexiones KNX que soporta la libreria y enrutar sus mensajes puedes instanciarlas atravez de la clase ``Router``, cada una es opcional por lo tanto se pueden hacer distintas combinaciones
 
+Tu puedes programar dispositivos KNX reales manteniendo un enlace KNXnetIpServer para que se conecte ETS y un enlace que pueda comunicarse atravez del bus KNX (TPUART, KNXUSB), para que esto se cumpla asigne en falso o lo deja por defecto la opción `handleHopCount` y asigne en verdadero o lo deja por defecto la opción `isUseSingleIA`.
+
 ```typescript
 import { Router } from "knx.ts";
 
 const router = new Router({
+  individualAddress: "1.1.250",
     knxNetIpServer: {
       ip: MULTICAST_IP,
       port: PORT,
       localIp: "192.168.0.200",
       friendlyName: "Test",
-      individualAddress: "15.15.0",
       clientAddrs: "15.15.1:5",
       useAllInterfaces: true,
       logOptions: { level: "info" },
     },
     usb: {
-      individualAddress: "1.1.250",
       logOptions: {
         level: "debug",
       },
     },
     tpuart: {
-      individualAddress: "1.1.50",
       path: "/dev/ttyAMA0"
     },
     tunneling: [
