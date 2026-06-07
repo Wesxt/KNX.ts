@@ -2,7 +2,6 @@ import { KNXHelper } from "../utils/KNXHelper";
 import { AddressType } from "./enum/EnumControlFieldExtended";
 import { ControlField } from "./ControlField";
 import { MESSAGE_CODE_FIELD } from "./MessageCodeField";
-import { Priority } from "./enum/EnumControlField";
 import { ServiceMessage } from "../@types/interfaces/ServiceMessage";
 import { checksum } from "../utils/checksumFrame";
 import { Status, SystemStatus } from "./SystemStatus";
@@ -10,6 +9,8 @@ import { SAP } from "./enum/SAP";
 import { APCIEnum } from "./enum/APCIEnum";
 import { APCI } from "./layers/interfaces/APCI";
 import { NPDU } from "./layers/data/NPDU";
+import { TPDU } from "./layers/data/TPDU";
+import { APDU } from "./layers/data/APDU";
 
 export type bits4 = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type NPCI = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -19,7 +20,6 @@ export type NPCI = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
  * @description The External Message Interface (EMI) is a standardized interface for communication between external devices and KNX systems. It allows for the integration of various external systems, such as building management systems, into the KNX network.
  * @version Version 01.04.02 is a KNX Approved Standard.
  * @author Arnold Beleño Zuletta
- * @todo - En todos los mensajes se debe implementar las clases que corresponden a las capas de los PDU
  */
 export class EMI {
   constructor() {
@@ -445,17 +445,8 @@ export class EMI {
    */
   static DataLinkLayerEMI = {
     "L_Data.req": class LDataReq implements ServiceMessage {
-      constructor(
-        priority: Priority,
-        ackRequest: boolean,
-        destinationAddress: string,
-        public addressType: AddressType,
-        public npci: NPCI,
-        npdu: NPDU,
-      ) {
-        this.controlField1 = new ControlField(0);
-        this.controlField1.priority = priority;
-        this.controlField1.ackRequest = ackRequest;
+      constructor(controlField1: ControlField, destinationAddress: string, npdu: NPDU) {
+        this.controlField1 = controlField1;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
           KNXHelper.isValidIndividualAddress(destinationAddress)
@@ -464,8 +455,6 @@ export class EMI {
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = addressType;
-        this.npci = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.req"]["EMI2/IMI2"].value;
@@ -486,11 +475,11 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          destinationAddress: this.destinationAddress,
           npdu: this.npdu.describe(),
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -509,7 +498,6 @@ export class EMI {
         const destinationAddressBuf = buffer.subarray(4, 6);
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI_val = (octet6 >> 4) & 0x07;
         // const length = octet6 & 0x0f;
 
         const destinationAddress = KNXHelper.GetAddress(
@@ -519,28 +507,12 @@ export class EMI {
 
         const npdu = NPDU.fromBuffer(buffer.subarray(6));
 
-        return new LDataReq(
-          controlField1.priority,
-          controlField1.ackRequest,
-          destinationAddress as string,
-          addressType,
-          NPCI_val as NPCI,
-          npdu,
-        );
+        return new LDataReq(controlField1, destinationAddress as string, npdu);
       }
     },
     "L_Data.con": class LDataCon implements ServiceMessage {
-      constructor(
-        priority: Priority,
-        confirm: boolean,
-        destinationAddress: string,
-        addressType: AddressType,
-        npci: NPCI,
-        npdu: Buffer,
-      ) {
-        this.controlField1 = new ControlField(0);
-        this.controlField1.priority = priority;
-        this.controlField1.confirm = confirm;
+      constructor(controlField1: ControlField, destinationAddress: string, npdu: NPDU) {
+        this.controlField1 = controlField1;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
           KNXHelper.isValidIndividualAddress(destinationAddress)
@@ -549,39 +521,33 @@ export class EMI {
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = addressType;
-        this.NPCI = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.con"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
-      addressType: AddressType;
-      NPCI: number;
       octNumber: number = 0;
-      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+      npdu: NPDU; // Network Protocol Data Unit (NPDU)
 
       toBuffer(): Buffer {
+        const npduBuf = this.npdu.toBuffer();
         const buffer = Buffer.alloc(7 + this.npdu.length);
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
-        this.npdu.copy(buffer, 7);
+        npduBuf.copy(buffer, 6);
         return buffer;
       }
 
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          addressType: `AT: ${AddressType[this.addressType]}`,
-          npci: `NPCI: ${this.NPCI}`,
-          npdu: `NPDU: ${this.npdu.toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          destinationAddress: this.destinationAddress,
+          npdu: this.npdu.describe(),
           octNumber: this.npdu.length.toString(),
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -599,7 +565,6 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -608,29 +573,14 @@ export class EMI {
           addressType === AddressType.GROUP ? "/" : ".",
         );
 
-        const npdu = buffer.subarray(7, 7 + length);
+        const npdu = NPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new LDataCon(
-          controlField1.priority,
-          controlField1.confirm,
-          destinationAddress as string,
-          addressType,
-          NPCI_val as NPCI,
-          npdu,
-        );
+        return new LDataCon(controlField1, destinationAddress as string, npdu);
       }
     },
     "L_Data.ind": class LDataInd implements ServiceMessage {
-      constructor(
-        priority: Priority,
-        sourceAddress: string,
-        destinationAddress: string,
-        addressType: AddressType,
-        npci: NPCI,
-        npdu: Buffer,
-      ) {
-        this.controlField1 = new ControlField(0);
-        this.controlField1.priority = priority;
+      constructor(controlField1: ControlField, sourceAddress: string, destinationAddress: string, npdu: NPDU) {
+        this.controlField1 = controlField1;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
           KNXHelper.isValidIndividualAddress(destinationAddress)
@@ -640,42 +590,36 @@ export class EMI {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
         this.sourceAddress = sourceAddress;
-        this.addressType = addressType;
-        this.NPCI = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_Data.ind"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       sourceAddress: string;
       destinationAddress: string; // Destination address
-      addressType: AddressType;
-      NPCI: number;
       octNumber: number = 0;
-      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+      npdu: NPDU; // Network Protocol Data Unit (NPDU)
 
       toBuffer(): Buffer {
+        const npduBuf = this.npdu.toBuffer();
         const buffer = Buffer.alloc(7 + this.npdu.length);
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
-        this.npdu.copy(buffer, 7);
+        npduBuf.copy(buffer, 6);
         return buffer;
       }
 
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
-          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          addressType: `AT: ${AddressType[this.addressType]}`,
-          npci: `NPCI: ${this.NPCI}`,
-          npdu: `NPDU: ${this.npdu.toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+          npdu: this.npdu.describe(),
           octNumber: this.npdu.length.toString(),
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -696,7 +640,6 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -705,16 +648,9 @@ export class EMI {
           addressType === AddressType.GROUP ? "/" : ".",
         );
 
-        const npdu = buffer.subarray(7, 7 + length);
+        const npdu = NPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new LDataInd(
-          controlField1.priority,
-          sourceAddress as string,
-          destinationAddress as string,
-          addressType,
-          NPCI_val as NPCI,
-          npdu,
-        );
+        return new LDataInd(controlField1, sourceAddress, destinationAddress, npdu);
       }
     },
     "L_Poll_Data.req": class LPollDataReq implements ServiceMessage {
@@ -852,19 +788,8 @@ export class EMI {
       }
     },
     "L_SystemBroadcast.req": class LSystemBroadcastReq implements ServiceMessage {
-      constructor(
-        priority: Priority,
-        confirm: boolean,
-        ackRequest: boolean,
-        destinationAddress: string,
-        addressType: 0 | 1,
-        npci: NPCI,
-        npdu: Buffer,
-      ) {
-        this.controlField1 = new ControlField(0b10000000);
-        this.controlField1.priority = priority;
-        this.controlField1.confirm = confirm;
-        this.controlField1.ackRequest = ackRequest;
+      constructor(controlField1: ControlField, destinationAddress: string, npdu: NPDU) {
+        this.controlField1 = controlField1;
         this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
@@ -874,39 +799,33 @@ export class EMI {
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = addressType;
-        this.NPCI = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.req"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
-      addressType: AddressType;
-      NPCI: number;
       octNumber: number = 0;
-      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+      npdu: NPDU; // Network Protocol Data Unit (NPDU)
 
       toBuffer(): Buffer {
+        const npduBuf = this.npdu.toBuffer();
         const buffer = Buffer.alloc(7 + this.npdu.length);
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
-        this.npdu.copy(buffer, 7);
+        npduBuf.copy(buffer, 6);
         return buffer;
       }
 
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          addressType: `AT: ${AddressType[this.addressType]}`,
-          npci: `NPCI: ${this.NPCI}`,
-          npdu: `NPDU: ${this.npdu.toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          destinationAddress: this.destinationAddress,
+          npdu: this.npdu.describe(),
           octNumber: this.npdu.length.toString(),
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -923,7 +842,6 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -932,33 +850,14 @@ export class EMI {
           addressType === AddressType.GROUP ? "/" : ".",
         );
 
-        const npdu = buffer.subarray(7, 7 + length);
+        const npdu = NPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new LSystemBroadcastReq(
-          controlField1.priority,
-          controlField1.confirm,
-          controlField1.ackRequest,
-          destinationAddress as string,
-          addressType as 0 | 1,
-          NPCI_val as NPCI,
-          npdu,
-        );
+        return new LSystemBroadcastReq(controlField1, destinationAddress as string, npdu);
       }
     },
     "L_SystemBroadcast.con": class LSystemBroadcastCon implements ServiceMessage {
-      constructor(
-        notRepeat: boolean,
-        priority: Priority,
-        confirm: boolean,
-        destinationAddress: string,
-        addressType: AddressType,
-        npci: NPCI,
-        npdu: Buffer,
-      ) {
-        this.controlField1 = new ControlField(0);
-        this.controlField1.repeat = notRepeat;
-        this.controlField1.priority = priority;
-        this.controlField1.confirm = confirm;
+      constructor(controlField1: ControlField, destinationAddress: string, npdu: NPDU) {
+        this.controlField1 = controlField1;
         this.messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
@@ -968,39 +867,32 @@ export class EMI {
         } else {
           throw new Error("The Destination Address is invalid Group Address or Individual Address");
         }
-        this.addressType = addressType;
-        this.NPCI = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.con"]["EMI2/IMI2"].value;
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
-      addressType: AddressType;
-      NPCI: number;
       octNumber: number = 0;
-      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+      npdu: NPDU; // Network Protocol Data Unit (NPDU)
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.npdu.length);
         buffer.writeUInt8(this.messageCode, 0);
         this.controlField1.buffer.copy(buffer, 1); // Assuming controlField1 is a Buffer
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] = 0x00 | ((this.addressType << 7) | (this.NPCI << 4) | (this.npdu.length & 0x0f));
-        this.npdu.copy(buffer, 7);
+        this.npdu.toBuffer().copy(buffer, 6);
         return buffer;
       }
 
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          addressType: `AT: ${AddressType[this.addressType]}`,
-          npci: `NPCI: ${this.NPCI}`,
-          npdu: `NPDU: ${this.npdu.toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          destinationAddress: this.destinationAddress,
+          npdu: this.npdu.describe(),
           octNumber: this.npdu.length.toString(),
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1017,7 +909,6 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -1026,34 +917,14 @@ export class EMI {
           addressType === AddressType.GROUP ? "/" : ".",
         );
 
-        const npdu = buffer.subarray(7, 7 + length);
+        const npdu = NPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new LSystemBroadcastCon(
-          controlField1.repeat,
-          controlField1.priority,
-          controlField1.confirm,
-          destinationAddress as string,
-          addressType,
-          NPCI_val as NPCI,
-          npdu,
-        );
+        return new LSystemBroadcastCon(controlField1, destinationAddress as string, npdu);
       }
     },
     "L_SystemBroadcast.ind": class LSystemBroadcastInd implements ServiceMessage {
-      constructor(
-        priority: Priority,
-        confirm: boolean,
-        notRepeat: boolean,
-        sourceAddress: string,
-        destinationAddress: string,
-        addressType: AddressType,
-        npci: NPCI,
-        npdu: Buffer,
-      ) {
-        this.controlField1 = new ControlField(0);
-        this.controlField1.priority = priority;
-        this.controlField1.confirm = confirm;
-        this.controlField1.repeat = notRepeat;
+      constructor(controlField1: ControlField, sourceAddress: string, destinationAddress: string, npdu: NPDU) {
+        this.controlField1 = controlField1;
         if (
           KNXHelper.isValidGroupAddress(destinationAddress) ||
           KNXHelper.isValidIndividualAddress(destinationAddress)
@@ -1067,8 +938,6 @@ export class EMI {
         } else {
           throw new Error("The Source Address is invalid Group Address or Individual Address");
         }
-        this.addressType = addressType;
-        this.NPCI = npci;
         this.npdu = npdu;
       }
       messageCode = MESSAGE_CODE_FIELD["L_SystemBroadcast.ind"]["EMI2/IMI2"].value;
@@ -1076,10 +945,8 @@ export class EMI {
       controlField1: ControlField; // Control field 1
       destinationAddress: string; // Destination address
       sourceAddress: string; // Source address
-      addressType: AddressType;
-      NPCI: number;
       octNumber: number = 0;
-      npdu: Buffer; // Network Protocol Data Unit (NPDU)
+      npdu: NPDU; // Network Protocol Data Unit (NPDU)
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.npdu.length);
@@ -1088,22 +955,19 @@ export class EMI {
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
 
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        buffer[6] = 0x00 | (this.NPCI << 4) | (this.npdu.length & 0x0f);
-        this.npdu.copy(buffer, 7);
+        this.npdu.toBuffer().copy(buffer, 6);
         return buffer;
       }
 
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField1: `Campo de control 1: ${this.controlField1.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          addressType: `AT: ${AddressType[this.addressType]}`,
-          npci: `NPCI: ${this.NPCI}`,
-          npdu: `NPDU: ${this.npdu.toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          destinationAddress: this.destinationAddress,
+          npdu: this.npdu.describe(),
           octNumber: this.npdu.length.toString(),
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1120,7 +984,6 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const addressType = (octet6 >> 7) & 0x01;
-        const NPCI_val = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
         const destinationAddressBuf = buffer.subarray(4, 6);
@@ -1129,18 +992,9 @@ export class EMI {
           addressType === AddressType.GROUP ? "/" : ".",
         );
 
-        const npdu = buffer.subarray(7, 7 + length);
+        const npdu = NPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new LSystemBroadcastInd(
-          controlField1.priority,
-          controlField1.confirm,
-          controlField1.repeat,
-          sourceAddress as string,
-          destinationAddress as string,
-          addressType,
-          NPCI_val as NPCI,
-          npdu,
-        );
+        return new LSystemBroadcastInd(controlField1, sourceAddress as string, destinationAddress as string, npdu);
       }
     },
   } as const;
@@ -1153,27 +1007,12 @@ export class EMI {
   static NetworkLayerEMI = {
     "N_Data_Individual.req": class NDataIndividualReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.req"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       destinationAddress: string; // Individual address
-      TPDU: Buffer; // Transport Layer Protocol Data Unit
+      TPDU: TPDU; // Transport Layer Protocol Data Unit
 
-      constructor(
-        frameType: boolean,
-        repeat: boolean,
-        systemBroadcast: boolean,
-        priority: Priority,
-        ackRequest: boolean,
-        confirm: boolean,
-        destinationAddress: string,
-        tpdu: Buffer,
-      ) {
-        this.controlField = new ControlField(0);
-        this.controlField.frameType = frameType;
-        this.controlField.repeat = repeat;
-        this.controlField.systemBroadcast = systemBroadcast;
-        this.controlField.priority = priority;
-        this.controlField.ackRequest = ackRequest;
-        this.controlField.confirm = confirm;
+      constructor(controlField1: ControlField, destinationAddress: string, tpdu: TPDU) {
+        this.controlField1 = controlField1;
 
         if (!KNXHelper.isValidIndividualAddress(destinationAddress)) {
           throw new Error("The Destination Address must be a valid Individual Address");
@@ -1191,12 +1030,12 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt8(0x00, 2); // Octet 3: unused
         buffer.writeUInt8(0x00, 3); // Octet 6: unused (LG high in diagram, but treated as unused)
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         buffer.writeUInt8(this.TPDU.length, 6); // Octet 7: LG (octet count)
-        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        this.TPDU.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1207,12 +1046,11 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          APDU: `APDU: ${this.TPDU.toString("hex")}`,
-          APDU_Length: `${this.TPDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1,
+          destinationAddress: this.destinationAddress,
+          tpdu: this.TPDU.describe(),
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1239,29 +1077,19 @@ export class EMI {
           throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
-        const TPDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataIndividualReq(
-          controlField.frameType,
-          controlField.repeat,
-          controlField.systemBroadcast,
-          controlField.priority,
-          controlField.ackRequest,
-          controlField.confirm,
-          destinationAddress as string,
-          TPDU,
-        );
+        return new NDataIndividualReq(controlField, destinationAddress as string, tpdu);
       }
     },
     "N_Data_Individual.con": class NDataIndividualCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.con"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       destinationAddress: string; // Destination address
-      TPDU: Buffer;
+      TPDU: TPDU;
 
-      constructor(confirm: boolean, destinationAddress: string, tpdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.confirm = confirm; // Set confirm bit
+      constructor(controlField1: ControlField, destinationAddress: string, tpdu: TPDU) {
+        this.controlField1 = controlField1;
 
         if (!KNXHelper.isValidIndividualAddress(destinationAddress)) {
           throw new Error("The Destination Address must be a valid Individual Address");
@@ -1279,12 +1107,12 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt8(0x00, 2); // Octet 3: unused
         buffer.writeUInt8(0x00, 3); // Octet 4: unused (LG high in diagram, but treated as unused)
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         buffer.writeUInt8(this.TPDU.length & 0x0f, 6); // Octet 7: LG (octet count)
-        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        this.TPDU.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1295,12 +1123,12 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          TPDU: `TPDU: ${this.TPDU.toString("hex")}`,
-          TPDU_Length: `${this.TPDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1,
+          destinationAddress: this.destinationAddress,
+          tpdu: this.TPDU,
+          TPDU_Length: this.TPDU.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1327,22 +1155,27 @@ export class EMI {
           throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
-        const TPDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataIndividualCon(controlField.confirm, destinationAddress as string, TPDU);
+        return new NDataIndividualCon(controlField, destinationAddress as string, tpdu);
       }
     },
     "N_Data_Individual.ind": class NDataIndividualInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Individual.ind"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       sourceAddress: string; // Individual address
       destinationAddress: string; // Individual address
       hopCount: number; // 4 bits (formerly NPCI)
-      TPDU: Buffer;
+      TPDU: TPDU;
 
-      constructor(priority: number, sourceAddress: string, destinationAddress: string, hopCount: number, tpdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.priority = priority;
+      constructor(
+        controlField1: ControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        hopCount: number,
+        tpdu: TPDU,
+      ) {
+        this.controlField1 = controlField1;
 
         if (!KNXHelper.isValidIndividualAddress(sourceAddress)) {
           throw new Error("The Source Address must be a valid Individual Address");
@@ -1366,12 +1199,12 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(7 + this.TPDU.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         // Octet 7: hop_count_type (bits 6-4) | octet count (LG) (bits 3-0)
         buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f), 6);
-        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        this.TPDU.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1382,14 +1215,13 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          hopCount: `Conteo de saltos: ${this.hopCount}`,
-          APDU: `APDU: ${this.TPDU.toString("hex")}`,
-          APDU_Length: `${this.TPDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1,
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+          hopCount: this.hopCount,
+          tpdu: this.TPDU.describe(),
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1421,32 +1253,31 @@ export class EMI {
           throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
-        const TPDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
         return new NDataIndividualInd(
-          controlField.priority,
+          controlField,
           sourceAddress as string,
           destinationAddress as string,
           hopCount,
-          TPDU,
+          tpdu,
         );
       }
     },
     "N_Data_Group.req": class NDataGroupReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Group.req"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       destinationAddress: string; // Group address
-      APDU: Buffer;
+      tpdu: TPDU;
 
-      constructor(priority: number, destinationAddress: string, apdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.priority = priority;
+      constructor(controlField1: ControlField, destinationAddress: string, tpdu: TPDU) {
+        this.controlField1 = controlField1;
 
         if (!KNXHelper.isValidGroupAddress(destinationAddress)) {
           throw new Error("The Destination Address must be a valid Group Address");
         }
         this.destinationAddress = destinationAddress;
-        this.APDU = apdu;
+        this.tpdu = tpdu;
       }
 
       /**
@@ -1456,14 +1287,14 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.APDU.length);
+        const buffer = Buffer.alloc(7 + this.tpdu.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         // Octet 7: hop_count_type (bits 7-4, default 0) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(this.APDU.length & 0x0f, 6); // Default hop_count_type is 0
-        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(this.tpdu.length & 0x0f, 6); // Default hop_count_type is 0
+        this.tpdu.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1474,12 +1305,12 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          APDU: `APDU: ${this.APDU.toString("hex")}`,
-          APDU_Length: `${this.APDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField: this.controlField1,
+          destinationAddress: this.destinationAddress,
+          tpdu: this.tpdu.describe(),
+          length: this.tpdu.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1506,26 +1337,25 @@ export class EMI {
           throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
-        const APDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataGroupReq(controlField.priority, destinationAddress as string, APDU);
+        return new NDataGroupReq(controlField, destinationAddress as string, tpdu);
       }
     },
     "N_Data_Group.con": class NDataGroupCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Group.con"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       destinationAddress: string; // Group address
-      APDU: Buffer;
+      tpdu: TPDU;
 
-      constructor(confirm: boolean, destinationAddress: string, apdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.confirm = confirm;
+      constructor(controlField1: ControlField, destinationAddress: string, tpdu: TPDU) {
+        this.controlField1 = controlField1;
 
         if (!KNXHelper.isValidGroupAddress(destinationAddress)) {
           throw new Error("The Destination Address must be a valid Group Address");
         }
         this.destinationAddress = destinationAddress;
-        this.APDU = apdu;
+        this.tpdu = tpdu;
       }
 
       /**
@@ -1535,13 +1365,13 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.APDU.length);
+        const buffer = Buffer.alloc(7 + this.tpdu.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
-        buffer.writeUInt8(this.APDU.length & 0x0f, 6); // Octet 7: LG (octet count), upper 4 bits unused
-        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(this.tpdu.length & 0x0f, 6); // Octet 7: LG (octet count), upper 4 bits unused
+        this.tpdu.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1552,12 +1382,12 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          APDU: `APDU: ${this.APDU.toString("hex")}`,
-          APDU_Length: `${this.APDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1,
+          destinationAddress: this.destinationAddress,
+          tpdu: this.tpdu.describe(),
+          length: this.tpdu.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1584,22 +1414,27 @@ export class EMI {
           throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
-        const APDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataGroupCon(controlField.confirm, destinationAddress as string, APDU);
+        return new NDataGroupCon(controlField, destinationAddress as string, tpdu);
       }
     },
     "N_Data_Group.ind": class NDataGroupInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Group.ind"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       sourceAddress: string; // Individual address
       destinationAddress: string; // Group address
       hopCount: number; // 4 bits (formerly NPCI)
-      APDU: Buffer;
+      tpdu: TPDU;
 
-      constructor(priority: number, sourceAddress: string, destinationAddress: string, hopCount: number, apdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.priority = priority;
+      constructor(
+        controlField1: ControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        hopCount: number,
+        tpdu: TPDU,
+      ) {
+        this.controlField1 = controlField1;
 
         if (!KNXHelper.isValidIndividualAddress(sourceAddress)) {
           throw new Error("The Source Address must be a valid Individual Address");
@@ -1611,7 +1446,7 @@ export class EMI {
         }
         this.destinationAddress = destinationAddress;
         this.hopCount = hopCount;
-        this.APDU = apdu;
+        this.tpdu = tpdu;
       }
 
       /**
@@ -1621,14 +1456,14 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.APDU.length);
+        const buffer = Buffer.alloc(7 + this.tpdu.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address in diagram, but text implies unused for Group.ind)
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4); // Octets 5-6: Destination Address
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.APDU.length & 0x0f), 6);
-        this.APDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.tpdu.length & 0x0f), 6);
+        this.tpdu.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1639,14 +1474,14 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
-          destinationAddress: `Dirección de destino: ${this.destinationAddress}`,
-          hopCount: `Conteo de saltos: ${this.hopCount}`,
-          APDU: `APDU: ${this.APDU.toString("hex")}`,
-          APDU_Length: `${this.APDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1,
+          sourceAddress: this.sourceAddress,
+          destinationAddress: this.destinationAddress,
+          hopCount: this.hopCount,
+          tpdu: this.tpdu.describe(),
+          length: this.tpdu.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1678,30 +1513,23 @@ export class EMI {
           throw new Error(`Buffer length mismatch. Expected at least ${7 + length} bytes, got ${buffer.length}`);
         }
 
-        const APDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataGroupInd(
-          controlField.priority,
-          sourceAddress as string,
-          destinationAddress as string,
-          hopCount,
-          APDU,
-        );
+        return new NDataGroupInd(controlField, sourceAddress as string, destinationAddress as string, hopCount, tpdu);
       }
     },
     "N_Data_Broadcast.req": class NDataBroadcastReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.req"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       hopCount: NPCI;
-      TPDU: Buffer;
+      tpdu: TPDU;
 
-      constructor(priority: number, hopCountType: NPCI, tpdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.priority = priority;
+      constructor(controlField1: ControlField, hopCountType: NPCI, tpdu: TPDU) {
+        this.controlField1 = controlField1;
         // The spec (3.3.5.8) for N_Data_Broadcast.req control field is "unused priority unused".
         // Therefore, ackRequest should not be set here.
         this.hopCount = hopCountType;
-        this.TPDU = tpdu;
+        this.tpdu = tpdu;
       }
 
       /**
@@ -1711,14 +1539,14 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.TPDU.length);
+        const buffer = Buffer.alloc(7 + this.tpdu.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
         // Octet 7: hop_count_type (bits 7-4, default 0) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8((this.hopCount << 4) | (this.TPDU.length & 0x0f), 6); // Default hop_count_type is 0
-        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8((this.hopCount << 4) | (this.tpdu.length & 0x0f), 6); // Default hop_count_type is 0
+        this.tpdu.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
@@ -1730,11 +1558,11 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          TPDU: `TPDU: ${this.TPDU.toString("hex")}`,
-          TPDU_Length: `${this.TPDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField1: this.controlField1.describe(),
+          TPDU: this.tpdu.describe(),
+          length: this.tpdu.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1750,23 +1578,22 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const TPDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataBroadcastReq(controlField.priority, hopCount as NPCI, TPDU);
+        return new NDataBroadcastReq(controlField, hopCount as NPCI, tpdu);
       }
     },
     "N_Data_Broadcast.con": class NDataBroadcastCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.con"]["EMI2/IMI2"].value;
       controlField: ControlField;
-      TPDU: Buffer;
+      tpdu: TPDU;
 
-      constructor(confirm: boolean, tpdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.confirm = confirm;
+      constructor(controlField1: ControlField, tpdu: TPDU) {
+        this.controlField = controlField1;
         // The spec (3.3.5.9) for N_Data_Broadcast.con control field is "unused unused unused c".
         // Therefore, priority should not be set here.
 
-        this.TPDU = tpdu;
+        this.tpdu = tpdu;
       }
 
       /**
@@ -1776,13 +1603,13 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.TPDU.length);
+        const buffer = Buffer.alloc(7 + this.tpdu.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
         this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
         buffer.writeUInt16BE(0x0000, 2); // Octets 3-4: unused (Source Address)
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
-        buffer.writeUInt8(this.TPDU.length & 0x0f, 6); // Octet 7: LG (octet count), upper 4 bits unused
-        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(this.tpdu.length & 0x0f, 6); // Octet 7: LG (octet count), upper 4 bits unused
+        this.tpdu.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         return buffer;
       }
 
@@ -1793,11 +1620,11 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          APDU: `APDU: ${this.TPDU.toString("hex")}`,
-          APDU_Length: `${this.TPDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField: this.controlField.describe(),
+          tpdu: this.tpdu.describe(),
+          length: this.tpdu.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1838,28 +1665,27 @@ export class EMI {
           throw new Error(`Buffer mismatch: Expected ${length} bytes of TPDU, available ${buffer.length - 7}`);
         }
 
-        const TPDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataBroadcastCon(controlField.confirm, TPDU);
+        return new NDataBroadcastCon(controlField, tpdu);
       }
     },
     "N_Data_Broadcast.ind": class NDataBroadcastInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["N_Data_Broadcast.ind"]["EMI2/IMI2"].value;
-      controlField: ControlField;
+      controlField1: ControlField;
       sourceAddress: string; // Individual address
       hopCount: number; // 4 bits (formerly NPCI)
-      TPDU: Buffer;
+      tpdu: TPDU;
 
-      constructor(priority: number, sourceAddress: string, hopCount: number, tpdu: Buffer) {
-        this.controlField = new ControlField(0);
-        this.controlField.priority = priority;
+      constructor(controlField1: ControlField, sourceAddress: string, hopCount: number, tpdu: TPDU) {
+        this.controlField1 = new ControlField(0);
 
         if (!KNXHelper.isValidIndividualAddress(sourceAddress)) {
           throw new Error("The Source Address must be a valid Individual Address");
         }
         this.sourceAddress = sourceAddress;
         this.hopCount = hopCount;
-        this.TPDU = tpdu;
+        this.tpdu = tpdu;
       }
 
       /**
@@ -1869,14 +1695,14 @@ export class EMI {
        * @returns The Buffer representation of the message.
        */
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(7 + this.TPDU.length);
+        const buffer = Buffer.alloc(7 + this.tpdu.length);
         buffer.writeUInt8(this.messageCode, 0); // Octet 1: m_code
-        this.controlField.buffer.copy(buffer, 1); // Octet 2: Control
+        this.controlField1.buffer.copy(buffer, 1); // Octet 2: Control
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2); // Octets 3-4: Source Address
         buffer.writeUInt16BE(0x0000, 4); // Octets 5-6: unused (Destination Address)
         // Octet 7: hop_count_type (bits 7-4) | octet count (LG) (bits 3-0)
-        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.TPDU.length & 0x0f), 6);
-        this.TPDU.copy(buffer, 7); // Octet 8...n: TPDU
+        buffer.writeUInt8(((this.hopCount & 0x0f) << 4) | (this.tpdu.length & 0x0f), 6);
+        this.tpdu.toBuffer().copy(buffer, 7); // Octet 8...n: TPDU
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
@@ -1888,13 +1714,13 @@ export class EMI {
       describe() {
         return {
           obj: this.constructor.name,
-          messageCode: `Código de mensaje: ${this.messageCode}`,
-          controlField: `Campo de control: ${this.controlField.describe()}`,
-          sourceAddress: `Dirección de fuente: ${this.sourceAddress}`,
-          hopCount: `Conteo de saltos: ${this.hopCount}`,
-          TPDU: `TPDU: ${this.TPDU.toString("hex")}`,
-          TPDU_Length: `${this.TPDU.length} octets`,
-          rawValue: `Valor numérico: ${this.toBuffer().toString("hex")}`,
+          messageCode: this.messageCode,
+          controlField: this.controlField1.describe(),
+          sourceAddress: this.sourceAddress,
+          hopCount: this.hopCount,
+          tpdu: this.tpdu.describe(),
+          length: this.tpdu.length,
+          rawValue: this.toBuffer(),
         };
       }
 
@@ -1914,9 +1740,9 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const TPDU = buffer.subarray(7, 7 + length);
+        const tpdu = TPDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new NDataBroadcastInd(controlField.priority, sourceAddress, hopCount, TPDU);
+        return new NDataBroadcastInd(controlField, sourceAddress, hopCount, tpdu);
       }
     },
     "N_Poll_Data.req": class NPollDataReq implements ServiceMessage {
@@ -2223,23 +2049,11 @@ export class EMI {
     },
     "T_Connect.ind": class TConnectInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Connect.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      control = new ControlField(0);
       sourceAddress: string;
 
-      constructor(
-        sourceAddress: string,
-        frameType: boolean,
-        repeat: boolean,
-        systemBroadcast: boolean,
-        priority: Priority,
-        ackRequest: boolean,
-      ) {
+      constructor(sourceAddress: string) {
         this.sourceAddress = sourceAddress;
-        this.control.ackRequest = ackRequest;
-        this.control.frameType = frameType;
-        this.control.repeat = repeat;
-        this.control.systemBroadcast = systemBroadcast;
-        this.control.priority = priority;
       }
 
       toBuffer(): Buffer {
@@ -2263,8 +2077,6 @@ export class EMI {
         const expectedCode = MESSAGE_CODE_FIELD["T_Connect.ind"]["EMI2/IMI2"].value;
         if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Message Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
-
-        const control = new ControlField(buffer.readUInt8(1));
         // Source Address en bytes 2-3
         const sourceAddress = KNXHelper.GetAddress(buffer.subarray(2, 4), ".");
         if (!sourceAddress)
@@ -2274,14 +2086,7 @@ export class EMI {
         if (typeof sourceAddress !== "string")
           throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
 
-        return new TConnectInd(
-          sourceAddress,
-          control.frameType,
-          control.repeat,
-          control.systemBroadcast,
-          control.priority,
-          control.ackRequest,
-        );
+        return new TConnectInd(sourceAddress);
       }
     },
     "T_Disconnect.req": class TDisconnectReq implements ServiceMessage {
@@ -2316,23 +2121,9 @@ export class EMI {
     },
     "T_Disconnect.con": class TDisconnectCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Disconnect.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      control = new ControlField(0);
 
-      constructor(
-        frameType: boolean,
-        repeat: boolean,
-        systemBroadcast: boolean,
-        priority: Priority,
-        ackRequest: boolean,
-        confirm: boolean,
-      ) {
-        this.control.ackRequest = ackRequest;
-        this.control.frameType = frameType;
-        this.control.repeat = repeat;
-        this.control.systemBroadcast = systemBroadcast;
-        this.control.priority = priority;
-        this.control.confirm = confirm;
-      }
+      constructor() {}
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(6);
@@ -2354,37 +2145,14 @@ export class EMI {
         if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
-        const control = new ControlField(buffer.readUInt8(1));
-
-        return new TDisconnectCon(
-          control.frameType,
-          control.repeat,
-          control.systemBroadcast,
-          control.priority,
-          control.ackRequest,
-          control.confirm,
-        );
+        return new TDisconnectCon();
       }
     },
     "T_Disconnect.ind": class TDisconnectInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Disconnect.ind"]["EMI2/IMI2"].value;
       control = new ControlField();
 
-      constructor(
-        frameType: boolean,
-        repeat: boolean,
-        systemBroadcast: boolean,
-        priority: Priority,
-        ackRequest: boolean,
-        confirm: boolean,
-      ) {
-        this.control.ackRequest = ackRequest;
-        this.control.frameType = frameType;
-        this.control.repeat = repeat;
-        this.control.systemBroadcast = systemBroadcast;
-        this.control.priority = priority;
-        this.control.confirm = confirm;
-      }
+      constructor() {}
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(6);
@@ -2406,36 +2174,27 @@ export class EMI {
         if (buffer.readUInt8(0) !== expectedCode) throw new Error("Invalid Code");
         if (buffer.length < 6) throw new Error("Buffer too short");
 
-        const control = new ControlField(buffer.readUInt8(1));
-
-        return new TDisconnectInd(
-          control.frameType,
-          control.repeat,
-          control.systemBroadcast,
-          control.priority,
-          control.ackRequest,
-          control.confirm,
-        );
+        return new TDisconnectInd();
       }
     },
     "T_Data_Connected.req": class TDataConnectedReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      apdu: APDU;
       hopCount: number;
 
-      constructor(priority: Priority, hopCount: number, apdu: Buffer) {
-        this.control.priority = priority;
-        this.APDU = apdu;
+      constructor(controlField1: ControlField, hopCount: number, apdu: APDU) {
+        this.controlField1 = controlField1;
+        this.apdu = apdu;
         this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(8 + this.apdu.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (buffer.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.apdu.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1); // Calculate FCS
         return buffer;
       }
@@ -2443,8 +2202,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           hopCount: this.hopCount.toString(),
+          apdu: this.apdu.describe(),
         };
       }
       static fromBuffer(buffer: Buffer): TDataConnectedReq {
@@ -2462,28 +2222,28 @@ export class EMI {
         // Validar integridad
         if (buffer.length < 7 + length) throw new Error("Buffer data incomplete");
 
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataConnectedReq(control.priority, hopCount, apdu);
+        return new TDataConnectedReq(control, hopCount, apdu);
       }
     },
     "T_Data_Connected.con": class TDataConnectedCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.con"]["EMI2/IMI2"].value;
       control = new ControlField();
-      APDU: Buffer;
+      apdu: APDU;
 
-      constructor(confirm: boolean, apdu: Buffer) {
+      constructor(confirm: boolean, apdu: APDU) {
         this.control.confirm = confirm;
-        this.APDU = apdu;
+        this.apdu = apdu;
       }
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(8 + this.apdu.length);
         buffer.writeUInt8(this.messageCode, 0);
         this.control.buffer.copy(buffer, 1);
-        // Octetos 3-5 no utilizados
-        buffer[6] |= this.APDU.length & 0x0f;
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        // Octetos 2-5 no utilizados
+        buffer[6] |= buffer.length & 0x0f;
+        this.apdu.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2493,7 +2253,7 @@ export class EMI {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
           control: this.control.describe(),
-          APDU: this.APDU.toString("hex"),
+          APDU: this.apdu.describe(),
         };
       }
 
@@ -2504,33 +2264,33 @@ export class EMI {
 
         const control = new ControlField(buffer.readUInt8(1));
         const length = buffer.readUInt8(6) & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
         return new TDataConnectedCon(control.confirm, apdu);
       }
     },
     "T_Data_Connected.ind": class TDataConnectedInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sourceAddress: string;
-      APDU: Buffer;
+      apdu: APDU;
       hopCount: number;
 
-      constructor(priority: number, sourceAddress: string, apdu: Buffer, hopCount: number) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, sourceAddress: string, apdu: APDU, hopCount: number) {
+        this.controlField1 = controlField1;
         this.sourceAddress = sourceAddress;
-        this.APDU = apdu;
+        this.apdu = apdu;
         this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(8 + this.apdu.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         // Octeto 5-6 no utilizados
-        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.apdu.length & 0x0f);
+        this.apdu.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2539,9 +2299,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sourceAddress: this.sourceAddress,
-          APDU: this.APDU.toString("hex"),
+          apdu: this.apdu.describe(),
         };
       }
 
@@ -2564,30 +2324,30 @@ export class EMI {
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
 
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataConnectedInd(control.priority, sourceAddress, apdu, hopCount);
+        return new TDataConnectedInd(control, sourceAddress, apdu, hopCount);
       }
     },
     "T_Data_Group.req": class TDataGroupReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Group.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      apdu: APDU;
       hopCount: number;
 
-      constructor(priority: number, hopCount: number, apdu: Buffer) {
-        this.control.priority = priority;
-        this.APDU = apdu;
+      constructor(controlField1: ControlField, hopCount: number, apdu: APDU) {
+        this.controlField1 = controlField1;
+        this.apdu = apdu;
         this.hopCount = hopCount;
       }
 
       toBuffer(): Buffer {
-        const buffer = Buffer.alloc(8 + this.APDU.length);
+        const buffer = Buffer.alloc(8 + this.apdu.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         // Octetos 3-6 no utilizados
-        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.apdu.length & 0x0f);
+        this.apdu.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2596,9 +2356,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           hopCount: this.hopCount.toString(),
-          APDU: this.APDU.toString("hex"),
+          APDU: this.apdu.describe(),
         };
       }
 
@@ -2612,25 +2372,25 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataGroupReq(control.priority, hopCount, apdu);
+        return new TDataGroupReq(control, hopCount, apdu);
       }
     },
     "T_Data_Group.con": class TDataGroupCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Group.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       data: Buffer;
 
-      constructor(confirm: boolean, data: Buffer) {
-        this.control.confirm = confirm;
+      constructor(controlField1: ControlField, data: Buffer) {
+        this.controlField1 = controlField1;
         this.data = data;
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.data.length); // Tamaño mínimo según documento
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         buffer[6] = this.data.length & 0x0f;
         buffer[7] = 0; // El buffer en la posicion 8 debe ser la otra parte del APCI con APDU
         KNXHelper.WriteData(buffer, this.data, 7);
@@ -2642,7 +2402,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
         };
       }
 
@@ -2655,26 +2415,26 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
-        return new TDataGroupCon(control.confirm, data);
+        return new TDataGroupCon(control, data);
       }
     },
     "T_Data_Group.ind": class TDataGroupInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Group.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      APDU: APDU;
 
-      constructor(priority: number, apdu: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         // Octetos 3-6 no utilizados
         buffer[6] |= this.APDU.length & 0x0f;
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2683,8 +2443,8 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
-          APDU: this.APDU.toString("hex"),
+          control: this.controlField1.describe(),
+          APDU: this.APDU.describe(),
         };
       }
 
@@ -2697,20 +2457,20 @@ export class EMI {
 
         const octet6 = buffer.readUInt8(6);
         const length = octet6 & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataGroupInd(control.priority, apdu);
+        return new TDataGroupInd(control, apdu);
       }
     },
     "T_Data_Individual.req": class TDataIndividualReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       destinationAddress: string;
-      APDU: Buffer;
+      APDU: APDU;
       hopCount: number;
 
-      constructor(priority: number, destinationAddress: string, hopCount: number, apdu: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, destinationAddress: string, hopCount: number, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.destinationAddress = destinationAddress;
         this.APDU = apdu;
         this.hopCount = hopCount;
@@ -2719,10 +2479,10 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2731,10 +2491,10 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           destinationAddress: this.destinationAddress,
           hopCount: this.hopCount.toString(),
-          APDU: this.APDU.toString("hex"),
+          APDU: this.APDU.describe(),
         };
       }
       static fromBuffer(buffer: Buffer): TDataIndividualReq {
@@ -2756,19 +2516,19 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataIndividualReq(control.priority, destinationAddress, hopCount, apdu);
+        return new TDataIndividualReq(control, destinationAddress, hopCount, apdu);
       }
     },
     "T_Data_Individual.con": class TDataIndividualCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       destinationAddress: string;
-      APDU: Buffer;
+      APDU: APDU;
 
-      constructor(confirm: boolean, destinationAddress: string, apdu: Buffer) {
-        this.control.confirm = confirm;
+      constructor(controlField1: ControlField, destinationAddress: string, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.destinationAddress = destinationAddress;
         this.APDU = apdu;
       }
@@ -2776,10 +2536,10 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
         buffer[6] = this.APDU.length & 0x0f;
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2788,7 +2548,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          controlField1: this.controlField1.describe(),
           destinationAddress: this.destinationAddress,
         };
       }
@@ -2810,21 +2570,27 @@ export class EMI {
             "The destinationAddress is not string, this fatal error is from GetAddress, dont be ignore it",
           );
         const length = buffer.readUInt8(6) & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataIndividualCon(control.confirm, destinationAddress, apdu);
+        return new TDataIndividualCon(control, destinationAddress, apdu);
       }
     },
     "T_Data_Individual.ind": class TDataIndividualInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Individual.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sourceAddress: string;
       destinationAddress: string;
-      APDU: Buffer;
+      APDU: APDU;
       hopCount: number;
 
-      constructor(priority: number, sourceAddress: string, destinationAddress: string, hopCount: number, apdu: Buffer) {
-        this.control.priority = priority;
+      constructor(
+        controlField1: ControlField,
+        sourceAddress: string,
+        destinationAddress: string,
+        hopCount: number,
+        apdu: APDU,
+      ) {
+        this.controlField1 = controlField1;
         this.sourceAddress = sourceAddress;
         this.destinationAddress = destinationAddress;
         this.APDU = apdu;
@@ -2834,11 +2600,11 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2847,10 +2613,10 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
-          APDU: this.APDU.toString("hex"),
+          APDU: this.APDU.describe(),
         };
       }
 
@@ -2880,19 +2646,19 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataIndividualInd(control.priority, sourceAddress, destinationAddress, hopCount, apdu);
+        return new TDataIndividualInd(control, sourceAddress, destinationAddress, hopCount, apdu);
       }
     },
     "T_Data_Broadcast.req": class TDataBroadcastReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      APDU: APDU;
       hopCount: number;
 
-      constructor(priority: number, hopCount: number, apdu: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, hopCount: number, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.APDU = apdu;
         this.hopCount = hopCount;
       }
@@ -2900,9 +2666,9 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f); // podría no ser usado
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2911,9 +2677,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           hopCount: this.hopCount.toString(),
-          APDU: this.APDU.toString("hex"),
+          APDU: this.APDU.describe(),
         };
       }
 
@@ -2927,26 +2693,26 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataBroadcastReq(control.priority, hopCount, apdu);
+        return new TDataBroadcastReq(control, hopCount, apdu);
       }
     },
     "T_Data_Broadcast.con": class TDataBroadcastCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      APDU: APDU;
 
-      constructor(confirm: boolean, apdu: Buffer) {
-        this.control.confirm = confirm;
+      constructor(controlField1: ControlField, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.controlField1.buffer.copy(buffer, 1);
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -2955,7 +2721,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
         };
       }
 
@@ -2967,20 +2733,20 @@ export class EMI {
         const control = new ControlField(buffer.readUInt8(1));
 
         const length = buffer.readUInt8(6) & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataBroadcastCon(control.confirm, apdu);
+        return new TDataBroadcastCon(control, apdu);
       }
     },
     "T_Data_Broadcast.ind": class TDataBroadcastInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["T_Data_Broadcast.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sourceAddress: string;
-      APDU: Buffer;
+      APDU: APDU;
       hopCount: number;
 
-      constructor(priority: number, sourceAddress: string, hopCount: number, apdu: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, sourceAddress: string, hopCount: number, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.sourceAddress = sourceAddress;
         this.APDU = apdu;
         this.hopCount = hopCount;
@@ -2989,10 +2755,10 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
       }
@@ -3001,9 +2767,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sourceAddress: this.sourceAddress,
-          APDU: this.APDU.toString("hex"),
+          APDU: this.APDU.describe(),
         };
       }
       static fromBuffer(buffer: Buffer): TDataBroadcastInd {
@@ -3023,9 +2789,9 @@ export class EMI {
         const octet6 = buffer.readUInt8(6);
         const hopCount = (octet6 >> 4) & 0x07;
         const length = octet6 & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new TDataBroadcastInd(control.priority, sourceAddress, hopCount, apdu);
+        return new TDataBroadcastInd(control, sourceAddress, hopCount, apdu);
       }
     },
     "T_Poll_Data.req": class TPollDataReq implements ServiceMessage {
@@ -3229,12 +2995,12 @@ export class EMI {
     },
     "M_User_Data_Connected.req": class MUserDataConnectedReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      APDU: APDU;
       hopCount: number;
 
-      constructor(priority: number, apdu: Buffer, hopCount: number) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, apdu: APDU, hopCount: number) {
+        this.controlField1 = controlField1;
         this.APDU = apdu;
         this.hopCount = hopCount;
       }
@@ -3242,10 +3008,10 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         // Octetos 2-5 no utilizados
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.APDU.length & 0x0f);
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         buffer[7] = 0x02;
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
@@ -3255,9 +3021,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           hopCount: this.hopCount.toString(),
-          APDU: this.APDU.toString("hex"),
+          APDU: this.APDU.describe(),
         };
       }
 
@@ -3281,28 +3047,28 @@ export class EMI {
         // Tu toBuffer escribe Data en 7 pero luego pone 0x02 en 7. ¡ESTO ES UN BUG EN TU TOBUFFER!
         // Asumiré para leer que la Data real empieza en 8 dado el conflicto, o leeremos desde 7 si el 0x02 es parte de la data.
         // Estandarizando: Leemos el buffer restante como APDU.
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new MUserDataConnectedReq(control.priority, apdu, hopCount);
+        return new MUserDataConnectedReq(control, apdu, hopCount);
       }
     },
     "M_User_Data_Connected.con": class MUserDataConnectedCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
-      APDU: Buffer;
+      controlField1: ControlField;
+      APDU: APDU;
 
-      constructor(confirm: boolean, apdu: Buffer) {
-        this.control.confirm = confirm;
+      constructor(controlField1: ControlField, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.APDU = apdu;
       }
 
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         // Octetos 3-6 no utilizados
         buffer[6] |= this.APDU.length & 0x0f;
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         buffer[7] = 0x02;
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
@@ -3312,8 +3078,8 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
-          APDU: this.APDU.toString("hex"),
+          control: this.controlField1.describe(),
+          APDU: this.APDU.describe(),
         };
       }
 
@@ -3325,19 +3091,19 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
 
         // Mismo conflicto del byte 7 (0x02). Leemos length bytes desde 7.
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new MUserDataConnectedCon(control.confirm, apdu);
+        return new MUserDataConnectedCon(control, apdu);
       }
     },
     "M_User_Data_Connected.ind": class MUserDataConnectedInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Connected.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sourceAddress: string;
-      APDU: Buffer;
+      APDU: APDU;
 
-      constructor(priority: number, sourceAddress: string, apdu: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, sourceAddress: string, apdu: APDU) {
+        this.controlField1 = controlField1;
         this.sourceAddress = sourceAddress;
         this.APDU = apdu;
       }
@@ -3345,11 +3111,11 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.APDU.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         // Octetos 5-6 no utilizados
         buffer[6] |= this.APDU.length & 0x0f;
-        KNXHelper.WriteData(buffer, this.APDU, 7);
+        this.APDU.toBuffer().copy(buffer, 7);
         buffer[7] = 0x02;
         // buffer.writeUInt8(checksum(buffer.subarray(0, buffer.length - 1)), buffer.length - 1);
         return buffer;
@@ -3359,9 +3125,9 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sourceAddress: this.sourceAddress,
-          APDU: this.APDU.toString("hex"),
+          APDU: this.APDU.describe(),
         };
       }
 
@@ -3378,21 +3144,21 @@ export class EMI {
         if (typeof sourceAddress !== "string")
           throw new Error("The sourceAddress is not string, this fatal error is from GetAddress, dont be ignore it");
         const length = buffer.readUInt8(6) & 0x0f;
-        const apdu = buffer.subarray(7, 7 + length);
+        const apdu = APDU.fromBuffer(buffer.subarray(7, 7 + length));
 
-        return new MUserDataConnectedInd(control.priority, sourceAddress, apdu);
+        return new MUserDataConnectedInd(control, sourceAddress, apdu);
       }
     },
     "A_Data_Group.req": class ADataGroupReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["A_Data_Group.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sap: SAP;
       apci: APCI;
       data: Buffer;
       hopCount: number;
 
-      constructor(priority: number, sap: SAP, apci: APCI, data: Buffer, hopCount: number) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, sap: SAP, apci: APCI, data: Buffer, hopCount: number) {
+        this.controlField1 = controlField1;
         this.sap = sap;
         this.apci = apci;
         this.data = data;
@@ -3402,7 +3168,7 @@ export class EMI {
       toBuffer(): Buffer {
         const buffer = Buffer.alloc(8 + this.data.length);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         // Octetos 2-4 no utilizados
         buffer.writeUInt8(this.sap, 5);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (this.data.length & 0x0f);
@@ -3419,7 +3185,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sap: this.sap.toString(),
           hopCount: this.hopCount.toString(),
           apci: this.apci.describe(),
@@ -3451,18 +3217,18 @@ export class EMI {
         // Por simplicidad devolvemos el payload crudo, ajusta según tu parser APCI.
         const data = fullAPDU;
 
-        return new ADataGroupReq(control.priority, sap, newAPCI, data, hopCount);
+        return new ADataGroupReq(control, sap, newAPCI, data, hopCount);
       }
     },
     "A_Data_Group.con": class ADataGroupCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["A_Data_Group.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sap: SAP;
       apci: APCI;
       data: Buffer;
 
-      constructor(confirm: boolean, sap: SAP, apci: APCI, data: Buffer) {
-        this.control.confirm = confirm;
+      constructor(controlField1: ControlField, sap: SAP, apci: APCI, data: Buffer) {
+        this.controlField1 = controlField1;
         this.sap = sap;
         this.apci = apci;
         this.data = data;
@@ -3472,7 +3238,7 @@ export class EMI {
         const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         buffer.writeUInt8(this.sap, 5);
         buffer[6] |= totalLength & 0x0f;
         const apci = this.apci.packNumber();
@@ -3488,7 +3254,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sap: this.sap.toString(),
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
@@ -3509,18 +3275,18 @@ export class EMI {
         const fullAPCI = apci1 | (apci2 >> 4);
         const apci = new APCI(fullAPCI);
 
-        return new ADataGroupCon(control.confirm, sap, apci, fullAPDU);
+        return new ADataGroupCon(control, sap, apci, fullAPDU);
       }
     },
     "A_Data_Group.ind": class ADataGroupInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["A_Data_Group.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sap: SAP;
       apci: APCI;
       data: Buffer;
 
-      constructor(priority: number, sap: SAP, apci: APCI, data: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, sap: SAP, apci: APCI, data: Buffer) {
+        this.controlField1 = controlField1;
         this.sap = sap;
         this.apci = apci;
         this.data = data;
@@ -3530,7 +3296,7 @@ export class EMI {
         const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         buffer.writeUInt8(this.sap, 5);
         buffer[6] |= totalLength & 0x0f;
         const apci = this.apci.packNumber();
@@ -3546,7 +3312,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sap: this.sap.toString(),
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
@@ -3567,19 +3333,19 @@ export class EMI {
         const fullAPCI = apci1 | (apci2 >> 4);
         const apci = new APCI(fullAPCI);
 
-        return new ADataGroupInd(control.priority, sap, apci, fullAPDU);
+        return new ADataGroupInd(control, sap, apci, fullAPDU);
       }
     },
     "M_User_Data_Individual.req": class MUserDataIndividualReq implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.req"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       destinationAddress: string;
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
       data: Buffer;
       hopCount: number;
 
-      constructor(priority: number, destinationAddress: string, data: Buffer, hopCount: number) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, destinationAddress: string, data: Buffer, hopCount: number) {
+        this.controlField1 = controlField1;
         this.destinationAddress = destinationAddress;
         this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit; // 2C0
         this.data = data;
@@ -3590,7 +3356,7 @@ export class EMI {
         const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= ((this.hopCount & 0x07) << 4) | (totalLength & 0x0f);
         const apci = this.apci.packNumber();
@@ -3605,7 +3371,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           destinationAddress: this.destinationAddress,
           hopCount: this.hopCount.toString(),
           apci: this.apci.describe(),
@@ -3630,18 +3396,18 @@ export class EMI {
 
         const data = buffer.subarray(7, 7 + length);
 
-        return new MUserDataIndividualReq(control.priority, destAddr, data, hopCount);
+        return new MUserDataIndividualReq(control, destAddr, data, hopCount);
       }
     },
     "M_User_Data_Individual.con": class MUserDataIndividualCon implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.con"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       destinationAddress: string;
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
       data: Buffer;
 
-      constructor(confirm: boolean, destinationAddress: string, data: Buffer) {
-        this.control.confirm = confirm;
+      constructor(controlField1: ControlField, destinationAddress: string, data: Buffer) {
+        this.controlField1 = controlField1;
         this.destinationAddress = destinationAddress;
         this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit; // 2C0
         this.data = data;
@@ -3651,7 +3417,7 @@ export class EMI {
         const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= totalLength & 0x0f;
         const apci = this.apci.packNumber();
@@ -3666,7 +3432,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           destinationAddress: this.destinationAddress,
           apci: this.apci.describe(),
           data: this.data.toString("hex"),
@@ -3686,19 +3452,19 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
-        return new MUserDataIndividualCon(control.confirm, destAddr, data);
+        return new MUserDataIndividualCon(control, destAddr, data);
       }
     },
     "M_User_Data_Individual.ind": class MUserDataIndividualInd implements ServiceMessage {
       messageCode = MESSAGE_CODE_FIELD["M_User_Data_Individual.ind"]["EMI2/IMI2"].value;
-      control = new ControlField();
+      controlField1: ControlField;
       sourceAddress: string;
       destinationAddress: string;
       apci: APCI = new APCI(APCIEnum.A_UserMemory_Read_Protocol_Data_Unit);
       data: Buffer;
 
-      constructor(priority: number, sourceAddress: string, destinationAddress: string, data: Buffer) {
-        this.control.priority = priority;
+      constructor(controlField1: ControlField, sourceAddress: string, destinationAddress: string, data: Buffer) {
+        this.controlField1 = controlField1;
         this.sourceAddress = sourceAddress;
         this.destinationAddress = destinationAddress;
         this.apci.command = APCIEnum.A_UserMemory_Read_Protocol_Data_Unit; // 2C0
@@ -3709,7 +3475,7 @@ export class EMI {
         const totalLength = this.data.length;
         const buffer = Buffer.alloc(8 + totalLength);
         buffer.writeUInt8(this.messageCode, 0);
-        this.control.buffer.copy(buffer, 1);
+        this.controlField1.buffer.copy(buffer, 1);
         KNXHelper.GetAddress_(this.sourceAddress).copy(buffer, 2);
         KNXHelper.GetAddress_(this.destinationAddress).copy(buffer, 4);
         buffer[6] |= totalLength & 0x0f;
@@ -3725,7 +3491,7 @@ export class EMI {
         return {
           obj: this.constructor.name,
           messageCode: this.messageCode.toString(),
-          control: this.control.describe(),
+          control: this.controlField1.describe(),
           sourceAddress: this.sourceAddress,
           destinationAddress: this.destinationAddress,
           apci: this.apci.toHex(),
@@ -3754,7 +3520,7 @@ export class EMI {
         const length = buffer.readUInt8(6) & 0x0f;
         const data = buffer.subarray(7, 7 + length);
 
-        return new MUserDataIndividualInd(control.priority, sourceAddr, destAddr, data);
+        return new MUserDataIndividualInd(control, sourceAddr, destAddr, data);
       }
     },
     "A_Poll_Data.req": class APollDataReq implements ServiceMessage {

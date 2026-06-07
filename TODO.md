@@ -39,8 +39,6 @@ Implementaciones pendientes.
 
 - Implementar escucha de eventos basado en las direcciones de fuente
 
-- Usar las capas implementas de NPDU, TPDU y APDU en las clases de EMI
-
 #### Filtros
 
 - Implementar un filtro para direcciones que no se quieren escuchar

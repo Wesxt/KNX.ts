@@ -62,7 +62,7 @@ export class NPDU implements ServiceMessage {
     const length = tpduBuffer.length;
 
     // Construcción del Byte NPCI (Octeto 0 del NPDU)
-    // Bits 7: Reservado (0) -> parece ser el AddressType
+    // Bits 7: address_type (0)
     // Bits 6-4: Hop Count
     // Bits 3-0: Length (Longitud del TPDU)
     const npciByte = (this.addressType << 7) | (this._hopCount << 4) | (this.length & 0x0f);
@@ -96,7 +96,7 @@ export class NPDU implements ServiceMessage {
     }
 
     // 1. Parsear el Byte NPCI (Octeto 0)
-    // Bits 7: Reservado (0)
+    // Bits 7: address_type (0)
     // Bits 6-4: Hop Count
     // Bits 3-0: Length (Longitud del TPDU)
     const npci = buffer.readUInt8(0);
