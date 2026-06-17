@@ -36,6 +36,27 @@ import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
 import { TunnelConnection } from "./TunnelConnection";
 import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
+import { FSM } from "./FSM";
+
+/**
+ * States for the KNXnetIPServer Finite State Machine.
+ */
+export enum KNXServerState {
+  STOPPED = "STOPPED",
+  STARTING = "STARTING",
+  RUNNING = "RUNNING",
+  FAULTED = "FAULTED",
+}
+
+/**
+ * Events triggering transitions in the KNXnetIPServer FSM.
+ */
+export enum KNXServerEvent {
+  START = "START",
+  STOP = "STOP",
+  RUNNING = "RUNNING",
+  ERROR = "ERROR",
+}
 
 /**
  * Implements a KNXnet/IP Server (Gateway) that supports Routing and Tunneling protocols.
@@ -45,6 +66,7 @@ import { GroupAddressCache } from "../core/cache/GroupAddressCache";
  * (RoutingBusy), rate limiting, and echo cancellation.
  */
 export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
+  private fsm: FSM<KNXServerState, KNXServerEvent>;
   private isRoutingBusy: boolean = false;
   private routingBusyTimer: NodeJS.Timeout | null = null;
   private msgQueue: Buffer[] = [];
@@ -73,6 +95,31 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   constructor(options: KNXnetIPServerOptions) {
     super(options);
     this._transport = "UDP";
+
+    // Initialize FSM
+    this.fsm = new FSM<KNXServerState, KNXServerEvent>(
+      KNXServerState.STOPPED,
+      {
+        [KNXServerState.STOPPED]: {
+          [KNXServerEvent.START]: KNXServerState.STARTING,
+        },
+        [KNXServerState.STARTING]: {
+          [KNXServerEvent.RUNNING]: KNXServerState.RUNNING,
+          [KNXServerEvent.ERROR]: KNXServerState.FAULTED,
+          [KNXServerEvent.STOP]: KNXServerState.STOPPED,
+        },
+        [KNXServerState.RUNNING]: {
+          [KNXServerEvent.ERROR]: KNXServerState.FAULTED,
+          [KNXServerEvent.STOP]: KNXServerState.STOPPED,
+        },
+        [KNXServerState.FAULTED]: {
+          [KNXServerEvent.START]: KNXServerState.STARTING,
+          [KNXServerEvent.STOP]: KNXServerState.STOPPED,
+        },
+      },
+      (newState, oldState) => this.handleStateChange(newState, oldState)
+    );
+
     // Set defaults for discovery if not provided
     const routingOptions = this.options;
     const netInfo = getNetworkInfo();
@@ -128,7 +175,35 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     }
   }
 
+  /**
+   * Returns the current FSM state as a string.
+   */
+  public get connectionState(): string {
+    return this.fsm.state;
+  }
+
   async connect(): Promise<void> {
+    if (this.fsm.state === KNXServerState.RUNNING) {
+      return;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const onRunning = () => {
+        this.removeListener("error", onError);
+        resolve();
+      };
+      const onError = (err: Error) => {
+        this.removeListener("connected", onRunning);
+        reject(err);
+      };
+      this.once("connected", onRunning);
+      this.once("error", onError);
+
+      this.fsm.transition(KNXServerEvent.START);
+    });
+  }
+
+  private async performConnect(): Promise<void> {
     if (this.socket) {
       return;
     }
@@ -140,6 +215,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     });
 
     this.socket.on("error", (err) => {
+      this.fsm.transition(KNXServerEvent.ERROR);
       this.emit("error", err);
     });
 
@@ -151,25 +227,21 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           socket.setMulticastTTL(128);
           socket.setMulticastLoopback(true);
 
-          // [MEJORA] Multi-homing: Unirse al multicast en todas las interfaces válidas (si está habilitado)
           const interfaces = os.networkInterfaces();
           const joinedInterfaces = new Set<string>();
           const useAllInterfaces = this.options.useAllInterfaces ?? true;
 
-          // Siempre intenta unirse primero a la localIp especificada
           if (this.options.localIp && this.options.localIp !== "0.0.0.0" && this.options.ip) {
             try {
               socket.addMembership(this.options.ip, this.options.localIp);
               joinedInterfaces.add(this.options.localIp);
               this.logger.info(`Joined multicast on primary interface (${this.options.ip})`);
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e) {
               this.logger.debug(`Failed to join multicast on primary interface ${this.options.localIp}`);
             }
           }
 
           if (useAllInterfaces) {
-            // Itera sobre todas las demás interfaces de red del host
             for (const name of Object.keys(interfaces)) {
               for (const net of interfaces[name]!) {
                 if (net.family === "IPv4" && !net.internal) {
@@ -178,7 +250,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
                       socket.addMembership(this.options.ip as string, net.address);
                       joinedInterfaces.add(net.address);
                       this.logger.info(`Joined multicast on interface ${name} (${net.address})`);
-                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     } catch (err) {
                       // Ignora interfaces virtuales que no soportan IGMP
                     }
@@ -190,10 +261,10 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             this.logger.info("Multi-homing disabled. Only primary interface used for multicast.");
           }
 
-          this.emit("connected");
+          this.fsm.transition(KNXServerEvent.RUNNING);
           resolve();
         } catch (err) {
-          this.emit("error", err);
+          this.fsm.transition(KNXServerEvent.ERROR);
           reject(err);
         }
       });
@@ -203,12 +274,41 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   }
 
   disconnect(): void {
+    this.fsm.transition(KNXServerEvent.STOP);
+  }
+
+  private closeServer(): void {
     if (this.socket) {
-      (this.socket as dgram.Socket).close();
+      try {
+        (this.socket as dgram.Socket).close();
+      } catch { /* Ignore */ }
       this.socket = null;
     }
     this.clearTimers();
-    this.emit("disconnected");
+  }
+
+  private async handleStateChange(newState: KNXServerState, oldState: KNXServerState): Promise<void> {
+    this.logger.info(`FSM: State transition from ${oldState} to ${newState}`);
+
+    switch (newState) {
+      case KNXServerState.STARTING:
+        try {
+          await this.performConnect();
+        } catch (err: any) {
+          this.emit("error", err);
+        }
+        break;
+
+      case KNXServerState.RUNNING:
+        this.emit("connected");
+        break;
+
+      case KNXServerState.STOPPED:
+      case KNXServerState.FAULTED:
+        this.closeServer();
+        this.emit("disconnected");
+        break;
+    }
   }
 
   /**

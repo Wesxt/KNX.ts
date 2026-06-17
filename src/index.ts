@@ -1,7 +1,7 @@
 export { KnxDataDecode } from "./core/data/KNXDataDecode";
 export { KnxDataEncoder } from "./core/data/KNXDataEncode";
-export { KNXnetIPServer } from "./connection/KNXnetIPServer";
-export { KNXTunneling } from "./connection/KNXTunneling";
+export { KNXnetIPServer, KNXServerState, KNXServerEvent } from "./connection/KNXnetIPServer";
+export { KNXTunneling, KNXTunnelingState, KNXTunnelingEvent } from "./connection/KNXTunneling";
 export * from "./connection/Router";
 export * from "./connection/TPUART";
 export * from "./connection/KNXUSBConnection";

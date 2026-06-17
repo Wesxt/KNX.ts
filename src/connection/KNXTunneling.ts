@@ -8,23 +8,51 @@ import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXTunnelingOptions } from "../@types/interfaces/connection";
 import { KNXHelper } from "../utils/KNXHelper";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
+import { FSM } from "./FSM";
+
+/**
+ * States for the KNXTunneling Finite State Machine.
+ */
+export enum KNXTunnelingState {
+  DISCONNECTED = "DISCONNECTED",
+  CONNECTING = "CONNECTING",
+  CONNECTED = "CONNECTED",
+  RECONNECTING = "RECONNECTING",
+  FAULTED = "FAULTED",
+}
+
+/**
+ * Events triggering transitions in the KNXTunneling FSM.
+ */
+export enum KNXTunnelingEvent {
+  START = "START",
+  STOP = "STOP",
+  CONNECTED = "CONNECTED",
+  CONNECTION_LOST = "CONNECTION_LOST",
+  RETRY = "RETRY",
+  FAIL_FATAL = "FAIL_FATAL",
+}
 
 /**
  * Handles KNXnet/IP Tunneling connections for point-to-point communication with a KNX gateway.
- * This class manages the connection state, sequence numbering for reliable delivery,
+ * This class manages the connection state via an internal FSM, sequence numbering for reliable delivery,
  * heartbeat monitoring (ConnectionState), and message queuing over both UDP and TCP transports.
  */
 export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
+  private fsm: FSM<KNXTunnelingState, KNXTunnelingEvent>;
   private channelId: number = 0;
   private sequenceNumber: number = 0;
   private rxSequenceNumber: number = 0;
-  private isConnected: boolean = false;
   private tcpBuffer: Buffer = Buffer.alloc(0);
   public individualAddress: string = "1.0.1"; // Assigned Individual Address
   // Heartbeat
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private heartbeatFailures: number = 0;
   private heartbeatRetryTimer: NodeJS.Timeout | null = null;
+
+  // Reconnection
+  private reconnectAttempts = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   // Message Queue
   private msgQueue: {
@@ -57,53 +85,136 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     this.options.port = options.port || 3671;
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
     this.logger = this.logger.child({ module: "TunnelClient" });
+
+    // Initialize the FSM
+    this.fsm = new FSM<KNXTunnelingState, KNXTunnelingEvent>(
+      KNXTunnelingState.DISCONNECTED,
+      {
+        [KNXTunnelingState.DISCONNECTED]: {
+          [KNXTunnelingEvent.START]: KNXTunnelingState.CONNECTING,
+        },
+        [KNXTunnelingState.CONNECTING]: {
+          [KNXTunnelingEvent.CONNECTED]: KNXTunnelingState.CONNECTED,
+          [KNXTunnelingEvent.CONNECTION_LOST]: KNXTunnelingState.RECONNECTING,
+          [KNXTunnelingEvent.STOP]: KNXTunnelingState.DISCONNECTED,
+        },
+        [KNXTunnelingState.CONNECTED]: {
+          [KNXTunnelingEvent.CONNECTION_LOST]: KNXTunnelingState.RECONNECTING,
+          [KNXTunnelingEvent.STOP]: KNXTunnelingState.DISCONNECTED,
+        },
+        [KNXTunnelingState.RECONNECTING]: {
+          [KNXTunnelingEvent.CONNECTED]: KNXTunnelingState.CONNECTED,
+          [KNXTunnelingEvent.RETRY]: KNXTunnelingState.RECONNECTING,
+          [KNXTunnelingEvent.FAIL_FATAL]: KNXTunnelingState.FAULTED,
+          [KNXTunnelingEvent.STOP]: KNXTunnelingState.DISCONNECTED,
+        },
+        [KNXTunnelingState.FAULTED]: {
+          [KNXTunnelingEvent.START]: KNXTunnelingState.CONNECTING,
+          [KNXTunnelingEvent.STOP]: KNXTunnelingState.DISCONNECTED,
+        },
+      },
+      (newState, oldState) => this.handleStateChange(newState, oldState)
+    );
+
     this.logger.info(
       `Tunneling initialized with ip: ${options.ip} and port: ${options.port} and transport: ${this._transport}`,
     );
   }
 
+  /**
+   * Returns the current FSM state as a string.
+   */
+  public get connectionState(): string {
+    return this.fsm.state;
+  }
+
+  /**
+   * Returns true if currently connected.
+   */
+  public get isConnected(): boolean {
+    return this.fsm.state === KNXTunnelingState.CONNECTED;
+  }
+
+  /**
+   * Dispatches the transition to start the connection process.
+   * Resolves when connected, rejects if connection fails or times out.
+   */
   async connect(): Promise<void> {
+    if (this.fsm.state === KNXTunnelingState.CONNECTED) return;
+
+    return new Promise<void>((resolve, reject) => {
+      const onConnected = () => {
+        this.removeListener("error", onError);
+        resolve();
+      };
+      const onError = (err: Error) => {
+        this.removeListener("connected", onConnected);
+        reject(err);
+      };
+      this.once("connected", onConnected);
+      this.once("error", onError);
+
+      this.fsm.transition(KNXTunnelingEvent.START);
+    });
+  }
+
+  /**
+   * Internal wrapper that performs the socket setup and connection.
+   */
+  private async performConnect(): Promise<void> {
     this.rxSequenceNumber = 0;
-    if (this._transport === "TCP") {
-      await this.connectTCP();
-    } else {
-      await this.connectUDP();
+    try {
+      if (this._transport === "TCP") {
+        await this.connectTCP();
+      } else {
+        await this.connectUDP();
+      }
+      this.fsm.transition(KNXTunnelingEvent.CONNECTED);
+    } catch (err: any) {
+      this.fsm.transition(KNXTunnelingEvent.CONNECTION_LOST);
+      throw err;
     }
   }
 
   private async connectUDP(): Promise<void> {
     this.socket = dgram.createSocket("udp4");
 
-    // Manejo de mensajes entrantes
+    // Message handler
     this.socket.on("message", (msg) => this.handleMessage(msg));
 
-    // ERROR GLOBAL: Si el socket muere, desconectamos
+    // Socket error handler
     this.socket.on("error", (err) => {
-      this.emit("error", err);
-      this.disconnect();
+      this.handleConnectionLost(err);
     });
 
     return new Promise((resolve, reject) => {
-      // Listener temporal para atrapar errores DURANTE la conexión inicial
+      const timeout = setTimeout(() => {
+        this.removeListener("connected", successListener);
+        this.removeListener("error", errorListener);
+        this.closeSocket();
+        reject(new Error("Connection timeout"));
+      }, 6000);
+
       const errorListener = (err: Error) => {
+        clearTimeout(timeout);
         this.removeListener("connected", successListener);
         reject(err);
       };
 
       const successListener = () => {
-        this.removeListener("error", errorListener); // Limpiamos el listener de error temporal
+        clearTimeout(timeout);
+        this.removeListener("error", errorListener);
         resolve();
       };
 
-      // Escuchamos ambos eventos
       this.once("error", errorListener);
       this.once("connected", successListener);
 
-      // Bind
       (this.socket as dgram.Socket).bind(this.options.localPort, this.options.localIp, () => {
         try {
           this.sendConnectRequest();
         } catch (e) {
+          clearTimeout(timeout);
           reject(e);
         }
       });
@@ -114,9 +225,19 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     return new Promise((resolve, reject) => {
       this.socket = new net.Socket();
 
+      const timeout = setTimeout(() => {
+        this.closeSocket();
+        reject(new Error("Connection timeout"));
+      }, 6000);
+
+      const successListener = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+
       (this.socket as net.Socket).connect(this.options.port!, this.options.ip!, () => {
         this.sendConnectRequest();
-        this.once("connected", resolve);
+        this.once("connected", successListener);
       });
 
       (this.socket as net.Socket).on("data", (data) => {
@@ -134,12 +255,15 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       });
 
       (this.socket as net.Socket).on("error", (err) => {
-        this.emit("error", err);
-        this.disconnect();
+        clearTimeout(timeout);
+        this.handleConnectionLost(err);
         reject(err);
       });
 
-      (this.socket as net.Socket).on("close", () => this.disconnect());
+      (this.socket as net.Socket).on("close", () => {
+        clearTimeout(timeout);
+        this.handleConnectionLost(new Error("TCP connection closed by remote peer"));
+      });
     });
   }
 
@@ -156,56 +280,145 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     const cri = new CRI(this.options.connectionType!);
 
     const header = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_REQUEST, 0);
-    // CORRECCIÓN
-    // Estructura: HPAI (Control) -> HPAI (Data) -> CRI
     const body = Buffer.concat([hpai.toBuffer(), hpai.toBuffer(), cri.toBuffer()]);
     header.totalLength = 6 + body.length;
 
     this.sendRaw(Buffer.concat([header.toBuffer(), body]));
   }
 
+  /**
+   * Safe disconnection of the connection.
+   */
   disconnect() {
-    if (this.isConnected && this.channelId) {
-      const localPort =
-        this._transport === "UDP"
-          ? (this.socket as dgram.Socket).address().port
-          : (this.socket as net.Socket).localPort!;
-      const useRouteBack = this.options.useRouteBack;
-      const hpai = new HPAI(
-        this._transport === "TCP" ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
-        useRouteBack ? "0.0.0.0" : this.options.localIp!,
-        useRouteBack ? 0 : localPort,
-      );
+    if (this.fsm.state === KNXTunnelingState.CONNECTED && this.channelId) {
+      try {
+        const localPort =
+          this._transport === "UDP"
+            ? (this.socket as dgram.Socket).address().port
+            : (this.socket as net.Socket).localPort!;
+        const useRouteBack = this.options.useRouteBack;
+        const hpai = new HPAI(
+          this._transport === "TCP" ? HostProtocolCode.IPV4_TCP : HostProtocolCode.IPV4_UDP,
+          useRouteBack ? "0.0.0.0" : this.options.localIp!,
+          useRouteBack ? 0 : localPort,
+        );
 
-      const header = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_REQUEST, 0);
-      const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
-      header.totalLength = 6 + body.length;
-      this.sendRaw(Buffer.concat([header.toBuffer(), body]));
+        const header = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_REQUEST, 0);
+        const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
+        header.totalLength = 6 + body.length;
+        this.sendRaw(Buffer.concat([header.toBuffer(), body]));
+      } catch { /* empty */ }
 
-      // Graceful disconnect: Wait for response or timeout (1s)
       this.disconnectTimeout = setTimeout(() => {
-        this.closeSocket();
+        this.fsm.transition(KNXTunnelingEvent.STOP);
       }, 1000);
     } else {
-      this.closeSocket();
+      this.fsm.transition(KNXTunnelingEvent.STOP);
     }
   }
 
   private closeSocket() {
     this.stopHeartbeat();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.disconnectTimeout) {
       clearTimeout(this.disconnectTimeout);
       this.disconnectTimeout = null;
     }
-    this.isConnected = false;
     this.channelId = 0;
 
     if (this.socket) {
-      if (this._transport === "UDP") (this.socket as dgram.Socket).close();
-      else (this.socket as net.Socket).destroy();
+      try {
+        if (this._transport === "UDP") (this.socket as dgram.Socket).close();
+        else (this.socket as net.Socket).destroy();
+      } catch { /* empty */ }
       this.socket = null;
     }
     this.emit("disconnected");
+  }
+
+  /**
+   * Action handler for FSM state entries.
+   */
+  private async handleStateChange(newState: KNXTunnelingState, oldState: KNXTunnelingState): Promise<void> {
+    this.logger.info(`FSM: State transition from ${oldState} to ${newState}`);
+
+    switch (newState) {
+      case KNXTunnelingState.CONNECTING:
+        this.reconnectAttempts = 0;
+        try {
+          await this.performConnect();
+        } catch { /* Handled in performConnect */ }
+        break;
+
+      case KNXTunnelingState.CONNECTED:
+        this.reconnectAttempts = 0;
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = null;
+        }
+        this.emit("connected", {
+          channelId: this.channelId,
+          individualAddress: this.individualAddress,
+        });
+        this.startHeartbeat();
+        break;
+
+      case KNXTunnelingState.RECONNECTING:
+        this.scheduleReconnection();
+        break;
+
+      case KNXTunnelingState.DISCONNECTED:
+        this.closeSocket();
+        break;
+
+      case KNXTunnelingState.FAULTED:
+        this.closeSocket();
+        this.emit("error", new Error("Connection faulted: Max reconnection attempts exceeded."));
+        break;
+    }
+  }
+
+  /**
+   * Automatically handles unexpected connection loss.
+   */
+  private handleConnectionLost(err: Error) {
+    if (this.fsm.state === KNXTunnelingState.DISCONNECTED || this.fsm.state === KNXTunnelingState.FAULTED) return;
+    this.logger.warn(`Connection lost: ${err.message}`);
+    this.closeSocket();
+    const autoReconnect = this.options.autoReconnect ?? true;
+    if (autoReconnect) {
+      this.fsm.transition(KNXTunnelingEvent.CONNECTION_LOST);
+    } else {
+      this.fsm.transition(KNXTunnelingEvent.STOP);
+      this.emit("error", err);
+    }
+  }
+
+  /**
+   * Reconnection retry scheduler.
+   */
+  private scheduleReconnection() {
+    const maxAttempts = this.options.maxReconnectAttempts ?? 10;
+    const delay = this.options.reconnectDelay ?? 5000;
+
+    if (this.reconnectAttempts >= maxAttempts) {
+      this.fsm.transition(KNXTunnelingEvent.FAIL_FATAL);
+      return;
+    }
+
+    this.reconnectAttempts++;
+    this.logger.warn(`FSM Reconnection: scheduling attempt #${this.reconnectAttempts} in ${delay}ms...`);
+
+    this.reconnectTimer = setTimeout(async () => {
+      try {
+        await this.performConnect();
+      } catch {
+        this.fsm.transition(KNXTunnelingEvent.RETRY);
+      }
+    }, delay);
   }
 
   // #region Message Queue & Sending
@@ -298,7 +511,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       this.pendingAck = null;
       this.isSending = false;
       reject(new Error("Tunneling ACK Timeout"));
-      this.disconnect();
+      this.handleConnectionLost(new Error("Tunneling ACK Timeout"));
     }
   }
   // #endregion
@@ -337,20 +550,12 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
             this.channelId = body[0];
             this.sequenceNumber = 0;
             this.rxSequenceNumber = 0;
-            this.isConnected = true;
 
-            // Parse CRD
             if (body.length >= 14) {
               const crd = CRD.fromBuffer(body.subarray(10));
               this.individualAddress = KNXHelper.GetAddress(crd.knxAddress, ".");
-              this.emit("connected", {
-                channelId: this.channelId,
-                individualAddress: this.individualAddress,
-              });
-            } else {
-              this.emit("connected", { channelId: this.channelId });
             }
-            this.startHeartbeat();
+            this.fsm.transition(KNXTunnelingEvent.CONNECTED);
           } else {
             this.emit("error", new Error(`Connect Error: 0x${status.toString(16)}`));
           }
@@ -368,8 +573,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
               this.logger.warn(`Heartbeat response error from server: 0x${body[1].toString(16)}`);
               // If it's a connection ID error, we should probably disconnect
               if (body[1] === KNXnetIPErrorCodes.E_CONNECTION_ID) {
-                this.emit("error", new Error("Connection ID no longer valid on server"));
-                this.disconnect();
+                this.handleConnectionLost(new Error("Connection ID no longer valid on server"));
               }
             }
           }
@@ -399,7 +603,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
               this.pendingAck = null;
               this.isSending = false;
               this.activeRequest = null;
-              this.disconnect();
+              this.handleConnectionLost(new Error(`ACK Error: 0x${status.toString(16)}`));
               return;
             }
 
@@ -444,10 +648,10 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
           break;
         case KNXnetIPServiceType.DISCONNECT_REQUEST:
           // Server closed connection
-          this.closeSocket();
+          this.fsm.transition(KNXTunnelingEvent.STOP);
           break;
         case KNXnetIPServiceType.DISCONNECT_RESPONSE:
-          this.closeSocket();
+          this.fsm.transition(KNXTunnelingEvent.STOP);
           break;
         case KNXnetIPServiceType.TUNNELLING_FEATURE_INFO:
           // Body: ConnHeader(4) + FeatureID(1) + Len(1) + Value...
@@ -556,8 +760,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     this.heartbeatFailures++;
     this.logger.warn(`Heartbeat timeout (${this.heartbeatFailures}/3)`);
     if (this.heartbeatFailures >= 3) {
-      this.emit("error", new Error("Heartbeat failed 3 times"));
-      this.disconnect();
+      this.handleConnectionLost(new Error("Heartbeat failed 3 times"));
     } else {
       // Immediate retry
       this.sendHeartbeatRequest();

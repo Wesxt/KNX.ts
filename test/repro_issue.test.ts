@@ -40,7 +40,7 @@ describe("CEMI Decoding and Encoding Reproduction", () => {
 
   test("should preserve short GroupValueWrite boolean true data", () => {
     const raw = Buffer.from("1100B4E011FA0001010081", "hex");
-    const cemi = CEMI.fromBuffer(raw);
+    const cemi = CEMI.fromBuffer(raw) as any;
 
     expect(cemi.TPDU.apdu.isShort).toBe(true);
     expect(cemi.TPDU.apdu.data).toEqual(Buffer.from([0x01]));

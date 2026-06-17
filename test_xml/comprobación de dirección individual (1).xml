@@ -1,0 +1,19 @@
+<CommunicationLog xmlns="http://knx.org/xml/telegrams/01">
+  <Connection Timestamp="2026-05-11T16:27:25.9649964Z" State="Established" />
+  <RecordStart Timestamp="2026-05-11T16:27:25.9654414Z" Mode="LinkLayer" Host="DESKTOP-0GDG6V7" ConnectionName="Zennio KNX USB Interface" ConnectionOptions="Type=USB;DeviceIndex=0;DevicePath=\\?\hid#vid_28c2&amp;pid_0002#6&amp;a8446ca&amp;0&amp;0000#{4d1e55b2-f16f-11cf-88cb-001111000030};Name=&quot;Zennio KNX USB Interface&quot;" ConnectorType="USB" />
+  <Telegram Timestamp="2026-05-11T16:27:31.6522898Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F0080" />
+  <Telegram Timestamp="2026-05-11T16:27:31.6763831Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F014300" />
+  <Telegram Timestamp="2026-05-11T16:27:31.6923786Z" Service="L_Data.ind" FrameFormat="CommonEmi" RawData="2900B060123F11FA00C2" />
+  <Telegram Timestamp="2026-05-11T16:27:31.7162238Z" Service="L_Data.ind" FrameFormat="CommonEmi" RawData="2900B060123F11FA03434007B0" />
+  <Telegram Timestamp="2026-05-11T16:27:31.7401488Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F00C2" />
+  <Telegram Timestamp="2026-05-11T16:27:31.8361802Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F0547D500381001" />
+  <Telegram Timestamp="2026-05-11T16:27:31.8521689Z" Service="L_Data.ind" FrameFormat="CommonEmi" RawData="2900B060123F11FA00C6" />
+  <Telegram Timestamp="2026-05-11T16:27:31.884194Z" Service="L_Data.ind" FrameFormat="CommonEmi" RawData="2900B060123F11FA0747D60038100100FE" />
+  <Telegram Timestamp="2026-05-11T16:27:31.908169Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F00C6" />
+  <Telegram Timestamp="2026-05-11T16:27:31.9521472Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F054BD500361001" />
+  <Telegram Timestamp="2026-05-11T16:27:31.9681653Z" Service="L_Data.ind" FrameFormat="CommonEmi" RawData="2900B060123F11FA00CA" />
+  <Telegram Timestamp="2026-05-11T16:27:32.0001145Z" Service="L_Data.ind" FrameFormat="CommonEmi" RawData="2900B060123F11FA064BD60036100100" />
+  <Telegram Timestamp="2026-05-11T16:27:32.0241016Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F00CA" />
+  <Telegram Timestamp="2026-05-11T16:27:32.0481492Z" Service="L_Data.con" FrameFormat="CommonEmi" RawData="2E00B06011FA123F0081" />
+  <RecordStop Timestamp="2026-05-11T16:27:59.5728436Z" />
+</CommunicationLog>

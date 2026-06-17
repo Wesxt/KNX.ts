@@ -16,6 +16,7 @@ env/*.env
 Thumbs.db
 
 tsconfig.tsbuildinfo
+tsconfig.build.tsbuildinfo
 
 GEMINI.md
 

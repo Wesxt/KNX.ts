@@ -14,7 +14,7 @@ type ExpectedTelegram = {
   data?: string;
 };
 
-const fixturesDir = join(__dirname, "..", "03 Volume 3 System Specifications");
+const fixturesDir = join(__dirname, "..", "test_xml");
 const txtFixture = join(fixturesDir, "comprobación de dirección individual.txt");
 const xmlFixture = join(fixturesDir, "comprobación de dirección individual (1).xml");
 

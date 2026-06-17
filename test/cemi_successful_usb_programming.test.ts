@@ -8,15 +8,26 @@ type XmlTelegram = {
 };
 
 const xmlFixture = join(__dirname, "..", "test_xml", "Programacion_exitosa_del_knx_usb 2 (1).xml");
+const xmlFixture2 = join(__dirname, "../../", "test_xml", "Programacion_exitosa_del_knx_usb 2 (1).xml");
 
 function readTelegramsFromXml(): XmlTelegram[] {
-  const xml = readFileSync(xmlFixture, "utf8");
-  return [
-    ...xml.matchAll(/<Telegram\b[^>]*Service="([^"]+)"[^>]*FrameFormat="CommonEmi"[^>]*RawData="([0-9A-F]+)"/g),
-  ].map((match) => ({
-    service: match[1],
-    rawData: match[2],
-  }));
+  try {
+    const xml = readFileSync(xmlFixture, "utf8");
+    return [
+      ...xml.matchAll(/<Telegram\b[^>]*Service="([^"]+)"[^>]*FrameFormat="CommonEmi"[^>]*RawData="([0-9A-F]+)"/g),
+    ].map((match) => ({
+      service: match[1],
+      rawData: match[2],
+    }));
+  } catch {
+    const xml = readFileSync(xmlFixture2, "utf8");
+    return [
+      ...xml.matchAll(/<Telegram\b[^>]*Service="([^"]+)"[^>]*FrameFormat="CommonEmi"[^>]*RawData="([0-9A-F]+)"/g),
+    ].map((match) => ({
+      service: match[1],
+      rawData: match[2],
+    }));
+  }
 }
 
 describe("CEMI - programación exitosa por KNX USB", () => {

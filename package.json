@@ -14,11 +14,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run build",
-    "start": "tsc && node dist/index.js",
-    "watch": "tsc -w",
+    "start": "tsc -p tsconfig.build.json && node dist/index.js",
+    "watch": "tsc -p tsconfig.build.json -w",
     "test": "jest",
+    "test:stability": "tsx test/stability/tunneling_stability.ts",
+    "test:server-stability": "tsx test/stability/server_tunneling_stability.ts",
     "manualTest:router": "tsx manual-tests/router.ts",
     "manualTest:tunneling": "tsx manual-tests/tunneling_manual.ts",
     "manualTest:routing": "tsx manual-tests/routing_manual.ts",
@@ -50,7 +52,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.3",
     "@types/node-hid": "^3.0.0",
     "@types/ws": "^8.18.1",
     "eslint": "^10.2.0",
@@ -60,7 +62,7 @@
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.58.1"
   },
   "dependencies": {

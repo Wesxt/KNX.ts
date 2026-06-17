@@ -52,6 +52,10 @@ export abstract class KNXService<TOptions extends AllConnectionOptions = AllConn
    * @param data A data buffer CEMI or EMI or an instance of a CEMI message
    */
   abstract send(data: Buffer | CEMIInstance): Promise<void>;
+  /**
+   * Returns the current connection state of the service as a string.
+   */
+  abstract get connectionState(): string;
 
   /**
    * Send a GroupValue_Write telegram to a group address.

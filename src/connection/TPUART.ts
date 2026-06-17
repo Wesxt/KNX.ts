@@ -5,6 +5,7 @@ import { CEMIAdapter } from "../utils/CEMIAdapter";
 import { KNXHelper } from "../utils/KNXHelper";
 import { CEMI, CEMIInstance } from "../core/CEMI";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
+import { FSM } from "./FSM";
 
 const UART_SERVICES = {
   RESET_REQ: 0x01,
@@ -20,19 +21,29 @@ const UART_SERVICES = {
   BUSY: 0xc0,
 } as const;
 
-enum TPUARTState {
-  DISCONNECTED,
-  RESET_WAIT,
-  SET_ADDR_WAIT,
-  GET_STATE_WAIT,
-  ONLINE,
-  ERROR,
+export enum TPUARTState {
+  DISCONNECTED = "DISCONNECTED",
+  RESET_WAIT = "RESET_WAIT",
+  SET_ADDR_WAIT = "SET_ADDR_WAIT",
+  GET_STATE_WAIT = "GET_STATE_WAIT",
+  ONLINE = "ONLINE",
+  ERROR = "ERROR",
+}
+
+export enum TPUARTEvent {
+  START = "START",
+  STOP = "STOP",
+  RESET_RECEIVED = "RESET_RECEIVED",
+  ADDR_SET = "ADDR_SET",
+  STATE_RECEIVED = "STATE_RECEIVED",
+  ONLINE = "ONLINE",
+  ERROR = "ERROR",
 }
 
 export class TPUARTConnection extends KNXService<TPUARTOptions> {
+  private fsm: FSM<TPUARTState, TPUARTEvent>;
   private serialPort: SerialPort;
   private receiver: Receiver;
-  private connectionState: TPUARTState = TPUARTState.DISCONNECTED;
   private isOpening: boolean = false;
 
   private initPromise: {
@@ -63,6 +74,40 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
       stopBits: 1,
       autoOpen: false,
     });
+
+    // Initialize FSM
+    this.fsm = new FSM<TPUARTState, TPUARTEvent>(
+      TPUARTState.DISCONNECTED,
+      {
+        [TPUARTState.DISCONNECTED]: {
+          [TPUARTEvent.START]: TPUARTState.RESET_WAIT,
+        },
+        [TPUARTState.RESET_WAIT]: {
+          [TPUARTEvent.RESET_RECEIVED]: TPUARTState.GET_STATE_WAIT,
+          [TPUARTEvent.ERROR]: TPUARTState.ERROR,
+          [TPUARTEvent.STOP]: TPUARTState.DISCONNECTED,
+        },
+        [TPUARTState.SET_ADDR_WAIT]: {
+          [TPUARTEvent.ADDR_SET]: TPUARTState.GET_STATE_WAIT,
+          [TPUARTEvent.ERROR]: TPUARTState.ERROR,
+          [TPUARTEvent.STOP]: TPUARTState.DISCONNECTED,
+        },
+        [TPUARTState.GET_STATE_WAIT]: {
+          [TPUARTEvent.STATE_RECEIVED]: TPUARTState.ONLINE,
+          [TPUARTEvent.ERROR]: TPUARTState.ERROR,
+          [TPUARTEvent.STOP]: TPUARTState.DISCONNECTED,
+        },
+        [TPUARTState.ONLINE]: {
+          [TPUARTEvent.ERROR]: TPUARTState.ERROR,
+          [TPUARTEvent.STOP]: TPUARTState.DISCONNECTED,
+        },
+        [TPUARTState.ERROR]: {
+          [TPUARTEvent.START]: TPUARTState.RESET_WAIT,
+          [TPUARTEvent.STOP]: TPUARTState.DISCONNECTED,
+        },
+      },
+      (newState, oldState) => this.handleStateChange(newState, oldState)
+    );
 
     this.receiver = new Receiver(this);
     this.serialPort.on("data", (data) => this.receiver.handleData(data));
@@ -136,14 +181,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
   }
 
   private handleFatalError(err: any) {
-    this.stopTimers();
-    this.connectionState = TPUARTState.ERROR;
-    this.isOpening = false;
-    // Reject all pending messages
-    while (this.msgQueue.length > 0) {
-      this.msgQueue.shift()?.reject(err);
-    }
-    this.isProcessing = false;
+    this.fsm.transition(TPUARTEvent.ERROR);
     this.emit("error", err);
   }
 
@@ -160,15 +198,22 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
   private resetKeepalive() {
     if (this.keepaliveTimer) clearTimeout(this.keepaliveTimer);
     this.keepaliveTimer = setTimeout(() => {
-      if (this.connectionState === TPUARTState.ONLINE) {
+      if (this.fsm.state === TPUARTState.ONLINE) {
         this.initRetryCount = 0;
         this.requestState();
       }
     }, 10000);
   }
 
+  /**
+   * Returns the current FSM state as a string.
+   */
+  public get connectionState(): string {
+    return this.fsm.state;
+  }
+
   async connect(): Promise<void> {
-    if (this.connectionState !== TPUARTState.DISCONNECTED && this.connectionState !== TPUARTState.ERROR) return;
+    if (this.fsm.state !== TPUARTState.DISCONNECTED && this.fsm.state !== TPUARTState.ERROR) return;
     if (this.isOpening) return;
     this.isOpening = true;
     return new Promise((resolve, reject) => {
@@ -190,52 +235,96 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
           return;
         }
         this.initRetryCount = 0;
-        this.sendResetRequest();
+        this.fsm.transition(TPUARTEvent.START);
       });
     });
   }
 
   private sendResetRequest() {
-    this.connectionState = TPUARTState.RESET_WAIT;
     this.writeRaw([UART_SERVICES.RESET_REQ]).catch(() => {});
     if (this.initTimer) clearTimeout(this.initTimer);
     this.initTimer = setTimeout(() => {
-      if (this.connectionState === TPUARTState.RESET_WAIT) {
+      if (this.fsm.state === TPUARTState.RESET_WAIT) {
         this.initRetryCount++;
         if (this.initRetryCount < 3) {
           this.sendResetRequest();
         } else {
+          const err = new Error("TPUART reset timeout");
           if (this.initPromise) {
-            this.initPromise.reject(new Error("TPUART reset timeout"));
+            this.initPromise.reject(err);
             this.initPromise = null;
           }
-          this.handleFatalError(new Error("TPUART reset timeout"));
+          this.handleFatalError(err);
         }
       }
     }, 500);
   }
 
   async disconnect(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const onDisconnected = () => {
+        this.removeListener("error", onError);
+        resolve();
+      };
+      const onError = () => {
+        this.removeListener("disconnected", onDisconnected);
+        resolve();
+      };
+      this.once("disconnected", onDisconnected);
+      this.once("error", onError);
+
+      this.fsm.transition(TPUARTEvent.STOP);
+    });
+  }
+
+  private closeTPUART() {
     this.stopTimers();
-    this.connectionState = TPUARTState.DISCONNECTED;
     this.isOpening = false;
 
-    // Clear queue
+    // Reject all pending messages
     while (this.msgQueue.length > 0) {
-      this.msgQueue.shift()?.reject(new Error("Disconnected by user"));
+      this.msgQueue.shift()?.reject(new Error("Disconnected/Error"));
     }
     this.isProcessing = false;
 
-    return new Promise((resolve) => {
-      if (this.serialPort.isOpen) {
-        this.serialPort.close(() => {
-          this.emit("disconnected");
-          resolve();
-        });
-      } else {
-        resolve();
-      }
-    });
+    if (this.serialPort.isOpen) {
+      this.serialPort.close(() => {
+        this.emit("disconnected");
+      });
+    } else {
+      this.emit("disconnected");
+    }
+  }
+
+  private async handleStateChange(newState: TPUARTState, oldState: TPUARTState): Promise<void> {
+    this.logger.info(`FSM: State transition from ${oldState} to ${newState}`);
+
+    switch (newState) {
+      case TPUARTState.RESET_WAIT:
+        this.sendResetRequest();
+        break;
+
+      case TPUARTState.SET_ADDR_WAIT:
+        // Handled internally in reset received callback
+        break;
+
+      case TPUARTState.GET_STATE_WAIT:
+        this.requestState();
+        break;
+
+      case TPUARTState.ONLINE:
+        if (this.initPromise) {
+          this.initPromise.resolve();
+          this.initPromise = null;
+        }
+        this.emit("connected");
+        break;
+
+      case TPUARTState.DISCONNECTED:
+      case TPUARTState.ERROR:
+        this.closeTPUART();
+        break;
+    }
   }
 
   /**
@@ -243,7 +332,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
    * @param enabled
    */
   public async setBusmonitor(enabled: boolean): Promise<void> {
-    if (this.connectionState < TPUARTState.ONLINE) throw new Error("TPUART offline");
+    if (this.fsm.state !== TPUARTState.ONLINE) throw new Error("TPUART offline");
     this.isBusmonitorMode = enabled;
     if (enabled) {
       await this.writeRaw([UART_SERVICES.ACTIVATE_BUSMON]);
@@ -255,7 +344,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
   }
 
   async send(data: Buffer | CEMIInstance): Promise<void> {
-    if (this.connectionState < TPUARTState.ONLINE) throw new Error("TPUART offline");
+    if (this.fsm.state !== TPUARTState.ONLINE) throw new Error("TPUART offline");
 
     let cemiObj: CEMIInstance | undefined = undefined;
     if (Buffer.isBuffer(data)) {
@@ -376,12 +465,12 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     }
 
     if (byte === UART_SERVICES.RESET_IND) {
-      if (this.connectionState === TPUARTState.RESET_WAIT) {
+      if (this.fsm.state === TPUARTState.RESET_WAIT) {
         if (this.initTimer) clearTimeout(this.initTimer);
         this.initRetryCount = 0;
         const options = this.options;
         if (options.individualAddress) {
-          this.connectionState = TPUARTState.SET_ADDR_WAIT;
+          this.fsm.forceState(TPUARTState.SET_ADDR_WAIT);
           this.writeRaw(
             Buffer.concat([Buffer.from([0x28]), KNXHelper.GetAddress(options.individualAddress, ".")]),
           ).catch((e) => this.emit("error", e));
@@ -390,11 +479,11 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
         } else {
           this.requestState();
         }
-      } else if (this.connectionState >= TPUARTState.ONLINE) {
+      } else if (this.fsm.state === TPUARTState.ONLINE) {
         // Spurious reset (power glitch?) -> re-initialize
         this.emit("warning", "TPUART spurious reset detected, re-initializing...");
         this.initRetryCount = 0;
-        this.sendResetRequest();
+        this.fsm.transition(TPUARTEvent.START);
       }
       return;
     }
@@ -438,13 +527,8 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
         if (byte & 0x01) this.emit("warning", "TPUART: Transmit error");
       }
 
-      if (this.connectionState < TPUARTState.ONLINE) {
-        this.connectionState = TPUARTState.ONLINE;
-        if (this.initPromise) {
-          this.initPromise.resolve();
-          this.initPromise = null;
-          this.emit("connected");
-        }
+      if (this.fsm.state !== TPUARTState.ONLINE) {
+        this.fsm.transition(TPUARTEvent.STATE_RECEIVED);
       }
     }
   }
@@ -459,11 +543,11 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
   }
 
   private requestState() {
-    this.connectionState = TPUARTState.GET_STATE_WAIT;
+    this.fsm.forceState(TPUARTState.GET_STATE_WAIT);
     this.writeRaw([UART_SERVICES.STATE_REQ]).catch((e) => this.emit("error", e));
     if (this.initTimer) clearTimeout(this.initTimer);
     this.initTimer = setTimeout(() => {
-      if (this.connectionState === TPUARTState.GET_STATE_WAIT) {
+      if (this.fsm.state === TPUARTState.GET_STATE_WAIT) {
         this.initRetryCount++;
         if (this.initRetryCount < 5) {
           this.requestState();

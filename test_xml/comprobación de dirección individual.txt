@@ -1,0 +1,15 @@
+#	Tiempo	Servicio técnico	Indicadores 	Prio	Dirección de origen	Nombre de origen	Dirección de destino	Nombre de destino	Número de Saltos	Tipo	DPT	Información
+3	11/05/2026 11:27:31,652 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	T_Connect		
+4	11/05/2026 11:27:31,676 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	DeviceDescriptorRead (S=0)		DescriptorType=0
+5	11/05/2026 11:27:31,692 a. m.	del bus		Sistema	1.2.63	Presentia C v2	1.1.250	-	6	T_ACK (S=0)		
+6	11/05/2026 11:27:31,716 a. m.	del bus		Sistema	1.2.63	Presentia C v2	1.1.250	-	6	DeviceDescriptorResponse (S=0)		DescriptorType=0, DescriptorData=07 B0
+7	11/05/2026 11:27:31,740 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	T_ACK (S=0)		
+8	11/05/2026 11:27:31,836 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	PropertyValueRead (S=1)		ObjectIndex=0, PropertyId=56, Count=1, StartIndex=1
+9	11/05/2026 11:27:31,852 a. m.	del bus		Sistema	1.2.63	Presentia C v2	1.1.250	-	6	T_ACK (S=1)		
+10	11/05/2026 11:27:31,884 a. m.	del bus		Sistema	1.2.63	Presentia C v2	1.1.250	-	6	PropertyValueResponse (S=1)		ObjectIndex=0, PropertyId=56, Count=1, StartIndex=1, Data=00 FE
+11	11/05/2026 11:27:31,908 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	T_ACK (S=1)		
+12	11/05/2026 11:27:31,952 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	PropertyValueRead (S=2)		ObjectIndex=0, PropertyId=54, Count=1, StartIndex=1
+13	11/05/2026 11:27:31,968 a. m.	del bus		Sistema	1.2.63	Presentia C v2	1.1.250	-	6	T_ACK (S=2)		
+14	11/05/2026 11:27:32,000 a. m.	del bus		Sistema	1.2.63	Presentia C v2	1.1.250	-	6	PropertyValueResponse (S=2)		ObjectIndex=0, PropertyId=54, Count=1, StartIndex=1, Data=$00
+15	11/05/2026 11:27:32,024 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	T_ACK (S=2)		
+16	11/05/2026 11:27:32,048 a. m.	al bus		Sistema	1.1.250	-	1.2.63	Presentia C v2	6	T_Disconnect		

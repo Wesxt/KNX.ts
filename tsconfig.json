@@ -1,31 +1,32 @@
 {
   "compilerOptions": {
-    "target": "es2024",
+    "target": "ES2022",
     "module": "nodenext",
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
     "moduleResolution": "nodenext",
+    "strict": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "lib": [
-      "ES2024",
-      "DOM",
-      "DOM.Iterable"
+      "ES2022"
     ],
     "declaration": true,
     "incremental": true,
     "isolatedModules": true,
     "types": [
       "node",
-    ]
+      "jest"
+    ],
+    "noEmit": true,
   },
   "include": [
     "src/**/*.ts",
+    "test/**/*.ts",
+    "manual-tests/**/*.ts"
   ],
   "exclude": [
     "node_modules",
+    "dist"
   ]
 }

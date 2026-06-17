@@ -21,7 +21,7 @@ const CEMI = {
 };
 
 type KeysOfCEMI = "Group1" | "Group2";
-
+// @ts-expect-error This is not use it only experiment proposes
 type CEMITypeDirty = (typeof CEMI)[keyof typeof CEMI];
 // This includes the fromBuffer function!
 
@@ -32,4 +32,5 @@ type CEMIInstance = InstanceType<CEMIClasses>;
 
 // Let's see if CEMIInstance is A | B | C.
 // I'll check with a variable.
+// @ts-expect-error This is not use it only experiment proposes
 const x: CEMIInstance = new A();

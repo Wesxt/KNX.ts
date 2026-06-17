@@ -5,91 +5,181 @@ import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXUSBOptions } from "../@types/interfaces/connection";
 import { EMIInstance } from "../core/EMI";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
+import { FSM } from "./FSM";
+
+/**
+ * States for the KNXUSBConnection Finite State Machine.
+ */
+export enum KNXUSBState {
+  DISCONNECTED = "DISCONNECTED",
+  CONNECTING = "CONNECTING",
+  CONNECTED = "CONNECTED",
+  FAULTED = "FAULTED",
+}
+
+/**
+ * Events triggering transitions in the KNXUSBConnection FSM.
+ */
+export enum KNXUSBEvent {
+  START = "START",
+  STOP = "STOP",
+  CONNECTED = "CONNECTED",
+  ERROR = "ERROR",
+}
 
 export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
+  private fsm: FSM<KNXUSBState, KNXUSBEvent>;
   private device: hid.HID | null = null;
-  private isConnected: boolean = false;
   private busConnected: boolean = false;
   private supportedEmiType: number = 0x03;
 
   constructor(options: KNXUSBOptions) {
     super(options);
     this.logger = this.logger.child({ module: "KNXUSBConnection" });
+
+    // Initialize FSM
+    this.fsm = new FSM<KNXUSBState, KNXUSBEvent>(
+      KNXUSBState.DISCONNECTED,
+      {
+        [KNXUSBState.DISCONNECTED]: {
+          [KNXUSBEvent.START]: KNXUSBState.CONNECTING,
+        },
+        [KNXUSBState.CONNECTING]: {
+          [KNXUSBEvent.CONNECTED]: KNXUSBState.CONNECTED,
+          [KNXUSBEvent.ERROR]: KNXUSBState.FAULTED,
+          [KNXUSBEvent.STOP]: KNXUSBState.DISCONNECTED,
+        },
+        [KNXUSBState.CONNECTED]: {
+          [KNXUSBEvent.ERROR]: KNXUSBState.FAULTED,
+          [KNXUSBEvent.STOP]: KNXUSBState.DISCONNECTED,
+        },
+        [KNXUSBState.FAULTED]: {
+          [KNXUSBEvent.START]: KNXUSBState.CONNECTING,
+          [KNXUSBEvent.STOP]: KNXUSBState.DISCONNECTED,
+        },
+      },
+      (newState, oldState) => this.handleStateChange(newState, oldState)
+    );
+  }
+
+  /**
+   * Returns the current state as a string.
+   */
+  public get connectionState(): string {
+    return this.fsm.state;
+  }
+
+  /**
+   * Returns true if currently connected.
+   */
+  public get isConnected(): boolean {
+    return this.fsm.state === KNXUSBState.CONNECTED;
   }
 
   async connect(): Promise<void> {
-    if (this.isConnected) return;
+    if (this.fsm.state === KNXUSBState.CONNECTED) return;
 
-    return new Promise((resolve, reject) => {
-      try {
-        const options = this.options;
-        let devicePath = options.path;
-
-        if (!devicePath) {
-          const devices = hid.devices();
-          const knxDevice = devices.find(
-            (d) =>
-              (options.vendorId &&
-                d.vendorId === options.vendorId &&
-                options.productId &&
-                d.productId === options.productId) ||
-              d.vendorId === 0x28c2 || // Zennio
-              d.vendorId === 0x145c || // ABB/Busch-Jaeger
-              d.vendorId === 0x10a6 || // MDT
-              d.vendorId === 0x135e || // Siemens
-              d.vendorId === 0x0e77 || // Weinzierl/Siemens
-              d.vendorId === 0x147b || // Weinzierl
-              d.vendorId === 0x16d0 || // MCS
-              (d.product && d.product.toLowerCase().includes("knx")),
-          );
-
-          if (!knxDevice || !knxDevice.path) {
-            throw new Error("No KNX USB device found");
-          }
-          devicePath = knxDevice.path;
-        }
-
-        this.logger.info(`Opening KNX USB device at ${devicePath}`);
-        this.device = new hid.HID(devicePath);
-
-        this.device.on("data", (data: Buffer) => {
-          this.handleData(data);
-        });
-        this.device.on("error", (err: any) => this.handleError(err));
-
-        this.isConnected = true;
-        this.busConnected = false;
-
-        this.initializeDevice()
-          .then(() => {
-            this.emit("connected");
-            resolve();
-          })
-          .catch((err) => {
-            this.logger.error("Failed to initialize KNX USB: " + err);
-            this.disconnect();
-            reject(err);
-          });
-      } catch (err) {
-        this.logger.error("Failed to connect to KNX USB: " + err);
+    return new Promise<void>((resolve, reject) => {
+      const onConnected = () => {
+        this.removeListener("error", onError);
+        resolve();
+      };
+      const onError = (err: Error) => {
+        this.removeListener("connected", onConnected);
         reject(err);
-      }
+      };
+      this.once("connected", onConnected);
+      this.once("error", onError);
+
+      this.fsm.transition(KNXUSBEvent.START);
     });
   }
 
-  disconnect(): void {
-    if (!this.isConnected || !this.device) return;
-
+  private async performConnect(): Promise<void> {
     try {
-      this.device.close();
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
-      // Ignore close errors
-    } finally {
-      this.device = null;
-      this.isConnected = false;
+      const options = this.options;
+      let devicePath = options.path;
+
+      if (!devicePath) {
+        const devices = hid.devices();
+        const knxDevice = devices.find(
+          (d) =>
+            (options.vendorId &&
+              d.vendorId === options.vendorId &&
+              options.productId &&
+              d.productId === options.productId) ||
+            d.vendorId === 0x28c2 || // Zennio
+            d.vendorId === 0x145c || // ABB/Busch-Jaeger
+            d.vendorId === 0x10a6 || // MDT
+            d.vendorId === 0x135e || // Siemens
+            d.vendorId === 0x0e77 || // Weinzierl/Siemens
+            d.vendorId === 0x147b || // Weinzierl
+            d.vendorId === 0x16d0 || // MCS
+            (d.product && d.product.toLowerCase().includes("knx")),
+        );
+
+        if (!knxDevice || !knxDevice.path) {
+          throw new Error("No KNX USB device found");
+        }
+        devicePath = knxDevice.path;
+      }
+
+      this.logger.info(`Opening KNX USB device at ${devicePath}`);
+      this.device = new hid.HID(devicePath);
+
+      this.device.on("data", (data: Buffer) => {
+        this.handleData(data);
+      });
+      this.device.on("error", (err: any) => this.handleError(err));
+
       this.busConnected = false;
-      this.emit("disconnected");
+
+      await this.initializeDevice();
+      this.fsm.transition(KNXUSBEvent.CONNECTED);
+    } catch (err: any) {
+      this.logger.error("Failed to connect to KNX USB: " + err);
+      this.fsm.transition(KNXUSBEvent.ERROR);
+      throw err;
+    }
+  }
+
+  disconnect(): void {
+    this.fsm.transition(KNXUSBEvent.STOP);
+  }
+
+  private closeDevice(): void {
+    if (this.device) {
+      try {
+        this.device.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+      this.device = null;
+    }
+    this.busConnected = false;
+  }
+
+  private async handleStateChange(newState: KNXUSBState, oldState: KNXUSBState): Promise<void> {
+    this.logger.info(`FSM: State transition from ${oldState} to ${newState}`);
+
+    switch (newState) {
+      case KNXUSBState.CONNECTING:
+        try {
+          await this.performConnect();
+        } catch (err: any) {
+          this.emit("error", err);
+        }
+        break;
+
+      case KNXUSBState.CONNECTED:
+        this.emit("connected");
+        break;
+
+      case KNXUSBState.DISCONNECTED:
+      case KNXUSBState.FAULTED:
+        this.closeDevice();
+        this.emit("disconnected");
+        break;
     }
   }
 
@@ -388,8 +478,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
 
   private handleError(err: any) {
     this.logger.error("KNX USB Error:", err);
-    this.isConnected = false;
-    this.busConnected = false;
+    this.fsm.transition(KNXUSBEvent.ERROR);
     this.emit("error", err);
   }
 }

@@ -127,7 +127,13 @@ export interface KNXLoggerOptions {
   logFilename?: string;
 }
 
-export interface KNXnetIPOptions {
+export interface BaseConnectionOptions {
+  autoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+  reconnectDelay?: number;
+}
+
+export interface KNXnetIPOptions extends BaseConnectionOptions {
   /**
    * IP address of the KNXnetIP server
    */
@@ -144,7 +150,7 @@ export interface KNXnetIPOptions {
   logOptions?: KNXLoggerOptions;
 }
 
-export interface TPUARTOptions {
+export interface TPUARTOptions extends BaseConnectionOptions {
   /**
    * The serial port path (e.g., "/dev/ttyS0" or "COM3").
    */
@@ -210,7 +216,7 @@ export interface RouterConnOptions extends ExternalManagerOptions {
   };
 }
 
-export interface KNXUSBOptions {
+export interface KNXUSBOptions extends BaseConnectionOptions {
   path?: string;
   vendorId?: number;
   productId?: number;
