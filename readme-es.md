@@ -324,6 +324,28 @@ Todos los componentes internos (`KNXnetIPServer`, `KNXTunneling`, `Router`, etc.
 
 La librería está orientada a eventos. Dependiendo de la clase utilizada, se emiten diferentes eventos para proporcionar un control y monitoreo detallados.
 
+### Monitoreo del Estado de la Conexión (FSM)
+
+Todas las clases de conexión (`KNXnetIPServer`, `KNXTunneling`, `KNXUSBConnection`, `TPUARTConnection`) comparten un motor unificado de Máquina de Estados Finita (FSM). Esto asegura transiciones robustas, previene condiciones de carrera, y maneja de forma elegante las auto-reconexiones.
+Puedes comprobar de forma síncrona el estado actual de cualquier conexión en todo momento leyendo la propiedad `connectionState`:
+
+```typescript
+import { KNXTunneling, KNXTunnelingState } from "knx.ts";
+
+const tunnel = new KNXTunneling({ ip: "192.168.1.100", port: 3671 });
+
+console.log(tunnel.connectionState); // "DISCONNECTED"
+
+tunnel.connect().then(() => {
+  console.log(tunnel.connectionState); // "CONNECTED"
+});
+
+// Si la red se cae, el FSM entra automáticamente en modo de recuperación
+// console.log(tunnel.connectionState); // "RECONNECTING"
+```
+
+Las cadenas de texto de los estados están estrictamente tipadas y se exportan como enumerables/objetos (ej., `KNXTunnelingState`, `KNXUSBState`, `KNXServerState`, `TPUARTState`), permitiéndote manejar lógicas precisas en tu aplicación.
+
 ### Eventos Comunes
 
 Todas las clases de conexión (`KNXnetIPServer`, `KNXTunneling`, `KNXUSBConnection`, `TPUARTConnection`) heredan de `KNXService` y emiten los siguientes eventos estándar:
