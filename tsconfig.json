@@ -9,7 +9,7 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "lib": [
-      "ES2022"
+      "ESNext"
     ],
     "declaration": true,
     "incremental": true,

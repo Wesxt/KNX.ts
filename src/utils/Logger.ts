@@ -2,6 +2,7 @@ import { isMainThread, parentPort, Worker } from "worker_threads";
 import fs from "fs";
 import path from "path";
 import { KNXLoggerOptions } from "../@types/interfaces/connection";
+import { inspect } from "util";
 
 export type LogLevel = "debug" | "info" | "warn" | "error" | "noLog";
 
@@ -120,7 +121,9 @@ export class Logger {
 
   private formatMessage(level: LogLevel, ...args: any[]): { colored: string; raw: string } {
     const nowISO = new Date().toISOString();
-    const joinedArgs = args.map((arg) => (typeof arg === "object" ? JSON.stringify(arg) : String(arg))).join(" ");
+    const joinedArgs = args
+      .map((arg) => (typeof arg === "object" ? inspect(arg, { depth: 2, colors: false }) : String(arg)))
+      .join(" ");
 
     const color = COLORS[level as keyof typeof COLORS] || COLORS.reset;
     const prefixCol = `${color}${nowISO} [${this.moduleName}] [${level.toUpperCase()}]${COLORS.reset}`;
@@ -187,6 +190,25 @@ export class Logger {
       this.initWorker();
     }
   }
+
+  /**
+   * Cierra el worker de forma segura garantizando el volcado a disco.
+   */
+  public shutdown(): Promise<void> {
+    return new Promise((resolve) => {
+      if (Logger.workerInstance) {
+        // Escuchamos el evento 'exit' nativo del Worker
+        Logger.workerInstance.once("exit", () => {
+          Logger.workerInstance = null;
+          resolve();
+        });
+        // Enviamos la orden de cierre
+        Logger.workerInstance.postMessage({ type: "close" });
+      } else {
+        resolve(); // Si no hay worker, resolvemos inmediatamente
+      }
+    });
+  }
 }
 
 /**
@@ -199,7 +221,7 @@ export const createKNXLogger = (options?: KNXLoggerOptions): Logger => {
 /**
  * Global default logger instance.
  */
-export let knxLogger: Logger = createKNXLogger();
+export const knxLogger: Logger = createKNXLogger();
 
 /**
  * Configures the global knxLogger instance.
@@ -207,8 +229,5 @@ export let knxLogger: Logger = createKNXLogger();
  */
 export const setupLogger = (options: KNXLoggerOptions): Logger => {
   knxLogger.updateOptions(options);
-  // Also recreate if needed, but updating is safer if references exist
-  // We recreate here to ensure options are perfectly mapped.
-  knxLogger = createKNXLogger(options);
   return knxLogger;
 };
