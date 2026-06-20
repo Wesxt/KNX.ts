@@ -1,0 +1,5 @@
+allowBuilds:
+  '@serialport/bindings-cpp': set this to true or false
+  esbuild: set this to true or false
+  node-hid: set this to true or false
+  unrs-resolver: set this to true or false
