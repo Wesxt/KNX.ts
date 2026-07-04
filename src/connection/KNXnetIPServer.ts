@@ -91,6 +91,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
+  private ignoreACKTimeout: boolean;
 
   constructor(options: KNXnetIPServerOptions) {
     super(options);
@@ -117,7 +118,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           [KNXServerEvent.STOP]: KNXServerState.STOPPED,
         },
       },
-      (newState, oldState) => this.handleStateChange(newState, oldState)
+      (newState, oldState) => this.handleStateChange(newState, oldState),
     );
 
     // Set defaults for discovery if not provided
@@ -131,6 +132,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (!KNXHelper.isValidIndividualAddress(routingOptions.individualAddress)) {
       throw new InvalidKnxAddressException(`This ${routingOptions.individualAddress} is not individual address`);
     }
+
+    // Setup misc options
+    this.ignoreACKTimeout = options.ignoreACKTimeout ?? false;
 
     // Setup Logger
     this.logger = this.logger.child({ module: this.constructor.name });
@@ -237,7 +241,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
               joinedInterfaces.add(this.options.localIp);
               this.logger.info(`Joined multicast on primary interface (${this.options.ip})`);
             } catch (e) {
-              this.logger.debug(`Failed to join multicast on primary interface ${this.options.localIp}`);
+              this.logger.debug(`Failed to join multicast on primary interface ${this.options.localIp}`, e);
             }
           }
 
@@ -250,6 +254,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
                       socket.addMembership(this.options.ip as string, net.address);
                       joinedInterfaces.add(net.address);
                       this.logger.info(`Joined multicast on interface ${name} (${net.address})`);
+                      // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     } catch (err) {
                       // Ignora interfaces virtuales que no soportan IGMP
                     }
@@ -281,7 +286,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (this.socket) {
       try {
         (this.socket as dgram.Socket).close();
-      } catch { /* Ignore */ }
+      } catch {
+        /* Ignore */
+      }
       this.socket = null;
     }
     this.clearTimers();
@@ -916,6 +923,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           this.HEARTBEAT_TIMEOUT,
           this.RETRANSMIT_TIMEOUT,
           this.MAX_PENDING_REQUESTS_PER_CLIENT,
+          this.ignoreACKTimeout,
           (cid: number, sendDisconnect: boolean) => this.closeConnection(cid, sendDisconnect),
           this.logger,
         ),
@@ -982,6 +990,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             this.HEARTBEAT_TIMEOUT,
             this.RETRANSMIT_TIMEOUT,
             this.MAX_PENDING_REQUESTS_PER_CLIENT,
+            this.ignoreACKTimeout,
             (cid: number, sendDisconnect: boolean) => this.closeConnection(cid, sendDisconnect),
             this.logger,
           ),

@@ -43,6 +43,7 @@ export class TunnelConnection {
     private readonly heartbeatTimeoutMs: number,
     private readonly retransmitTimeoutMs: number,
     private readonly maxQueueSize: number,
+    private readonly ignoreACKTimeout: boolean,
     private readonly onDisconnect: (channelId: number, sendDisconnect: boolean) => void,
     parentLogger: Logger,
   ) {
@@ -115,8 +116,12 @@ export class TunnelConnection {
           this.sendWithRetry(packet, seq, true);
         } else {
           // Spec 2.6.1: Terminate connection
-          this.logger.error(`Second ACK timeout for seq ${seq}. Terminating connection.`);
-          this.onDisconnect(this.channelId, true);
+          if (!this.ignoreACKTimeout) {
+            this.logger.error(`Second ACK timeout for seq ${seq}. Terminating connection.`);
+            this.onDisconnect(this.channelId, true);
+          } else {
+            this.logger.warn(`Second ACK timeout for seq ${seq}. Ignore ACK Timeout.`);
+          }
         }
       }, this.retransmitTimeoutMs),
     };
