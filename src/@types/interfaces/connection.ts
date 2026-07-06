@@ -78,10 +78,6 @@ export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip"> {
    * Defaults to true.
    */
   useAllInterfaces?: boolean;
-  /**
-   * Ignore ACK timeout for lazy clients (Useful for clients that don't follow the heartbeat sequence very well)
-   */
-  ignoreACKTimeout?: boolean;
 }
 
 export interface ExternalManagerOptions {

@@ -116,12 +116,8 @@ export class TunnelConnection {
           this.sendWithRetry(packet, seq, true);
         } else {
           // Spec 2.6.1: Terminate connection
-          if (!this.ignoreACKTimeout) {
-            this.logger.error(`Second ACK timeout for seq ${seq}. Terminating connection.`);
-            this.onDisconnect(this.channelId, true);
-          } else {
-            this.logger.warn(`Second ACK timeout for seq ${seq}. Ignore ACK Timeout.`);
-          }
+          this.logger.error(`Second ACK timeout for seq ${seq}. Terminating connection.`);
+          this.onDisconnect(this.channelId, true);
         }
       }, this.retransmitTimeoutMs),
     };

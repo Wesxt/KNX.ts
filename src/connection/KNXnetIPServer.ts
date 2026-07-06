@@ -91,7 +91,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
-  private ignoreACKTimeout: boolean;
 
   constructor(options: KNXnetIPServerOptions) {
     super(options);
@@ -132,9 +131,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (!KNXHelper.isValidIndividualAddress(routingOptions.individualAddress)) {
       throw new InvalidKnxAddressException(`This ${routingOptions.individualAddress} is not individual address`);
     }
-
-    // Setup misc options
-    this.ignoreACKTimeout = options.ignoreACKTimeout ?? false;
 
     // Setup Logger
     this.logger = this.logger.child({ module: this.constructor.name });
