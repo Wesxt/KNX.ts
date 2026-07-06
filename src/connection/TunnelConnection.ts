@@ -43,7 +43,6 @@ export class TunnelConnection {
     private readonly heartbeatTimeoutMs: number,
     private readonly retransmitTimeoutMs: number,
     private readonly maxQueueSize: number,
-    private readonly ignoreACKTimeout: boolean,
     private readonly onDisconnect: (channelId: number, sendDisconnect: boolean) => void,
     parentLogger: Logger,
   ) {
