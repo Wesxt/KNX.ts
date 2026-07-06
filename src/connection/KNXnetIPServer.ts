@@ -88,7 +88,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   private readonly HEARTBEAT_TIMEOUT = KNXTimeoutConstants.CONNECTION_ALIVE_TIME * 1000;
   private readonly RETRANSMIT_TIMEOUT = KNXTimeoutConstants.TUNNELING_REQUEST_TIMEOUT * 1000;
   private MAX_PENDING_REQUESTS_PER_CLIENT = 100; // [MEJORA] Límite de ráfagas
-
+  private ignoreACKTimeout: boolean;
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
 
@@ -131,6 +131,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (!KNXHelper.isValidIndividualAddress(routingOptions.individualAddress)) {
       throw new InvalidKnxAddressException(`This ${routingOptions.individualAddress} is not individual address`);
     }
+
+    // Setup options for clients who do not comply with the rules
+    this.ignoreACKTimeout = options.ignoreACKTimeout ?? false;
 
     // Setup Logger
     this.logger = this.logger.child({ module: this.constructor.name });
@@ -919,6 +922,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           this.HEARTBEAT_TIMEOUT,
           this.RETRANSMIT_TIMEOUT,
           this.MAX_PENDING_REQUESTS_PER_CLIENT,
+          this.ignoreACKTimeout,
           (cid: number, sendDisconnect: boolean) => this.closeConnection(cid, sendDisconnect),
           this.logger,
         ),
@@ -985,6 +989,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             this.HEARTBEAT_TIMEOUT,
             this.RETRANSMIT_TIMEOUT,
             this.MAX_PENDING_REQUESTS_PER_CLIENT,
+            this.ignoreACKTimeout,
             (cid: number, sendDisconnect: boolean) => this.closeConnection(cid, sendDisconnect),
             this.logger,
           ),

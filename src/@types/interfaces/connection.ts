@@ -78,6 +78,11 @@ export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip"> {
    * Defaults to true.
    */
   useAllInterfaces?: boolean;
+  /**
+   * Ignore the ACK timeout for tunneling clients that do not respond with TUNNELLING_ACK.
+   * Default: false
+   */
+  ignoreACKTimeout?: boolean;
 }
 
 export interface ExternalManagerOptions {
