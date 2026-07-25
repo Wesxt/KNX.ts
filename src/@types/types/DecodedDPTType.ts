@@ -11,8 +11,21 @@ export type DecodedDPT7012 = ReturnType<decode["asDpt7012"]>;
 export type DecodedDPT10001 = ReturnType<decode["asDpt10001"]>;
 export type DecodedDPT11001 = ReturnType<decode["asDpt11001"]>;
 export type DecodedDPTValueUnit =
+  | ReturnType<decode["asDpt5001"]>
+  | ReturnType<decode["asDpt5002"]>
+  | ReturnType<decode["asDpt6001"]>
+  | ReturnType<decode["asDpt6010"]>
   | ReturnType<decode["asDpt12001"]>
-  | ReturnType<decode["asDpt12002"]>;
+  | ReturnType<decode["asDpt12002"]>
+  | ReturnType<decode["asDpt7001"]>
+  | ReturnType<decode["asDpt7002"]>
+  | ReturnType<decode["asDpt7003"]>
+  | ReturnType<decode["asDpt7004"]>
+  | ReturnType<decode["asDpt7005"]>
+  | ReturnType<decode["asDpt7006"]>
+  | ReturnType<decode["asDpt7007"]>
+  | ReturnType<decode["asDpt7011"]>
+  | ReturnType<decode["asDpt7013"]>;
 export type DecodedDPT15000 = ReturnType<decode["asDpt15000"]>;
 export type DecodedDPT16002 = ReturnType<decode["asDpt16002"]>;
 export type DecodedDPT27001 = ReturnType<decode["asDpt27001"]>;
@@ -36,11 +49,11 @@ export type DecodedDPTType<T extends number | string> = T extends
   : T extends 4001 | "4.001" | 4002 | "4.002" | 4 | "4" | `4.${number}`
   ? string
   : T extends 5001 | "5.001" | 5002 | "5.002"
-  ? string
+  ? DecodedDPTValueUnit
   : T extends 5 | "5" | `5.${number}`
   ? number
   : T extends 6001 | "6.001" | 6010 | "6.010"
-  ? string
+  ? DecodedDPTValueUnit
   : T extends 6020 | "6.020"
   ? DecodedDPT6020
   : T extends 6 | "6" | `6.${number}`
@@ -64,7 +77,7 @@ export type DecodedDPTType<T extends number | string> = T extends
   | "7.011"
   | 7013
   | "7.013"
-  ? string
+  ? DecodedDPTValueUnit
   : T extends 7012 | "7.012"
   ? DecodedDPT7012
   : T extends 7 | "7" | `7.${number}`

@@ -251,10 +251,16 @@ export class KnxDataDecode extends KNXData {
   }
 
   private static toPercentage(value: number) {
-    return (value / 255) * 100 + "%";
+    return {
+      value: (value / 255) * 100,
+      unit: "%",
+    };
   }
   private static toAngle(value: number) {
-    return (value / 255) * 360 + "ª";
+    return {
+      value: (value / 255) * 360,
+      unit: "°",
+    };
   }
   /**
    * Interpret the underlying data as boolean value
@@ -422,10 +428,16 @@ export class KnxDataDecode extends KNXData {
     return buffer.readInt8(0);
   }
   static asDpt6001(buffer: Buffer) {
-    return this.asDpt6(buffer) + "%";
+    return {
+      value: this.asDpt6(buffer),
+      unit: "%",
+    };
   }
   static asDpt6010(buffer: Buffer) {
-    return this.asDpt6(buffer) + " counter pulses";
+    return {
+      value: this.asDpt6(buffer),
+      unit: "counter pulses",
+    };
   }
   static asDpt6020(buffer: Buffer) {
     // Extraer los primeros 5 bits (estado) de la primera posición
@@ -461,46 +473,83 @@ export class KnxDataDecode extends KNXData {
     }
   }
   static asDpt7001(buffer: Buffer) {
-    const data = this.asDpt7(buffer);
-    return data + "pulses";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "pulses",
+    };
   }
   static asDpt7002(buffer: Buffer) {
-    return this.asDpt7(buffer) + "ms";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "ms",
+    };
   }
   static asDpt7003(buffer: Buffer) {
-    return this.asDpt7(buffer) / 100 + "s";
+    const value = this.asDpt7(buffer) / 100;
+    return {
+      value,
+      unit: "s",
+    };
   }
   static asDpt7004(buffer: Buffer) {
-    return this.asDpt7(buffer) / 10 + "s";
+    const value = this.asDpt7(buffer) / 10;
+    return {
+      value,
+      unit: "s",
+    };
   }
   static asDpt7005(buffer: Buffer) {
-    return this.asDpt7(buffer) + "s";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "s",
+    };
   }
   static asDpt7006(buffer: Buffer) {
-    return this.asDpt7(buffer) + "min";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "min",
+    };
   }
   static asDpt7007(buffer: Buffer) {
-    return this.asDpt7(buffer) + "h";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "h",
+    };
   }
   static asDpt7011(buffer: Buffer) {
-    return this.asDpt7(buffer) + "mm";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "mm",
+    };
   }
   static asDpt7012(buffer: Buffer) {
-    const data = this.asDpt7(buffer);
-    if (data === 0) {
+    const value = this.asDpt7(buffer);
+    if (value === 0) {
       return {
-        value: data,
+        value,
+        unit: "mA",
         status: "No bus power supply functionality available",
       };
     } else {
       return {
-        value: data + "mA",
+        value,
+        unit: "mA",
         status: "",
       };
     }
   }
   static asDpt7013(buffer: Buffer) {
-    return this.asDpt7(buffer) + "lux";
+    const value = this.asDpt7(buffer);
+    return {
+      value,
+      unit: "lux",
+    };
   }
   static asDpt8(buffer: Buffer) {
     return buffer.readInt16BE(0);
