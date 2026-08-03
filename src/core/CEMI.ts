@@ -941,23 +941,23 @@ export class CEMI {
     "T_Data_Connected.req": class T_Data_Connected_ind implements ServiceMessage {
       constructor(addInfo: AddInfoBase[] | null, TPDU: TPDU) {
         if (addInfo) this.additionalInfo = new AdditionalInformationField(addInfo);
-        this.tpdu = TPDU;
+        this.TPDU = TPDU;
       }
 
       messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.req"].CEMI.value;
       additionalInfo = new AdditionalInformationField();
-      tpdu = new TPDU(new TPCI(0));
+      TPDU = new TPDU(new TPCI(0));
 
       toBuffer(): Buffer {
         const baseOffset = 2 + this.additionalInfo.length;
-        const buffer = Buffer.alloc(baseOffset + 6 + 1 + this.tpdu.length);
+        const buffer = Buffer.alloc(baseOffset + 6 + 1 + this.TPDU.length);
         buffer.writeUint8(this.messageCode, 0);
         buffer.writeUint8(this.additionalInfo.length, 1);
         if (this.additionalInfo.length > 0) {
           this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
         }
-        buffer.writeUint8(this.tpdu.apdu.length, baseOffset + 6);
-        this.tpdu.toBuffer().copy(buffer, baseOffset + 7);
+        buffer.writeUint8(this.TPDU.apdu.length, baseOffset + 6);
+        this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
         return buffer;
       }
 
@@ -966,7 +966,7 @@ export class CEMI {
           obj: this.constructor.name,
           messageCode: this.messageCode,
           additionalInfo: this.additionalInfo.describe(),
-          tpdu: this.tpdu.describe(),
+          TPDU: this.TPDU.describe(),
         };
       }
 
@@ -991,23 +991,23 @@ export class CEMI {
     "T_Data_Connected.ind": class T_Data_Connected_ind implements ServiceMessage {
       constructor(addInfo: AddInfoBase[] | null, TPDU: TPDU) {
         if (addInfo) this.additionalInfo = new AdditionalInformationField(addInfo);
-        this.tpdu = TPDU;
+        this.TPDU = TPDU;
       }
 
       messageCode = MESSAGE_CODE_FIELD["T_Data_Connected.ind"].CEMI.value;
       additionalInfo = new AdditionalInformationField();
-      tpdu = new TPDU(new TPCI(0));
+      TPDU = new TPDU(new TPCI(0));
 
       toBuffer(): Buffer {
         const baseOffset = 2 + this.additionalInfo.length;
-        const buffer = Buffer.alloc(baseOffset + 6 + 1 + this.tpdu.length);
+        const buffer = Buffer.alloc(baseOffset + 6 + 1 + this.TPDU.length);
         buffer.writeUint8(this.messageCode, 0);
         buffer.writeUint8(this.additionalInfo.length, 1);
         if (this.additionalInfo.length > 0) {
           this.additionalInfo.toBuffer().copy(buffer, 2, baseOffset);
         }
-        buffer.writeUint8(this.tpdu.apdu.length, baseOffset + 6);
-        this.tpdu.toBuffer().copy(buffer, baseOffset + 7);
+        buffer.writeUint8(this.TPDU.apdu.length, baseOffset + 6);
+        this.TPDU.toBuffer().copy(buffer, baseOffset + 7);
         return buffer;
       }
 
@@ -1016,7 +1016,7 @@ export class CEMI {
           obj: this.constructor.name,
           messageCode: this.messageCode,
           additionalInfo: this.additionalInfo.describe(),
-          tpdu: this.tpdu.describe(),
+          TPDU: this.TPDU.describe(),
         };
       }
 
