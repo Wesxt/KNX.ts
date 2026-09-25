@@ -68,8 +68,8 @@ These classes form the core of your interaction with the network. All of them in
 
 ### 2. Data Conversion (DPTs)
 
-- `KnxDataDecode`: Static utility to decode raw `Buffer` payloads into standard JavaScript/TypeScript types (e.g., numbers, booleans) depending on the KNX Data Point Type (DPT).
-- `KnxDataEncoder`: Static utility to encode JavaScript/TypeScript values back into `Buffer` chunks ready to be sent onto the KNX bus.
+- `KnxDataDecode`: Static utility to decode raw `Buffer` payloads into standard JavaScript/TypeScript types (primitives like `boolean`, `number`, `string`, or structured objects with metadata/units like `{ value, unit }`, time breakdown, or RGBW color validity) according to KNX specifications. All methods feature complete English JSDocs and descriptive error handling.
+- `KnxDataEncoder`: Static utility to validate and encode JavaScript/TypeScript values into `Buffer` payloads ready for KNX telegrams. Single-value DPTs accept either raw primitive values (e.g., `true`, `22.5`, `75`) or `{ value: ... }` wrapper objects, while complex multi-field DPTs accept structured objects. Includes granular input validation with detailed error diagnostics (`InvalidParametersForDpt`), pre-validation without encoding (`encodeThisOnlyVerify`), and full English JSDocs.
 
 ### 3. Core KNX Frames and Types
 
@@ -84,7 +84,7 @@ For developers building advanced monitoring or injection tools, the library expo
 - `APCIEnum` is an enum that helps write APCI values according to the specification. **Warning**: this enum assumes all commands inside it are 10-bit or 2-byte values within the `0x3FF` mask; those with 4-bit length are simply represented inside a `0x3C0` mask.
 - `TPCI` parses and serializes TPCI values in the TPDU layer.
 - `TPCIType` is an enum that helps write or identify TPCI values according to the specification.
-- `DPTs`: the library exports interfaces such as `DPT5001` or `DPT1`. These interfaces are used by `KnxDataDecode` to return JavaScript objects and by `KnxDataEncoder` as parameter types to convert them into `Buffer`s.
+- `DPTs`: The library exports interfaces such as `DPT5001`, `DPT1`, or `DPT10001`. Single-value DPT types accept both direct primitive values and `{ value: T }` wrapper objects. These interfaces are used by `KnxDataDecode` for typing decoded outputs and by `KnxDataEncoder` to validate and convert inputs into `Buffer`s.
 - `ServiceMessage` is an interface implemented by all CEMI and EMI messages, and also by NPDU, TPDU, and APCI layers. This is useful because they all expose two helpful methods: `toBuffer` to serialize the instance into a buffer and `describe` to provide a human-readable view of the instance. **Note**: most exported classes in this library that do not implement this interface, such as `APCI`, still provide a `describe` method.
 - `CEMIInstance` is an type of all CEMI Instances.
 
@@ -415,55 +415,136 @@ The library provides static utilities to handle conversion of KNX Data Point Typ
 
 ### Decoding Incoming Data
 
-Use `KnxDataDecode` to transform raw cEMI data into readable values. There are several methods with the `asDpt` prefix for specific cases; `decodeThis` is convenient if you do not want to deal with those directly:
+Use `KnxDataDecode` to transform raw cEMI data into readable values. You can use the generic `decodeThis` method (which automatically infers types and delegates based on the DPT identifier) or specific `asDpt...` methods:
 
 ```typescript
 import { KnxDataDecode } from "knx.ts";
 
 server.on("1/1/1", (cemi) => {
-  // Decode as DPT 1 (Boolean)
+  // Decode as DPT 1 (Boolean) -> returns boolean (true | false)
   const value = KnxDataDecode.decodeThis(1, cemi.TPDU.apdu.data);
   console.log("Decoded value:", value); // true or false
 
-  // Decode only as DPT 1 (Boolean)
+  // Decode directly using specific method
   const value1 = KnxDataDecode.asDpt1(cemi.TPDU.apdu.data);
 
-  // Decode as DPT 9 (2-byte float, e.g. Temperature)
+  // Decode as DPT 9 (2-byte float, e.g. Temperature) -> returns number
   const temp = KnxDataDecode.decodeThis(9, cemi.TPDU.apdu.data);
   console.log("Temperature:", temp, "°C");
 
-  // The first parameter also accepts strings with the standard DPT numbering
-  const temp1 = KnxDataDecode.decodeThis("9", cemi.TPDU.apdu.data);
+  // Strings with standard DPT notation are also supported
+  const temp1 = KnxDataDecode.decodeThis("9.001", cemi.TPDU.apdu.data);
   const percentage = KnxDataDecode.decodeThis("5.001", cemi.TPDU.apdu.data);
+
+  // Complex DPTs return descriptive structured objects:
+  // DPT 10.001 (Time of Day) -> { day: 1, dayName: "Monday", hour: 14, minutes: 30, seconds: 0 }
+  const time = KnxDataDecode.decodeThis(10001, cemi.TPDU.apdu.data);
+
+  // DPT 251.600 (RGBW) -> { R: { value, valid }, G: { ... }, B: { ... }, W: { ... } }
+  const rgbw = KnxDataDecode.decodeThis(251600, cemi.TPDU.apdu.data);
 });
 ```
 
+All `KnxDataDecode` methods feature complete English JSDocs and throw clear, descriptive errors if buffer sizes are insufficient or invalid.
+
 ### Encoding Data for Sending
 
-Use `KnxDataEncoder` with the `encodeThis` method to prepare buffers for KNX telegrams; the second parameter is always an object. There are several `encodeDpt`-prefixed methods for specific cases, but `encodeThis` is convenient if you do not want to deal with those directly:
+Use `KnxDataEncoder` with the `encodeThis` method to validate and prepare buffers for KNX telegrams. There are also specific `encodeDpt...` methods, but `encodeThis` provides strict TypeScript inference and automatic delegation:
+
+- **Single-value DPTs** (e.g., DPT 1, 5, 5.001, 5.002, 6, 7, 8, 9, 12, 13, 14, 20, 28.001, 29): Accept **either raw primitive values** directly or `{ value: ... }` wrapper objects.
+- **Complex multi-field DPTs** (e.g., DPT 2, 3, 10.001, 11.001, 15, 27.001, 238.600, 245.600, 250.600, 251.600): Accept typed structured objects with their respective required fields.
 
 ```typescript
 import { KnxDataEncoder } from "knx.ts";
 
-// Encode a Boolean (DPT 1)
-const buf1 = KnxDataEncoder.encodeThis(1, { value: true });
+// --- Single-Value DPTs: Direct Primitives or { value } Wrapper ---
 
-// Encode a Percentage (DPT 5.001)
-const bufOnly5 = KnxDataEncoder.encodeDpt5({ valueDpt5001: 50 });
-const buf5 = KnxDataEncoder.encodeThis(5001, { valueDpt5001: 50 });
-const buf5001 = KnxDataEncoder.encodeThis("5.001", { valueDpt5001: 50 });
+// DPT 1 (Boolean): accepts boolean directly or { value: boolean }
+const buf1Raw = KnxDataEncoder.encodeThis(1, true);
+const buf1Obj = KnxDataEncoder.encodeThis(1, { value: true });
 
-// Encode a Temperature (DPT 9.001)
-const buf9 = KnxDataEncoder.encodeThis(9, { valueDpt9: 22.5 });
+// DPT 5.001 (Percentage 0-100%): accepts number or { value: number }
+const buf5Raw = KnxDataEncoder.encodeThis(5001, 75);
+const buf5Obj = KnxDataEncoder.encodeThis("5.001", { value: 75 });
+
+// DPT 9 (2-byte float / Temperature): accepts number or { value: number }
+const buf9Raw = KnxDataEncoder.encodeThis(9, 21.5);
+const buf9Obj = KnxDataEncoder.encodeThis("9.001", { value: 21.5 });
+
+// DPT 28.001 (UTF-8 String) & DPT 29 (64-bit BigInt)
+const buf28 = KnxDataEncoder.encodeThis(28001, "Living Room");
+const buf29 = KnxDataEncoder.encodeThis(29, 123456789012345n);
+
+// --- Complex Multi-Field DPTs: Structured Objects ---
+
+// DPT 2 (1-bit control + 1-bit value)
+const buf2 = KnxDataEncoder.encodeThis(2, { control: 1, value: 0 });
+
+// DPT 3.007 / 3.008 (Dimming / Blinds Control)
+const buf3 = KnxDataEncoder.encodeThis(3007, { control: 1, stepCode: 5 });
+
+// DPT 10.001 (Time of Day: day, hour, minutes, seconds)
+const bufTime = KnxDataEncoder.encodeThis(10001, {
+  day: 1, // Monday
+  hour: 14,
+  minutes: 30,
+  seconds: 0,
+});
+
+// DPT 11.001 (Date: day, month, year)
+const bufDate = KnxDataEncoder.encodeThis(11001, {
+  day: 25,
+  month: 9,
+  year: 2026,
+});
+
+// DPT 251.600 (RGBW with individual validity masks)
+const bufRgbw = KnxDataEncoder.encodeThis(251600, {
+  R: 255, G: 128, B: 0, W: 64,
+  mR: 1, mG: 1, mB: 1, mW: 1,
+});
+```
+
+### Granular Input Validation (`InvalidParametersForDpt`)
+
+`KnxDataEncoder` validates incoming data before serializing it. If an input is invalid, it throws an `InvalidParametersForDpt` error containing detailed diagnostic properties:
+
+- `error.dpt`: The DPT number being encoded.
+- `error.received`: The raw payload that was passed.
+- `error.property`: The specific property that failed validation (e.g. `'hour'`, `'value'`, `'cCT'`).
+- `error.expected`: Description of the expected type or range (e.g. `'number (0 to 23)'`).
+- `error.reason`: A descriptive explanation of why validation failed (e.g. `'Value 25 is out of range (0 to 23)'` or `'Missing required property "hour"'`).
+
+```typescript
+import { KnxDataEncoder, InvalidParametersForDpt } from "knx.ts";
+
+try {
+  KnxDataEncoder.encodeThis(10001, { day: 1, hour: 25, minutes: 0, seconds: 0 } as any);
+} catch (error) {
+  if (error instanceof InvalidParametersForDpt) {
+    console.error(`DPT ${error.dpt} error on property "${error.property}":`);
+    console.error(`Expected: ${error.expected}`);
+    console.error(`Reason: ${error.reason}`);
+  }
+}
+```
+
+### Pre-Validation Without Encoding (`encodeThisOnlyVerify`)
+
+If you want to validate incoming user input, API payloads, or form submissions without allocating or generating a `Buffer`, use `encodeThisOnlyVerify`:
+
+```typescript
+// Validates data according to DPT rules and returns the valid data, or throws InvalidParametersForDpt
+const validatedData = KnxDataEncoder.encodeThisOnlyVerify(10001, userInput);
 ```
 
 ### Type Safety and IntelliSense
 
-Both `KnxDataDecode.decodeThis()` and `KnxDataEncoder.encodeThis()` are strictly typed. This means:
+Both `KnxDataDecode.decodeThis()` and `KnxDataEncoder.encodeThis()` are strictly typed in TypeScript:
 
-- **IntelliSense Support**: Your IDE will automatically suggest supported DPTs as you type the first parameter.
-- **Automatic Data Validation**: The second parameter (the data object) automatically adjusts its required properties based on the DPT selected in the first parameter.
-- **Supported DPTs**: You can programmatically inspect the list of supported DPTs (they return an array of numbers):
+- **IntelliSense Support**: Your IDE will automatically suggest supported DPTs as you type the first parameter (numeric IDs or standard string notation like `"1.001"`, `"9.001"`).
+- **Adaptive Parameter Typing**: The data parameter automatically adjusts its accepted type based on the selected DPT (allowing direct primitives or `{ value }` wrappers for single-value DPTs, or structured objects for complex DPTs).
+- **Supported DPTs List**: You can programmatically inspect the array of supported DPT numbers:
 
   ```typescript
   console.log(KnxDataDecode.dptEnum);

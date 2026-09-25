@@ -1,7 +1,9 @@
 // #region Interfaces of DPTs
-export interface DPT1 {
+export interface DPT1Object {
   value: boolean;
 }
+export type DPT1 = DPT1Object | boolean;
+
 export interface DPT2 {
   control: 0 | 1;
   value: 0 | 1;
@@ -13,31 +15,45 @@ export interface DPT3 {
 export interface DPT4 {
   char: string;
 }
-export interface DPT5 {
+export interface DPT5Object {
   value: number; // 0-255
 }
-export interface DPT5001 {
+export type DPT5 = DPT5Object | number;
+
+export interface DPT5001Object {
   value: number; // 0-100 (Percentage)
 }
-export interface DPT5002 {
+export type DPT5001 = DPT5001Object | number;
+
+export interface DPT5002Object {
   value: number; // 0-360 (Angle)
 }
-export interface DPT6 {
+export type DPT5002 = DPT5002Object | number;
+
+export interface DPT6Object {
   value: number; // -128 to 127
 }
+export type DPT6 = DPT6Object | number;
+
 export interface DPT6020 {
   status: 0 | 1; // 0-1 (1 bit)
   mode: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7; // 0-7 (3 bits)
 }
-export interface DPT7 {
+export interface DPT7Object {
   value: number; // 0-65535
 }
-export interface DPT8 {
+export type DPT7 = DPT7Object | number;
+
+export interface DPT8Object {
   value: number;
 }
-export interface DPT9 {
+export type DPT8 = DPT8Object | number;
+
+export interface DPT9Object {
   value: number;
 }
+export type DPT9 = DPT9Object | number;
+
 export interface DPT10001 {
   day: number;
   hour: number;
@@ -49,15 +65,21 @@ export interface DPT11001 {
   month: number;
   year: number;
 }
-export interface DPT12001 {
+export interface DPT12001Object {
   value: number;
 }
-export interface DPT13001 {
+export type DPT12001 = DPT12001Object | number;
+
+export interface DPT13001Object {
   value: number;
 }
-export interface DPT14 {
+export type DPT13001 = DPT13001Object | number;
+
+export interface DPT14Object {
   value: number;
 }
+export type DPT14 = DPT14Object | number;
+
 export interface DPT15 {
   D6: number; // 0-9
   D5: number; // 0-9
@@ -77,19 +99,25 @@ export interface DPT16 {
 export interface DPT16002 {
   hex: string; // Cadena hexadecimal (por ejemplo: "4A5F3C2E1AFF")
 }
-export interface DPT20 {
+export interface DPT20Object {
   value: number;
 }
+export type DPT20 = DPT20Object | number;
+
 export interface DPT27001 {
   mask: number; // valor entre 0 y 65535
   status: number; // valor entre 0 y 65535
 }
-export interface DPT28001 {
+export interface DPT28001Object {
   value: string;
 }
-export interface DPT29 {
+export type DPT28001 = DPT28001Object | string;
+
+export interface DPT29Object {
   value: bigint;
 }
+export type DPT29 = DPT29Object | bigint;
+
 export interface DPT238600 {
   BF: 0 | 1;
   LF: 0 | 1;

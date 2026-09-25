@@ -272,12 +272,12 @@ export class KnxDataDecode extends KNXData {
     return data != 0;
   }
   /**
-   * Interpretar la información del DPT2 (B2) y devolver un objeto con los campos:
-   * - control (c): 0 o 1
-   * - value (v): 0 o 1
-   * - description: descripción basada en la combinación de bits
+   * Interprets DPT2 (B2) data and returns an object with fields:
+   * - control (c): 0 or 1
+   * - value (v): 0 or 1
+   * - description: description based on the bit combination
    *
-   * Los datos se encuentran en el primer octeto (buffer[0]), y solo se toman en cuenta los dos bits menos significativos.
+   * Data is located in the first octet (buffer[0]), and only the two least significant bits are taken into account.
    */
   static asDpt2(buffer: Buffer) {
     // Extraer los dos bits menos significativos del primer octeto.
@@ -315,14 +315,14 @@ export class KnxDataDecode extends KNXData {
     };
   }
   /**
-   * Interpretar la información del DPT3007 (B1U3) y devolver un objeto con:
-   * - control: 0 (Decrease) o 1 (Increase)
-   * - stepCode: valor de 3 bits (0…7)
-   * - action: descripción de la acción (Decrease o Increase)
-   * - description: "Break" si stepCode es 0 o el detalle de step con el número de intervalos
+   * Interprets DPT3007 (B1U3) data and returns an object with:
+   * - control: 0 (Decrease) or 1 (Increase)
+   * - stepCode: 3-bit value (0…7)
+   * - action: action description (Decrease or Increase)
+   * - description: "Break" if stepCode is 0 or step details with number of intervals
    *
-   * Se asume que el dato se encuentra en el primer octeto útil, es decir, en buffer[0].
-   * Como la información es de 4 bits, se toma el nibble inferior del byte.
+   * Assumes data is in the first payload octet (buffer[0]).
+   * Since the information is 4 bits, the lower nibble of the byte is taken.
    */
   static asDpt3007(buffer: Buffer) {
     // Extraemos el nibble inferior del byte en buffer[0].
@@ -352,19 +352,19 @@ export class KnxDataDecode extends KNXData {
     };
   }
   /**
-   * Interpretar la información del DPT3008 (DPT_Control_Blinds).
-   * Se asume que los datos se encuentran en el primer octeto de la carga útil.
+   * Interprets DPT3008 (DPT_Control_Blinds) data.
+   * Assumes data is in the first octet of the payload.
    *
-   * Formato: 4 bit: B1U3
-   * Campos:
+   * Format: 4 bit: B1U3
+   * Fields:
    *  - c: 1 bit (0 = Up, 1 = Down)
    *  - stepCode: 3 bits
    *
-   * Retorna un objeto con:
-   *  - control: 0 o 1
-   *  - stepCode: valor numérico de 0 a 7
-   *  - description: texto descriptivo (p.ej. "Up" o "Down")
-   *  - intervals: Si stepCode es distinto de 0, se calcula como 2^(stepCode - 1), o bien se indica "Break" si es 0.
+   * Returns an object with:
+   *  - control: 0 or 1
+   *  - stepCode: numeric value from 0 to 7
+   *  - description: descriptive text (e.g. "Move Up" or "Move Down")
+   *  - intervals: If stepCode is not 0, calculated as 2^(stepCode - 1), or "Break indication" if 0.
    */
   static asDpt3008(buffer: Buffer) {
     const byte = buffer.readUInt8(0);
@@ -384,27 +384,27 @@ export class KnxDataDecode extends KNXData {
     };
   }
   /**
-   * Interpreta la información del DPT4001 (DPT_Char_ASCII).
-   * Se asume que el dato se encuentra en el primer octeto de la carga útil.
+   * Interprets DPT4001 (DPT_Char_ASCII) data.
+   * Assumes data is in the first octet of the payload.
    *
-   * - Valida que el MSB sea 0 (valor en el rango 0...127).
-   * - Retorna el carácter ASCII correspondiente.
+   * - Validates that MSB is 0 (value in range 0...127).
+   * - Returns the corresponding ASCII character.
    */
   static asDpt4001(buffer: Buffer) {
     const value = buffer.readUInt8(0);
     // Validación: el MSB debe ser 0 para un carácter ASCII
     if (value & 0x80) {
-      throw new Error(`Valor inválido para DPT4001: ${value}. El MSB debe ser 0.`);
+      throw new Error(`Invalid value for DPT4001: ${value}. MSB must be 0.`);
     }
 
     return String.fromCharCode(value);
   }
   /**
-   * Interpreta la información del DPT4002 (DPT_Char_8859_1).
-   * Se asume que el dato se encuentra en el primer octeto de la carga útil.
+   * Interprets DPT4002 (DPT_Char_8859_1) data.
+   * Assumes data is in the first octet of the payload.
    *
-   * - No se impone restricción en el MSB (valor en el rango 0...255).
-   * - Retorna el carácter correspondiente en ISO-8859-1.
+   * - No restriction on MSB (value in range 0...255).
+   * - Returns the corresponding ISO-8859-1 character.
    */
   static asDpt4002(buffer: Buffer) {
     const value = buffer.readUInt8(0);
@@ -555,14 +555,14 @@ export class KnxDataDecode extends KNXData {
     return buffer.readInt16BE(0);
   }
   /**
-   * Decodifica un DPT9 (2-octetos) según la especificación KNX:
+   * Decodes a DPT9 (2-octet) value according to the KNX specification:
    *   FloatValue = 0.01 * M * 2^(E)
-   *   S (1 bit) = Signo de la mantisa
+   *   S (1 bit) = Mantissa sign
    *   E (4 bits) = [0…15]
-   *   M (11 bits) = Mantisa
-   * Si el valor codificado es 0x7FFF, se considera inválido.
+   *   M (11 bits) = Mantissa
+   * If the encoded value is 0x7FFF, it is considered invalid.
    *
-   * @returns El valor en punto flotante.
+   * @returns Floating-point value.
    */
   static asDpt9(buffer: Buffer): number {
     const raw = buffer.readUInt16BE(0);
@@ -586,23 +586,23 @@ export class KnxDataDecode extends KNXData {
   }
 
   /**
-   * Interpreta la información del DPT 10001 (Time of Day).
-   * Se asume que la carga útil contiene 3 octetos codificados según:
+   * Interprets DPT 10001 (Time of Day) data.
+   * Assumes payload contains 3 octets encoded as:
    *
-   * Octeto 1: NNNUUUUU -> 3 bits para el Día y 5 bits para la Hora.
-   * Octeto 2: rrUUUUUU -> 6 bits para los Minutos (dos bits reservados).
-   * Octeto 3: rrUUUUUU -> 6 bits para los Segundos (dos bits reservados).
+   * Octet 1: NNNUUUUU -> 3 bits for Day and 5 bits for Hour.
+   * Octet 2: rrUUUUUU -> 6 bits for Minutes (two reserved bits).
+   * Octet 3: rrUUUUUU -> 6 bits for Seconds (two reserved bits).
    *
-   * Retorna un objeto con:
-   *   - day: número del día (0 = no day, 1 = lunes, …, 7 = domingo)
-   *   - dayName: nombre del día (o "No day")
-   *   - hour: hora (0...23)
-   *   - minutes: minutos (0...59)
-   *   - seconds: segundos (0...59)
+   * Returns an object with:
+   *   - day: day number (0 = no day, 1 = Monday, …, 7 = Sunday)
+   *   - dayName: day name (or "No day")
+   *   - hour: hour (0...23)
+   *   - minutes: minutes (0...59)
+   *   - seconds: seconds (0...59)
    */
   static asDpt10001(buffer: Buffer) {
     if (buffer.length < 3) {
-      throw new Error("No hay suficientes datos para DPT10001");
+      throw new Error("Not enough data for DPT10001");
     }
     // Octeto 1: Día y Hora
     const byte0 = buffer.readUInt8(0);
@@ -634,22 +634,22 @@ export class KnxDataDecode extends KNXData {
     };
   }
   /**
-   * Interpreta la información del DPT 11001 (Date).
-   * Se asume que la carga útil contiene 3 octetos codificados según:
+   * Interprets DPT 11001 (Date) data.
+   * Assumes payload contains 3 octets encoded as:
    *
-   * Octeto 1: r3U5 => Day: 5 bits (bits [4:0])
-   * Octeto 2: r4U4 => Month: 4 bits (bits [3:0])
-   * Octeto 3: r1U7 => Year: 7 bits (bits [6:0])
+   * Octet 1: r3U5 => Day: 5 bits (bits [4:0])
+   * Octet 2: r4U4 => Month: 4 bits (bits [3:0])
+   * Octet 3: r1U7 => Year: 7 bits (bits [6:0])
    *
-   * La interpretación del año es:
-   *   - Si el valor es >= 90: año = 1900 + valor (siglo XX)
-   *   - Si el valor es < 90:  año = 2000 + valor (siglo XXI)
+   * Year interpretation:
+   *   - If value >= 90: year = 1900 + value (20th century)
+   *   - If value < 90:  year = 2000 + value (21st century)
    *
-   * Retorna un objeto con los campos day, month, year y una cadena formateada.
+   * Returns an object with day, month, year fields and a formatted date string.
    */
   static asDpt11001(buffer: Buffer) {
     if (buffer.length < 3) {
-      throw new Error("No hay suficientes datos para DPT11001");
+      throw new Error("Not enough data for DPT11001");
     }
     // Octeto 1: Extraer el día (los 5 bits menos significativos)
     const byte0 = buffer.readUInt8(0);
@@ -674,14 +674,14 @@ export class KnxDataDecode extends KNXData {
     };
   }
   /**
-   * Interpreta la información del DPT 12.001 (4-Octet Unsigned Value para counter pulses).
-   * Se asume que la carga útil contiene 4 octetos.
+   * Interprets DPT 12.001 (4-Octet Unsigned Value for counter pulses).
+   * Assumes payload contains 4 octets.
    *
-   * @returns Un objeto con el valor sin signo y la unidad ("pulses").
+   * @returns An object with the unsigned value and unit ("pulses").
    */
   static asDpt12001(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 12.001");
+      throw new Error("Not enough data for DPT 12.001");
     }
     const value = buffer.readUInt32BE(0);
     return {
@@ -690,20 +690,20 @@ export class KnxDataDecode extends KNXData {
     };
   }
   /**
-   * Interpreta la información de los DPT LongTimePeriod (12.100, 12.101, 12.102) para operating hours.
-   * Se asume que la carga útil contiene 4 octetos.
+   * Interprets LongTimePeriod DPTs (12.100, 12.101, 12.102) for operating hours.
+   * Assumes payload contains 4 octets.
    *
-   * @param variant Puede ser:
-   *   - "sec" para DPT_LongTimePeriod_Sec (12.100, segundos),
-   *   - "min" para DPT_LongTimePeriod_Min (12.101, minutos),
-   *   - "hrs" para DPT_LongTimePeriod_Hrs (12.102, horas).
-   *   Por defecto se usa "sec".
+   * @param variant Can be:
+   *   - "sec" for DPT_LongTimePeriod_Sec (12.100, seconds),
+   *   - "min" for DPT_LongTimePeriod_Min (12.101, minutes),
+   *   - "hrs" for DPT_LongTimePeriod_Hrs (12.102, hours).
+   *   Defaults to "sec".
    *
-   * @returns Un objeto con el valor sin signo y la unidad seleccionada.
+   * @returns An object with the unsigned value and selected unit.
    */
   static asDpt12002(buffer: Buffer, variant: "sec" | "min" | "hrs" = "sec") {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para el DPT LongTimePeriod");
+      throw new Error("Not enough data for DPT LongTimePeriod");
     }
     const value = buffer.readUInt32BE(0);
     let unit: string;
@@ -732,11 +732,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.001: DPT_Value_4_Count
-   * Interpreta un contador de pulsos (valor de 4 octetos con signo).
+   * Interprets a pulse counter (4-octet signed value).
    */
   static asDpt13001(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.001");
+      throw new Error("Not enough data for DPT 13.001");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -746,11 +746,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.002: DPT_FlowRate_m3/h
-   * Interpreta el flujo en m³/h (valor de 4 octetos con signo) con alta resolución.
+   * Interprets flow rate in m³/h (4-octet signed value) with high resolution.
    */
   static asDpt13002(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.002");
+      throw new Error("Not enough data for DPT 13.002");
     }
     const rawValue = buffer.readInt32BE(0);
     const value = rawValue * 0.0001;
@@ -761,11 +761,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.010: DPT_ActiveEnergy
-   * Interpreta la energía activa en Wh.
+   * Interprets active energy in Wh.
    */
   static asDpt13010(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.010");
+      throw new Error("Not enough data for DPT 13.010");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -775,11 +775,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.011: DPT_ApparantEnergy
-   * Interpreta la energía aparente en VAh.
+   * Interprets apparent energy in VAh.
    */
   static asDpt13011(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.011");
+      throw new Error("Not enough data for DPT 13.011");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -789,11 +789,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.012: DPT_ReactiveEnergy
-   * Interpreta la energía reactiva en VARh.
+   * Interprets reactive energy in VARh.
    */
   static asDpt13012(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.012");
+      throw new Error("Not enough data for DPT 13.012");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -803,11 +803,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.013: DPT_ActiveEnergy_kWh
-   * Interpreta la energía activa en kWh.
+   * Interprets active energy in kWh.
    */
   static asDpt13013(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.013");
+      throw new Error("Not enough data for DPT 13.013");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -817,11 +817,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.014: DPT_ApparantEnergy_kVAh
-   * Interpreta la energía aparente en kVAh.
+   * Interprets apparent energy in kVAh.
    */
   static asDpt13014(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.014");
+      throw new Error("Not enough data for DPT 13.014");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -831,11 +831,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.015: DPT_ReactiveEnergy_kVARh
-   * Interpreta la energía reactiva en kVARh.
+   * Interprets reactive energy in kVARh.
    */
   static asDpt13015(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.015");
+      throw new Error("Not enough data for DPT 13.015");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -845,11 +845,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.016: DPT_ActiveEnergy_MWh
-   * Interpreta la energía activa en MWh.
+   * Interprets active energy in MWh.
    */
   static asDpt13016(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.016");
+      throw new Error("Not enough data for DPT 13.016");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -859,11 +859,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 13.100: DPT_LongDeltaTimeSec
-   * Interpreta un periodo de tiempo en segundos.
+   * Interprets a time period in seconds.
    */
   static asDpt13100(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 13.100");
+      throw new Error("Not enough data for DPT 13.100");
     }
     const value = buffer.readInt32BE(0);
     return {
@@ -880,11 +880,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 15.000: DPT_Access_Data
-   * Decodifica un valor de 4 bytes con información de acceso.
+   * Decodes a 4-byte value with access data.
    */
   static asDpt15000(buffer: Buffer) {
     if (buffer.length < 4) {
-      throw new Error("No hay suficientes datos para DPT 15.000 (Access Data).");
+      throw new Error("Not enough data for DPT 15.000 (Access Data).");
     }
     const d6 = buffer.readUInt8(0); // Octeto 4
     const d5 = (buffer.readUInt8(1) & 0b11110000) >> 4;
@@ -908,11 +908,11 @@ export class KnxDataDecode extends KNXData {
   }
   /**
    * DPT 16.000 / 16.001: DPT_String
-   * Decodifica una cadena de 14 bytes en ASCII o ISO-8859-1.
+   * Decodes a 14-byte string in ASCII or ISO-8859-1.
    */
   static asDpt16(buffer: Buffer) {
     if (buffer.length > 14) {
-      throw new Error("Datos muy grandes para DPT 16 (String).");
+      throw new Error("Data too large for DPT 16 (String).");
     }
     let str = "";
     for (let i = 0; i < buffer.length; i++) {
@@ -923,12 +923,12 @@ export class KnxDataDecode extends KNXData {
     return str;
   }
   /**
-   * Decodifica un buffer de 14 bytes en formato hexadecimal (DPT 16.002).
-   * (No oficial en la especificacion del DataPointType de Knx en la version 02.02.01)
+   * Decodes a 14-byte buffer in hexadecimal format (DPT 16.002).
+   * (Unofficial in the KNX DataPointType specification version 02.02.01)
    */
   static asDpt16002(buffer: Buffer) {
     if (buffer.length > 14) {
-      throw new Error("Datos muy grandes para DPT 16.002 (Se esperan 14 bytes).");
+      throw new Error("Data too large for DPT 16.002 (14 bytes expected).");
     }
     let hexString = "";
     let decimalValue = BigInt(0);
@@ -1241,7 +1241,7 @@ export class KnxDataDecode extends KNXData {
 
   /**
    * DPT 251.600: DPT_Colour_RGBW
-   * Decodifica un valor RGBW de 6 bytes con indicadores de validez.
+   * Decodes a 6-byte RGBW value with validity indicators.
    */
   static asDpt251600(buffer: Buffer) {
     const red = buffer.readUInt8(0);

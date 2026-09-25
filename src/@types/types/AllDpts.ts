@@ -51,9 +51,9 @@ export type AllDpts<Dpt extends (typeof KnxDataEncoder.dptEnum)[number] | string
   Dpt extends 10001 | "10.001" | 10 | "10" | `10.${number}` ? DPT10001 :
   Dpt extends 11001 | "11.001" | 11 | "11" | `11.${number}` ? DPT11001 :
   // DPT 12
-  Dpt extends 12 | "12" | `12.${number}` ? DPT12001 :
+  Dpt extends 12 | 12001 | "12" | `12.${number}` ? DPT12001 :
   // DPT 13
-  Dpt extends 13 | "13" | `13.${number}` ? DPT13001 :
+  Dpt extends 13 | 13001 | "13" | `13.${number}` ? DPT13001 :
   Dpt extends 14 | "14" | `14.${number}` ? DPT14 :
   Dpt extends 15 | "15" | `15.${number}` ? DPT15 :
   Dpt extends 16002 | "16.002" ? DPT16002 :
