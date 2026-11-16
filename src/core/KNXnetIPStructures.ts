@@ -72,6 +72,10 @@ export class HPAI {
   static get NULL_HPAI(): HPAI {
     return new HPAI(HostProtocolCode.IPV4_UDP, "0.0.0.0", 0);
   }
+
+  static get NULL_TCP_HPAI(): HPAI {
+    return new HPAI(HostProtocolCode.IPV4_TCP, "0.0.0.0", 0);
+  }
 }
 
 export class CRI {
@@ -82,6 +86,9 @@ export class CRI {
   ) {}
 
   toBuffer(): Buffer {
+    if (this.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION) {
+      return Buffer.from([0x02, this.connectionType]);
+    }
     const len = this.individualAddress !== null ? 6 : 4;
     const buffer = Buffer.alloc(len);
     buffer.writeUInt8(len, 0); // Length
@@ -207,6 +214,8 @@ export abstract class DIB {
         return IPConfigDIB.fromBuffer(data);
       case DescriptionType.IP_CUR_CONFIG:
         return IPCurrentConfigDIB.fromBuffer(data);
+      case DescriptionType.SECURED_SERVICE_FAMILIES:
+        return SecuredServiceFamiliesDIB.fromBuffer(data);
       case DescriptionType.TUNNELLING_INFO:
         return TunnellingInfoDIB.fromBuffer(data);
       case DescriptionType.DEVICE_INFO_EXTENDED:
@@ -543,6 +552,38 @@ export class SupportedServicesDIB extends DIB {
       }
     }
     return new SupportedServicesDIB(services);
+  }
+}
+
+export class SecuredServiceFamiliesDIB extends DIB {
+  constructor(public services: { family: number; securityVersion: number }[]) {
+    super(DescriptionType.SECURED_SERVICE_FAMILIES);
+  }
+
+  toBuffer(): Buffer {
+    const buffer = Buffer.alloc(2 + this.services.length * 2);
+    buffer.writeUInt8(buffer.length, 0);
+    buffer.writeUInt8(this.type, 1);
+    let offset = 2;
+    for (const svc of this.services) {
+      buffer.writeUInt8(svc.family, offset++);
+      buffer.writeUInt8(svc.securityVersion, offset++);
+    }
+    return buffer;
+  }
+
+  static fromBuffer(buffer: Buffer): SecuredServiceFamiliesDIB {
+    const len = buffer.readUInt8(0);
+    const services: { family: number; securityVersion: number }[] = [];
+    for (let i = 2; i < len; i += 2) {
+      if (i + 1 < len) {
+        services.push({
+          family: buffer.readUInt8(i),
+          securityVersion: buffer.readUInt8(i + 1),
+        });
+      }
+    }
+    return new SecuredServiceFamiliesDIB(services);
   }
 }
 

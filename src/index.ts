@@ -22,6 +22,17 @@ export * from "./core/layers/data/TPDU";
 export * from "./core/layers/interfaces/APCI";
 export * from "./core/layers/interfaces/TPCI";
 export * from "./core/cache/GroupAddressCache";
+export * from "./core/enum/KNXnetIPEnum";
+export * from "./core/KNXnetIPSecureStructures";
+export * from "./security/KnxCcm";
+export * from "./security/KnxSecureKeys";
+export * from "./security/KnxKeyring";
+export * from "./connection/TcpFrameReader";
+export * from "./connection/SecureSession";
+export * from "./connection/SecureRoutingTimer";
+export * from "./management/apduBuilders";
+export * from "./management/TransportConnection";
+export * from "./management/KNXManagement";
 export type { CEMIInstance } from "./core/CEMI";
 export type { EMIInstance } from "./core/EMI";
 export type { ServiceMessage } from "./@types/interfaces/ServiceMessage";
@@ -31,6 +42,7 @@ export type {
   KNXUSBOptions,
   KNXLoggerOptions,
   KNXTunnelingOptions,
+  KNXSecureOptions,
   RouterConnOptions,
   KNXDiscoveredDevice,
   IndicationRouterLink,

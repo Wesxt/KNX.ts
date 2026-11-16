@@ -37,6 +37,8 @@ import { TunnelConnection } from "./TunnelConnection";
 import { InvalidKnxAddressException } from "../errors/InvalidKnxAddresExeption";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 import { FSM } from "./FSM";
+import { SecureRoutingTimer } from "./SecureRoutingTimer";
+import { KnxKeyring } from "../security/KnxKeyring";
 
 /**
  * States for the KNXnetIPServer Finite State Machine.
@@ -91,6 +93,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   private ignoreACKTimeout: boolean;
   private maxTunnelConnections: number;
   private clientAddrsStartInt: number;
+  private secureRoutingTimer: SecureRoutingTimer | null = null;
 
   constructor(options: KNXnetIPServerOptions) {
     super(options);
@@ -175,6 +178,35 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     } else {
       this.maxTunnelConnections = 15;
       this.clientAddrsStartInt = serverIA + 1;
+    }
+
+    if (options.secure) {
+      let backboneKey = options.secure.backboneKey;
+      let latencyMs = options.secure.multicastLatencyToleranceMs;
+      if (!backboneKey && options.secure.keyringFile) {
+        const keyring = KnxKeyring.fromSource(options.secure.keyringFile, options.secure.keyringPassword ?? "");
+        const bb = keyring.getBackbone();
+        if (bb?.decryptedKey) {
+          backboneKey = bb.decryptedKey;
+        }
+        if (latencyMs === undefined && bb?.latency !== undefined) {
+          latencyMs = bb.latency;
+        }
+      }
+      if (backboneKey) {
+        this.secureRoutingTimer = new SecureRoutingTimer({
+          backboneKey,
+          serialNumber: options.secure.serialNumber ?? routingOptions.serialNumber,
+          latencyToleranceMs: latencyMs,
+          onSendTimerNotify: (notifyFrame) => {
+            if (this.socket) {
+              (this.socket as dgram.Socket).send(notifyFrame, this.options.port!, this.options.ip!, (err) => {
+                if (err) this.emit("error", err);
+              });
+            }
+          },
+        });
+      }
     }
   }
 
@@ -265,6 +297,10 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             this.logger.info("Multi-homing disabled. Only primary interface used for multicast.");
           }
 
+          if (this.secureRoutingTimer) {
+            this.secureRoutingTimer.start(true);
+          }
+
           this.fsm.transition(KNXServerEvent.RUNNING);
           resolve();
         } catch (err) {
@@ -282,6 +318,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   }
 
   private closeServer(): void {
+    if (this.secureRoutingTimer) {
+      this.secureRoutingTimer.stop();
+    }
     if (this.socket) {
       try {
         (this.socket as dgram.Socket).close();
@@ -602,9 +641,10 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       KNXnetIPHeader.HEADER_SIZE_10 + msgBody.length,
     );
     const packet = Buffer.concat([header.toBuffer(), msgBody]);
+    const outPacket = this.secureRoutingTimer ? this.secureRoutingTimer.wrapMulticastFrame(packet) : packet;
 
     if (this.socket) {
-      (this.socket as dgram.Socket).send(packet, this.options.port!, this.options.ip!, (err) => {
+      (this.socket as dgram.Socket).send(outPacket, this.options.port!, this.options.ip!, (err) => {
         if (err) this.emit("error", err);
       });
     }
@@ -615,9 +655,10 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     const msgBody = busyMsg.toBuffer();
     const header = new KNXnetIPHeader(KNXnetIPServiceType.ROUTING_BUSY, KNXnetIPHeader.HEADER_SIZE_10 + msgBody.length);
     const packet = Buffer.concat([header.toBuffer(), msgBody]);
+    const outPacket = this.secureRoutingTimer ? this.secureRoutingTimer.wrapMulticastFrame(packet) : packet;
 
     if (this.socket) {
-      (this.socket as dgram.Socket).send(packet, this.options.port!, this.options.ip!, (err) => {
+      (this.socket as dgram.Socket).send(outPacket, this.options.port!, this.options.ip!, (err) => {
         if (err) this.emit("error", err);
       });
     }
@@ -638,8 +679,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
       const packet = this.msgQueue.shift();
       if (packet) {
+        const outPacket = this.secureRoutingTimer ? this.secureRoutingTimer.wrapMulticastFrame(packet) : packet;
         const startTime = Date.now();
-        (this.socket as dgram.Socket).send(packet, this.options.port!, this.options.ip!, (err) => {
+        (this.socket as dgram.Socket).send(outPacket, this.options.port!, this.options.ip!, (err) => {
           if (err) this.emit("error", err);
           this.lastSentTime = Date.now();
           this.isProcessingQueue = false;
@@ -661,19 +703,53 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     else setTimeout(executeSend, initialWait);
   }
 
-  private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo) {
+  private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo, isFromSecureWrapper: boolean = false) {
     try {
       const header = KNXnetIPHeader.fromBuffer(msg);
       const body = msg.subarray(6);
-      const ourAddress = (this.socket as dgram.Socket).address();
+      const ourAddress = this.socket ? (this.socket as dgram.Socket).address() : null;
 
       // Filtro Anti-Eco inicial por IP/Puerto
-      if (rinfo.address === this.options.localIp && rinfo.port === ourAddress.port) return;
+      if (
+        !isFromSecureWrapper &&
+        ourAddress &&
+        rinfo.address === this.options.localIp &&
+        rinfo.port === ourAddress.port
+      )
+        return;
       this.logger.debug(
         `Received message from ${rinfo.address}:${rinfo.port} with service type ${header.serviceType} => ${KNXnetIPServiceType[header.serviceType]}`,
       );
       switch (header.serviceType) {
+        case KNXnetIPServiceType.TIMER_NOTIFY: {
+          if (this.secureRoutingTimer && !isFromSecureWrapper) {
+            try {
+              this.secureRoutingTimer.handleTimerNotify(msg);
+            } catch (err: any) {
+              this.logger.debug(`Ignored invalid TIMER_NOTIFY from ${rinfo.address}: ${err?.message ?? err}`);
+            }
+          }
+          break;
+        }
+        case KNXnetIPServiceType.SECURE_WRAPPER: {
+          if (!this.secureRoutingTimer || isFromSecureWrapper) {
+            return;
+          }
+          try {
+            const inner = this.secureRoutingTimer.unwrapMulticastFrame(msg);
+            if (inner) {
+              this.handleMessage(inner, rinfo, true);
+            }
+          } catch (err: any) {
+            this.logger.debug(`Discarded multicast SECURE_WRAPPER from ${rinfo.address}: ${err?.message ?? err}`);
+          }
+          break;
+        }
         case KNXnetIPServiceType.ROUTING_INDICATION: {
+          if (this.secureRoutingTimer && !isFromSecureWrapper) {
+            this.logger.debug(`Discarding plain ROUTING_INDICATION from ${rinfo.address} in secure routing mode`);
+            return;
+          }
           // [MEJORA] Filtro Anti-Eco Seguro leyendo la Individual Address (IA) origen del CEMI
           const addInfoLen = body[1];
           if (body.length >= 6 + addInfoLen) {
@@ -714,9 +790,16 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           break;
         }
         case KNXnetIPServiceType.ROUTING_BUSY:
+          if (this.secureRoutingTimer && !isFromSecureWrapper) {
+            this.logger.debug(`Discarding plain ROUTING_BUSY from ${rinfo.address} in secure routing mode`);
+            return;
+          }
           this.handleRoutingBusy(RoutingBusy.fromBuffer(body));
           break;
         case KNXnetIPServiceType.ROUTING_LOST_MESSAGE:
+          if (this.secureRoutingTimer && !isFromSecureWrapper) {
+            return;
+          }
           this.emit("routing_lost_message", RoutingLostMessage.fromBuffer(body));
           break;
         case KNXnetIPServiceType.SEARCH_REQUEST:

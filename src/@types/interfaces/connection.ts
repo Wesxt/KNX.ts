@@ -2,13 +2,72 @@ import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
 import { CEMIInstance } from "../../core/CEMI";
 
 /**
+ * Configuration options for KNXnet/IP Secure (KNX Standard 03_08_09).
+ */
+export interface KNXSecureOptions {
+  /**
+   * User ID for KNXnet/IP Secure unicast sessions (1 = management access, 2..127 = user/tunnelling access).
+   * Defaults to 2 (or to the UserID read from the keyring if a keyring is supplied).
+   */
+  userId?: number;
+  /**
+   * User password string (ISO-8859-1 / Latin-1) or pre-derived 16-byte PBKDF2 password hash.
+   */
+  userPassword?: string | Buffer;
+  /**
+   * Device Authentication Password (FDSK or commissioning auth code) or pre-derived 16-byte Device Authentication Code.
+   * Used to verify the server's MAC in SESSION_RESPONSE (03_08_09 §2.2.3.7.3).
+   */
+  deviceAuthenticationPassword?: string | Buffer;
+  /**
+   * If true, refuses to establish a secure session unless a valid Device Authentication Code is verified.
+   * Defaults to false.
+   */
+  requireDeviceAuthentication?: boolean;
+  /**
+   * Path to an ETS `.knxkeys` file, raw XML string, base64 string, or Buffer containing the keyring.
+   * When provided with `keyringPassword`, automatically populates `userId`, `userPassword`,
+   * `deviceAuthenticationPassword`, or `backboneKey`.
+   */
+  keyringFile?: string | Buffer;
+  /**
+   * Password used to decrypt and verify the ETS `.knxkeys` keyring.
+   */
+  keyringPassword?: string;
+  /**
+   * Individual Address of the tunnelling interface in the keyring (e.g. "1.1.1").
+   * If omitted, the first tunnelling interface in the keyring is selected.
+   */
+  tunnelInterfaceAddress?: string;
+  /**
+   * 6-byte KNX Serial Number sent in outgoing SECURE_WRAPPER / TIMER_NOTIFY frames.
+   * Defaults to 0x00006b6e7874 ("knxt") for tunnelling clients or the server's serialNumber for routing.
+   */
+  serialNumber?: Buffer;
+  /**
+   * 16-byte Secure Backbone Key (or 32-char hex string) for KNX IP Secure Multicast Routing (03_08_09 §2.2.2).
+   */
+  backboneKey?: Buffer | string;
+  /**
+   * Multicast latency tolerance in milliseconds (PID_MULTICAST_LATENCY_TOLERANCE).
+   * Defaults to 2000 ms (03_08_09 §2.2.2.3.2.2).
+   */
+  multicastLatencyToleranceMs?: number;
+  /**
+   * Session keepalive interval in milliseconds for unicast secure sessions.
+   * Defaults to 30000 ms (0 = disabled).
+   */
+  sessionKeepAliveIntervalMs?: number;
+}
+
+/**
  * Options for configuring a KNX Tunneling connection.
  */
 export interface KNXTunnelingOptions extends KNXnetIPOptions {
   /**
    * The transport protocol to use for the connection.
    * 'UDP' is the default and standard for KNXnet/IP.
-   * 'TCP' is optional and used for connection-oriented communication.
+   * 'TCP' is optional and used for connection-oriented communication (mandatory when `secure` is set).
    */
   transport?: "UDP" | "TCP";
   /**
@@ -21,7 +80,7 @@ export interface KNXTunnelingOptions extends KNXnetIPOptions {
    * If true, sends a "Route Back" HPAI (IP 0.0.0.0 and port 0).
    * This instructs the KNXnet/IP server to respond directly to the source IP and port
    * from which the request originated. Essential for environments with NAT,
-   * firewalls, or VPNs like ZeroTier.
+   * firewalls, or VPNs like ZeroTier. Always enabled automatically on TCP.
    */
   useRouteBack?: boolean;
   /**
@@ -29,6 +88,11 @@ export interface KNXTunnelingOptions extends KNXnetIPOptions {
    * Defaults to 100.
    */
   maxQueueSize?: number;
+  /**
+   * Optional KNXnet/IP Secure configuration. When set, forces TCP transport and establishes
+   * an encrypted Secure Session (0x0950..0x0954) prior to opening the tunnelling channel.
+   */
+  secure?: KNXSecureOptions;
 }
 
 export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip"> {
@@ -83,6 +147,10 @@ export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip"> {
    * Default: false
    */
   ignoreACKTimeout?: boolean;
+  /**
+   * Optional KNXnet/IP Secure configuration for Secure Routing multicast (03_08_09 §2.2.2).
+   */
+  secure?: KNXSecureOptions;
 }
 
 export interface ExternalManagerOptions {

@@ -8,21 +8,30 @@ This project focuses on protocol strictness, reading and sending any kind of **E
 
 ## 🌟 Capabilities
 
-- **Robust UDP Tunneling**: Implements a strict _Stop-and-Wait_ queue and sequence number management. This eliminates common "connection interrupted" issues in ETS or other applications during long sessions.
-- **KNXnet/IP Routing**: Supports multicast routing (only in the **KNXnet/IP** server).
+- **Robust UDP & TCP Tunneling**: Implements a strict _Stop-and-Wait_ queue for UDP and specification-compliant stream framing (`TcpFrameReader`, no `TUNNELLING_ACK` overhead per `03_08_04` §2.6.2) for TCP. This eliminates common "connection interrupted" issues in ETS or other applications during long sessions.
+- **KNXnet/IP Secure (`03_08_09`)**:
+  - **Secure Tunneling Client (TCP)**: Full X25519 ECDH key exchange, PBKDF2-HMAC-SHA256 user and device authentication (`SESSION_REQUEST`, `SESSION_RESPONSE`, `SESSION_AUTHENTICATE`, `SESSION_STATUS`), and AES-128-CCM frame wrapping (`SECURE_WRAPPER`).
+  - **Secure Routing Multicast**: Multicast `SECURE_WRAPPER` encryption/authentication and the 48-bit `TIMER_NOTIFY` synchronization state machine (`SecureRoutingTimer`) in `KNXnetIPServer`.
+  - **Zero-Dependency ETS `.knxkeys` Reader (`KnxKeyring`)**: Loads, verifies the canonical ETS signature, and decrypts `.knxkeys` files using built-in Node.js `crypto` and `zlib`.
+- **Full KNX Network & Device Management (`KNXManagement` & `KNXManagementSession`)**: Complete implementation of the KNX Management stack (`03_05_02 Management Procedures`, `03_03_07 Application Layer`, `03_05_01 Resources`, and `03_08_03 / 03_06_03 Local cEMI Management`) over a point-to-point connection-oriented Transport Layer (`TransportConnection`, `03_03_04`) as well as broadcast, system broadcast, and connectionless modes:
+  - **Individual & Domain Address Management (`NM_*`)**: Read devices in programming mode (with duplicate detection), program Individual Addresses by programming button (`writeIndividualAddress`) or by 6-byte KNX Serial Number (`writeIndividualAddressBySerial`), reset Individual Address to `15.15.255` (`resetIndividualAddress`), read/write Domain Addresses (`readDomainAddress`, `writeDomainAddress`, `readDomainAddressSelective`, `readDomainAddressBySerial`, `writeDomainAddressBySerial`), and read/write Network & System Network Parameters.
+  - **Device Management (`DM_*`)**: Persistent authenticated sessions (`openSession` / `withSession`), access authorization (`authorize` / `A_Authorize_Request`) and key programming (`setKey` / `A_Key_Write`), remote programming mode switching (`setProgrammingMode`), standard and extended Interface Object Property & Function Property read/write/description/scan, 16-bit standard memory / 20-bit user memory / 24-bit extended memory / bit-level memory read & write with automatic chunking and read-back verification (`DMP_MemWrite_RCoV`), Load & Run State Machine control (`PID_LOAD_STATE_CONTROL` / `PID_RUN_STATE_CONTROL`), Group Object Link read/write (`A_Link_Read` / `A_Link_Write`), and Basic Restart or confirmed *Master Reset* (`A_Restart` with `RestartEraseCode`).
+  - **Local Interface Management (`M_PropRead` / `M_PropWrite` / `M_FuncPropCommand` / `M_Reset`)**: Direct cEMI local device management over `DEVICE_MGMT_CONNECTION` or USB.
+- **KNXnet/IP Routing**: Supports plain and secure multicast routing (in the **KNXnet/IP** server).
 - **Discovery in the KNXnet/IP server**: Supports `SEARCH_REQUEST`, `SEARCH_REQUEST_EXTENDED`, `DESCRIPTION_REQUEST`, `CONNECT_REQUEST`, and `CONNECTIONSTATE_REQUEST` so applications such as ETS can discover it without manual configuration.
 - **Direct Hardware Interfaces**: Native support for **KNX USB interfaces** (via `node-hid`) and **TPUART** serial chips (via `serialport`).
-- **Program devices**: The library is now capable of fully programming KNX devices, including both the physical address and the program. *(This was tested with a router instance using the KNXnetIpServer and KNXUSB links. The KNXUSB was connected to the actual KNX bus. The device, a Zennio MAXinBOX 66, was deprogrammed and then fully programmed.)*
+- **Program devices via ETS**: The library is capable of fully programming KNX devices through ETS when bridging a `KNXnetIPServer` and a physical link (`KNXUSBConnection` / `TPUART`). *(Tested with a Zennio MAXinBOX 66 over a real KNX bus.)*
 - **Learning Bridge (Router)**: Advanced multi-interface routing with Loop Prevention, Signature Tracking, and Individual Address (IA) learning, allowing you to bridge multiple physical interfaces and tunnels simultaneously.
 - **Intuitive Address-Based Events**: Listen to specific telegrams using group addresses as event names (e.g., `server.on("1/1/1", ...)`).
 - **Echo Cancellation**: Automatically filters loopback messages to prevent telegram processing loops.
 - **High Performance**: Optimized for Node.js environments with minimal overhead.
 
-## 🚧 Status: Experimental and In Development
+## 🚧 Status: Experimental and Pending Hardware Validation
 
-According to `TODO.md`, several features are currently **experimental** or under development:
+According to `TODO.md`, several features are currently **experimental** or awaiting validation on physical devices:
 
-- **TCP Support**: The implementation is present, but testing is currently in an experimental phase.
+- **KNX IP Secure, TCP Tunneling, and `KNXManagement` (Hardware Testing Pending)**: Fully implemented according to the KNX Standard v3.0.0 and verified against official Annex A cryptographic test vectors, real ETS `.knxkeys` keyring files, real ETS XML telegram captures, and simulated gateways/devices. **Validation against physical KNX hardware devices is currently pending.**
+- **TCP Server in `KNXnetIPServer`**: Client-side TCP and Secure Tunneling are implemented in `KNXTunneling`; accepting incoming TCP / Secure Session clients in `KNXnetIPServer` is planned for a future phase.
 - **Source Filtering**: Filtering based on source addresses and selective routing is on the roadmap.
 - **Use of NPDU, TPDU, and APDU layers**: EMI still needs to use them for correct deserialization.
 
@@ -60,8 +69,10 @@ The library exposes a rich set of classes and utilities that allow both high-lev
 
 These classes form the core of your interaction with the network. All of them inherit from a `KNXService` base and emit common events.
 
-- `KNXnetIPServer`: Creates a standard KNXnet/IP server (Gateway). Perfect for providing tunneling slots to ETS or other tunneling clients.
-- `KNXTunneling`: Connects as a client to an existing KNXnet/IP gateway.
+- `KNXnetIPServer`: Creates a standard KNXnet/IP server (Gateway) with optional KNX IP Secure multicast routing (`secure.backboneKey` / `keyringFile`). Perfect for providing tunneling slots to ETS or other tunneling clients.
+- `KNXTunneling`: Connects as a client to an existing KNXnet/IP gateway over UDP, plain TCP (`transport: "TCP"`), or **KNX IP Secure over TCP** (`secure: { ... }`).
+- `KNXManagement`, `KNXManagementSession` & `TransportConnection`: Full KNX Network and Device Management stack (`03_05_02`, `03_03_07`, `03_08_03`) for reading and writing Individual/Domain Addresses, Interface Object Properties, Function Properties, Device/User/Extended Memory, Authorization Keys, Load/Run State Machines, Group Object Links, and Device Restarts/Master Resets without depending on ETS.
+- `KnxKeyring`: Zero-dependency loader and decryptor for ETS `.knxkeys` files.
 - `KNXUSBConnection`: Connects directly to local KNX USB interfaces (ABB, MDT, Weinzierl, Zennio, etc.).
 - `TPUARTConnection`: Connects directly to KNX through TPUART serial hardware.
 - `Router`: A powerful bridge that interconnects different hardware connections or tunneling clients (**KNXUSBConnection**). You can attach multiple `KNXService` instances to it (e.g., one USB connection and 5 tunnels), and it will automatically route telegrams between them, handling Individual Address learning and loop prevention.
@@ -174,6 +185,279 @@ tunnel.on("1/1/1", (cemi: CEMIInstance) => {
   console.log("New data on 1/1/1:", cemi.TPDU.apdu.data); // Raw APDU data
   console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
 });
+```
+
+### KNX IP Secure & TCP Guide (`KNXTunneling`, `KNXnetIPServer`, `KnxKeyring`)
+
+> **Note**: Validated against KNX Standard `03_08_09` Annex A test vectors, ETS `.knxkeys` files, and simulated gateways. **Pending validation on physical KNX IP Secure hardware.**
+
+#### 1. Plain TCP Tunneling (`03_08_04` §2.6.2)
+
+```typescript
+import { KNXTunneling } from "knx.ts";
+
+const tcpTunnel = new KNXTunneling({
+  ip: "192.168.1.100",
+  port: 3671,
+  transport: "TCP", // Uses Null HPAI (0.0.0.0:0) and omits TUNNELLING_ACK per specification
+});
+
+await tcpTunnel.connect();
+```
+
+#### 2. KNX IP Secure Tunneling Client over TCP (`03_08_09`)
+
+You can authenticate a Secure Tunneling session either by providing the passwords directly or by passing the `.knxkeys` keyring file exported from ETS:
+
+```typescript
+import { KNXTunneling, KnxKeyring } from "knx.ts";
+
+// Option A: Using explicit credentials
+const secureTunnel = new KNXTunneling({
+  ip: "192.168.1.100",
+  port: 3671,
+  secure: {
+    userId: 2, // 1 = Management, >= 2 = Tunnelling channel user
+    userPassword: "myTunnelPassword",
+    deviceAuthenticationPassword: "myDeviceAuthOrFDSK",
+  },
+});
+
+// Option B: Loading directly from an ETS .knxkeys file
+const secureTunnelFromKeyring = new KNXTunneling({
+  ip: "192.168.1.100",
+  port: 3671,
+  secure: {
+    keyringFile: "./project.knxkeys",
+    keyringPassword: "myKeyringPassword",
+    tunnelInterfaceAddress: "1.1.1", // Optional: picks the matching Tunnelling slot from the keyring
+  },
+});
+
+// Inspecting a .knxkeys file directly:
+const keyring = KnxKeyring.load("./project.knxkeys", "myKeyringPassword");
+console.log("Backbone Key:", keyring.backboneKey?.toString("hex"));
+console.log("Interfaces:", keyring.interfaces);
+```
+
+#### 3. KNX IP Secure Multicast Routing in `KNXnetIPServer`
+
+```typescript
+import { KNXnetIPServer } from "knx.ts";
+
+const secureServer = new KNXnetIPServer({
+  localIp: "192.168.1.50",
+  individualAddress: "1.1.0",
+  friendlyName: "Secure TypeScript KNX Router",
+  secure: {
+    // Provide a 16-byte Backbone Key directly or load it from .knxkeys:
+    keyringFile: "./project.knxkeys",
+    keyringPassword: "myKeyringPassword",
+    latencyToleranceMs: 2000,
+  },
+});
+
+await secureServer.connect();
+```
+
+---
+
+### Complete Device & Network Management Guide (`KNXManagement`)
+
+> **Note**: Implements the full KNX Management stack (`03_05_02`, `03_03_07`, `03_08_03`) without read-only restrictions. Validated against real ETS telegram captures (`test_xml/`) and simulated devices. **Pending validation on physical KNX devices.**
+
+```typescript
+import {
+  KNXManagement,
+  KNXPropertyId,
+  LoadEvent,
+  RunEvent,
+  RestartEraseCode,
+} from "knx.ts";
+
+const mgmt = new KNXManagement(tunnel, {
+  sourceAddress: "1.1.250",
+  minFrameDelayMs: 20,
+});
+```
+
+#### 1. Individual Address & Domain Address Programming (`NM_*`)
+
+```typescript
+// A. Read all devices with their Programming Mode button active (detects duplicate addresses)
+const prog = await mgmt.readProgrammingModeDevices();
+console.log("In programming mode:", prog.addresses, "Duplicates:", prog.duplicates);
+
+// B. Program Individual Address of the device in Programming Mode (NM_IndividualAddress_Write)
+// Automatically checks if 1.1.10 is occupied, writes IA, verifies DD0, and runs Basic Restart
+const writeRes = await mgmt.writeIndividualAddress("1.1.10");
+
+// C. Program Individual Address by 6-byte KNX Serial Number without pressing the button
+const serialRes = await mgmt.writeIndividualAddressBySerial(
+  Buffer.from("00FA12345678", "hex"),
+  "1.1.12",
+);
+
+// D. Reset Individual Address of the device in Programming Mode back to default 15.15.255
+await mgmt.resetIndividualAddress();
+
+// E. Read & Write Domain Address (PL110 2-byte / RF 6-byte)
+const domains = await mgmt.readDomainAddress();
+await mgmt.writeDomainAddress(Buffer.from([0x00, 0x1a]));
+await mgmt.writeDomainAddressBySerial(
+  Buffer.from("00FA12345678", "hex"),
+  Buffer.from([0x00, 0x1a]),
+);
+```
+
+#### 2. Device Discovery, Diagnostics & Inventory
+
+```typescript
+// Check if an address is occupied on the bus (handles both DD0 response and immediate T_Disconnect)
+const occupied = await mgmt.isAddressOccupied("1.1.10");
+
+// Run the exact ETS "Individual Address Check" sequence (DD0 + PID_MAX_APDULENGTH + PID_PROG_MODE)
+const check = await mgmt.checkIndividualAddress("1.1.10");
+
+// Full device identification (DM_Identify_RCo2: DD0, Manufacturer ID, Serial, HW Type, Order Info, Firmware)
+const identity = await mgmt.identifyDevice("1.1.10");
+
+// Scan a line (method: "connect" or "descriptor") and export JSON inventory
+const activeAddresses = await mgmt.scanLine("1.1", { range: [1, 64], method: "connect" });
+const inventory = await mgmt.exportInventory(activeAddresses);
+```
+
+#### 3. Persistent Sessions (`withSession` / `openSession`), Authorization & Keys
+
+When a device requires authorization (`A_Authorize_Request`), the granted access level stays valid only for the duration of the `T_Connect` session. Use `mgmt.withSession(ia, async (session) => { ... })` to execute multiple operations over the same Transport Layer connection:
+
+```typescript
+await mgmt.withSession("1.1.10", async (session) => {
+  // 1. Authenticate with a 4-byte key (default factory key is 0xFFFFFFFF)
+  const accessLevel = await session.authorize(0xffffffff);
+  console.log("Granted access level:", accessLevel);
+
+  // 2. Optionally program a new key for access level 1 (DM_SetKey_RCo)
+  await session.setKey(1, 0x11223344);
+
+  // 3. Remotely toggle the device's Programming LED ON or OFF (DM_ProgMode_Switch)
+  await session.setProgrammingMode(true);
+  console.log("Programming LED active:", await session.readProgrammingMode());
+  await session.setProgrammingMode(false);
+});
+```
+
+#### 4. Interface Object Properties & Function Properties (Standard & Extended)
+
+```typescript
+// Scan all available properties on Interface Object 0 (Device Object)
+const propDescriptions = await mgmt.scanObjectProperties("1.1.10", 0);
+
+// Read and Write standard Interface Object Properties (A_PropertyValue_Read / Write)
+const routingCount = await mgmt.readProperty("1.1.10", {
+  objectIndex: 0,
+  propertyId: KNXPropertyId.PID_ROUTING_COUNT,
+});
+
+await mgmt.writeProperty(
+  "1.1.10",
+  {
+    objectIndex: 0,
+    propertyId: KNXPropertyId.PID_ROUTING_COUNT,
+    data: Buffer.from([0x60]),
+  },
+  { verify: true, authKey: 0xffffffff },
+);
+
+// Call a Function Property (A_FunctionPropertyCommand) or read its state
+const fnResult = await mgmt.callFunctionProperty("1.1.10", {
+  objectIndex: 0,
+  propertyId: 50,
+  data: Buffer.from([0x01, 0x02]),
+});
+
+// Extended Property addressing (by 16-bit Object Type, 12-bit Instance, 12-bit PID)
+const extVal = await mgmt.readPropertyExtended("1.1.10", {
+  objectType: 0,
+  objectInstance: 1,
+  propertyId: KNXPropertyId.PID_SERIAL_NUMBER,
+});
+```
+
+#### 5. Memory Read/Write (16-bit, 20-bit User, 24-bit Extended) & State Machines
+
+```typescript
+await mgmt.withSession("1.1.10", async (session) => {
+  await session.authorize(0xffffffff);
+
+  // 1. Standard 16-bit memory read/write with automatic chunking and read-back verification (DMP_MemWrite_RCoV)
+  const memDump = await session.readMemory(0x0100, 32);
+  await session.writeMemory(0x0100, Buffer.alloc(32, 0xaa), { verify: true, maxChunkSize: 12 });
+
+  // 2. Bit-level memory modification (A_MemoryBit_Write)
+  await session.writeMemoryBit(0x0060, Buffer.from([0xfe]), Buffer.from([0x01]));
+
+  // 3. 20-bit User Memory (A_UserMemory_Read / Write) & 24-bit Extended Memory (A_MemoryExtended_Read / Write)
+  const userMem = await session.readUserMemory(0x00100, 16);
+  await session.writeUserMemory(0x00100, userMem, { verify: true });
+  await session.writeExtendedMemory(0x010000, Buffer.from([0x01, 0x02, 0x03, 0x04]));
+
+  // 4. Load State Machine (PID_LOAD_STATE_CONTROL = 5) & Run State Machine (PID_RUN_STATE_CONTROL = 6)
+  await session.writeLoadState(3, LoadEvent.UNLOAD);
+  await session.writeLoadState(3, LoadEvent.START_LOADING);
+  // ... write table/application memory ...
+  await session.writeLoadState(3, LoadEvent.LOAD_COMPLETED);
+  await session.writeRunState(3, RunEvent.RESTART);
+});
+```
+
+#### 6. Reading All Device Group Addresses, Group Object Links & Device Restart / Master Reset
+
+```typescript
+// Read ALL Group Addresses programmed in a device's Group Address Table (GrAT, 03_05_01 §4.16)
+// Automatically detects System B / System 7 PID_TABLE (23), BCU2 / BIM PID_TABLE_REFERENCE (7),
+// BCU1 fixed memory (0x0116 / 0x4000), or Group Object Link services
+const gaTable = await mgmt.readDeviceGroupAddresses("1.1.10");
+console.log("Programmed Group Addresses:", gaTable.groupAddresses, "via:", gaTable.method);
+
+// Read Group Addresses linked to a specific Group Object #1 (A_Link_Read)
+const links = await mgmt.readGroupObjectLinks("1.1.10", 1);
+
+// Add or delete a Group Address link on Group Object #1 (A_Link_Write)
+await mgmt.writeGroupObjectLink("1.1.10", 1, "1/1/5", { sending: true });
+
+// Basic Restart (restart_type = 0)
+await mgmt.restartDevice("1.1.10", { type: "basic" });
+
+// Confirmed Master Reset (restart_type = 1, e.g. Factory Reset without erasing Individual Address)
+const resetInfo = await mgmt.restartDevice("1.1.10", {
+  type: "master",
+  eraseCode: RestartEraseCode.FACTORY_RESET_WITHOUT_IA,
+  channelNumber: 0,
+  authKey: 0xffffffff,
+});
+console.log("Master Reset process time (s):", resetInfo?.processTimeSeconds);
+```
+
+#### 7. Local Interface cEMI Management (`M_PropRead` / `M_PropWrite` / `M_Reset`)
+
+When connected via `DEVICE_MGMT_CONNECTION` or local USB cEMI, you can read/write properties of the local interface itself:
+
+```typescript
+const localSerial = await mgmt.readLocalProperty({
+  objectType: 0,
+  objectInstance: 1,
+  propertyId: KNXPropertyId.PID_SERIAL_NUMBER,
+});
+
+await mgmt.writeLocalProperty({
+  objectType: 0,
+  objectInstance: 1,
+  propertyId: KNXPropertyId.PID_PROG_MODE,
+  data: Buffer.from([0x00]),
+});
+
+await mgmt.resetLocalDevice();
 ```
 
 ### Link Router
