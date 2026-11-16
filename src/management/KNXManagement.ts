@@ -2,6 +2,7 @@ import { KNXService } from "../connection/KNXService";
 import { CEMI, CEMIInstance } from "../core/CEMI";
 import { APCIEnum } from "../core/enum/APCIEnum";
 import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
+import { getKNXManufacturerName } from "../core/resources/KNXManufacturers";
 import { MESSAGE_CODE_FIELD } from "../core/MessageCodeField";
 import { TPCIType } from "../core/layers/interfaces/TPCI";
 import { KNXHelper } from "../utils/KNXHelper";
@@ -244,9 +245,11 @@ export interface DeviceIdentity {
   descriptorType0: number;
   maskName?: string;
   manufacturerId?: number;
+  manufacturerName?: string;
   serialNumber?: string;
   hardwareType?: string;
   orderInfo?: string;
+  orderInfoText?: string;
   firmwareRevision?: number;
   maxApduLength?: number;
   programmingMode?: boolean;
@@ -1380,13 +1383,25 @@ export class KNXManagementSession {
     const maxApduBuf = await tryReadProp(KNXPropertyId.PID_MAX_APDULENGTH);
     const progModeBuf = await tryReadProp(KNXPropertyId.PID_PROG_MODE);
 
+    const manufacturerId = mfrBuf && mfrBuf.length >= 2 ? mfrBuf.readUInt16BE(0) : undefined;
+    const orderInfoText = orderBuf
+      ? Array.from(orderBuf)
+          .filter((b) => b >= 0x20 && b <= 0x7e)
+          .map((b) => String.fromCharCode(b))
+          .join("")
+          .trim() || undefined
+      : undefined;
+
     return {
       individualAddress: this.destinationAddress,
       descriptorType0: dd0Val,
-      manufacturerId: mfrBuf && mfrBuf.length >= 2 ? mfrBuf.readUInt16BE(0) : undefined,
+      maskName: dd0Val ? DeviceDescriptorType0.describe(dd0Val) : undefined,
+      manufacturerId,
+      manufacturerName: manufacturerId !== undefined ? getKNXManufacturerName(manufacturerId) : undefined,
       serialNumber: serialBuf ? serialBuf.toString("hex").toUpperCase() : undefined,
       hardwareType: hwTypeBuf ? hwTypeBuf.toString("hex").toUpperCase() : undefined,
       orderInfo: orderBuf ? orderBuf.toString("hex").toUpperCase() : undefined,
+      orderInfoText,
       firmwareRevision: fwRevBuf && fwRevBuf.length >= 1 ? fwRevBuf.readUInt8(0) : undefined,
       maxApduLength:
         maxApduBuf && maxApduBuf.length >= 2

@@ -11,7 +11,7 @@ async function testRouting() {
   console.log(`
 --- Testing Routing (Multicast Group: ${MULTICAST_IP}:${PORT}) ---`);
 
-  const localIp = "192.168.0.238";
+  const localIp = "192.168.0.190";
   console.log(`Using Local IP: ${localIp}`);
 
   const client = new KNXnetIPServer({
@@ -21,7 +21,7 @@ async function testRouting() {
     friendlyName: "Arnold",
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
-    useAllInterfaces: false,
+    useAllInterfaces: true,
     logOptions: {
       level: "debug",
       enabled: true,
