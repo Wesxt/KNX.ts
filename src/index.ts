@@ -29,6 +29,7 @@ export * from "./security/KnxSecureKeys";
 export * from "./security/KnxKeyring";
 export * from "./connection/TcpFrameReader";
 export * from "./connection/SecureSession";
+export * from "./connection/ServerSecureSession";
 export * from "./connection/SecureRoutingTimer";
 export * from "./management/apduBuilders";
 export * from "./management/TransportConnection";

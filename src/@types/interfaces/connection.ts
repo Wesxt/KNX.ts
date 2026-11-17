@@ -58,6 +58,26 @@ export interface KNXSecureOptions {
    * Defaults to 30000 ms (0 = disabled).
    */
   sessionKeepAliveIntervalMs?: number;
+  /**
+   * Server-side map or record of allowed User IDs (1 = management, 2..127 = user)
+   * to plain passwords (ISO-8859-1) or pre-derived 16-byte password hashes.
+   */
+  users?: Record<number, string | Buffer> | Map<number, string | Buffer>;
+  /**
+   * Timeout in milliseconds waiting for SESSION_AUTHENTICATE in UNAUTHENTICATED state.
+   * Defaults to 10000 ms (03_08_09 §2.2.3.4).
+   */
+  sessionAuthenticationTimeoutMs?: number;
+  /**
+   * Inactivity timeout in milliseconds for an AUTHENTICATED secure session.
+   * Defaults to 60000 ms (03_08_09 §2.2.3.4).
+   */
+  sessionTimeoutMs?: number;
+  /**
+   * Explicit list of secured service families announced in SecuredServiceFamiliesDIB.
+   * Defaults automatically when server unicast/routing security credentials are configured.
+   */
+  securedServiceFamilies?: Array<{ family: number; version: number }>;
 }
 
 /**
@@ -148,9 +168,33 @@ export interface KNXnetIPServerOptions extends Omit<KNXnetIPOptions, "ip"> {
    */
   ignoreACKTimeout?: boolean;
   /**
-   * Optional KNXnet/IP Secure configuration for Secure Routing multicast (03_08_09 §2.2.2).
+   * Optional KNXnet/IP Secure configuration for Secure Routing multicast (03_08_09 §2.2.2)
+   * and Secure TCP unicast sessions (03_08_09 §2.2.3).
    */
   secure?: KNXSecureOptions;
+  /**
+   * Enables the TCP listener on the KNXnet/IP server (03_08_02 §8.4.3).
+   * Defaults to true.
+   */
+  tcp?: boolean;
+  /**
+   * Optional port override for the TCP listener. Defaults to `port` (3671).
+   */
+  tcpPort?: number;
+  /**
+   * Optional host/IP address to bind the TCP listener to. Defaults to "0.0.0.0".
+   */
+  tcpHost?: string;
+  /**
+   * Idle timeout in milliseconds for TCP sockets with no active KNXnet/IP connections or Secure Sessions.
+   * Defaults to 10000 ms (03_08_02 §8.4.3.5).
+   */
+  tcpIdleTimeoutMs?: number;
+  /**
+   * Whether plaintext KNXnet/IP connections (CONNECT_REQUEST, DESCRIPTION_REQUEST, etc.)
+   * are accepted on TCP without a Secure Session. Defaults to true.
+   */
+  allowPlainTcp?: boolean;
 }
 
 export interface ExternalManagerOptions {

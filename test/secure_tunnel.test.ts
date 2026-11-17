@@ -4,7 +4,6 @@ import { KNXnetIPHeader } from "../src/core/KNXnetIPHeader";
 import { CRD, HPAI } from "../src/core/KNXnetIPStructures";
 import {
   ConnectionType,
-  HostProtocolCode,
   KNXnetIPErrorCodes,
   KNXnetIPServiceType,
   SecureSessionStatus,
@@ -169,10 +168,7 @@ class SimulatedSecureTcpServer {
     if (header.serviceType === KNXnetIPServiceType.CONNECT_REQUEST) {
       const hpai = HPAI.NULL_TCP_HPAI.toBuffer();
       const crd = new CRD(ConnectionType.TUNNEL_CONNECTION, 0x11fa).toBuffer(); // 1.1.250
-      const respHeader = new KNXnetIPHeader(
-        KNXnetIPServiceType.CONNECT_RESPONSE,
-        6 + 2 + hpai.length + crd.length,
-      );
+      const respHeader = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, 6 + 2 + hpai.length + crd.length);
       const resp = Buffer.concat([
         respHeader.toBuffer(),
         Buffer.from([this.channelId, KNXnetIPErrorCodes.E_NO_ERROR]),
@@ -190,10 +186,7 @@ class SimulatedSecureTcpServer {
 
     if (header.serviceType === KNXnetIPServiceType.DISCONNECT_REQUEST) {
       const respHeader = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_RESPONSE, 8);
-      const resp = Buffer.concat([
-        respHeader.toBuffer(),
-        Buffer.from([this.channelId, KNXnetIPErrorCodes.E_NO_ERROR]),
-      ]);
+      const resp = Buffer.concat([respHeader.toBuffer(), Buffer.from([this.channelId, KNXnetIPErrorCodes.E_NO_ERROR])]);
       this.sendRawToClient(wrapReply ? this.wrapFromServer(resp) : resp);
     }
   }
@@ -202,10 +195,7 @@ class SimulatedSecureTcpServer {
     // GroupValue_Write 1/1/1 = 1 from 1.1.1
     const cemi = Buffer.from("2900bce011010901010081", "hex");
     const connHeader = Buffer.from([0x04, this.channelId, seq & 0xff, 0x00]);
-    const header = new KNXnetIPHeader(
-      KNXnetIPServiceType.TUNNELLING_REQUEST,
-      6 + connHeader.length + cemi.length,
-    );
+    const header = new KNXnetIPHeader(KNXnetIPServiceType.TUNNELLING_REQUEST, 6 + connHeader.length + cemi.length);
     return Buffer.concat([header.toBuffer(), connHeader, cemi]);
   }
 }

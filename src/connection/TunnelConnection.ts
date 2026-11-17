@@ -5,10 +5,23 @@ import { KNXnetIPServiceType, KNXnetIPErrorCodes, KNXLayer } from "../core/enum/
 
 import { Logger } from "../utils/Logger";
 
+export type TunnelTransportTarget =
+  | {
+      kind: "udp";
+      socket: dgram.Socket;
+    }
+  | {
+      kind: "tcp";
+      tcpConnectionId: string;
+      secureSessionId?: number;
+      secureUserId?: number;
+      sendPacket: (packet: Buffer) => void;
+    };
+
 /**
  * Encapsulates a single KNXnet/IP Tunnelling or Management connection state.
- * Handles sequence numbers, heartbeats, reliable delivery (stop-and-wait),
- * and retransmissions according to KNX Spec Vol 3/8/4.
+ * Handles sequence numbers, heartbeats, reliable delivery (stop-and-wait over UDP),
+ * and direct stream delivery without ACKs over TCP according to KNX Spec Vol 3/8/4 §2.6.
  *
  * ***Don't use this for connect a KNX device. Use KNXTunneling instead.***
  */
@@ -16,6 +29,7 @@ export class TunnelConnection {
   public sno: number = 0;
   public rno: number = 0;
 
+  private readonly transport: TunnelTransportTarget;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private pendingAck: {
     packet: Buffer;
@@ -39,7 +53,7 @@ export class TunnelConnection {
     public readonly knxAddress: number,
     public readonly knxAddressStr: string,
     public readonly knxLayer: KNXLayer,
-    private readonly socket: dgram.Socket,
+    transportOrSocket: dgram.Socket | TunnelTransportTarget,
     private readonly heartbeatTimeoutMs: number,
     private readonly retransmitTimeoutMs: number,
     private readonly maxQueueSize: number,
@@ -47,8 +61,31 @@ export class TunnelConnection {
     private readonly onDisconnect: (channelId: number, sendDisconnect: boolean) => void,
     parentLogger: Logger,
   ) {
+    this.transport =
+      "kind" in transportOrSocket
+        ? transportOrSocket
+        : {
+            kind: "udp",
+            socket: transportOrSocket,
+          };
     this.logger = parentLogger.child({ channelId, IA: knxAddressStr });
     this.resetHeartbeat();
+  }
+
+  public get isTcp(): boolean {
+    return this.transport.kind === "tcp";
+  }
+
+  public get tcpConnectionId(): string | null {
+    return this.transport.kind === "tcp" ? this.transport.tcpConnectionId : null;
+  }
+
+  public get secureSessionId(): number | null {
+    return this.transport.kind === "tcp" ? (this.transport.secureSessionId ?? null) : null;
+  }
+
+  public get secureUserId(): number | null {
+    return this.transport.kind === "tcp" ? (this.transport.secureUserId ?? null) : null;
   }
 
   /**
@@ -66,6 +103,23 @@ export class TunnelConnection {
    * Enqueues a CEMI message to be sent to the client.
    */
   public enqueue(cemiBuffer: Buffer, serviceType: KNXnetIPServiceType): void {
+    if (this.transport.kind === "tcp") {
+      // On TCP, sequence counters are ignored by the receiver (may be 0) and no ACK is expected (03_08_04 §2.6.2)
+      const tunnelHeader = Buffer.from([0x04, this.channelId, 0x00, 0x00]);
+      const responseHeader = new KNXnetIPHeader(
+        serviceType,
+        KNXnetIPHeader.HEADER_SIZE_10 + tunnelHeader.length + cemiBuffer.length,
+      );
+      const packet = Buffer.concat([responseHeader.toBuffer(), tunnelHeader, cemiBuffer]);
+      try {
+        this.transport.sendPacket(packet);
+      } catch (err: any) {
+        this.logger.error(`Failed to send TCP packet on channel ${this.channelId}: ${err?.message ?? err}`);
+        this.onDisconnect(this.channelId, false);
+      }
+      return;
+    }
+
     if (this.maxQueueSize > 0 && this.queue.length >= this.maxQueueSize) {
       this.logger.warn(`Outgoing queue full. Dropping connection.`);
       this.onDisconnect(this.channelId, true);
@@ -95,10 +149,10 @@ export class TunnelConnection {
   }
 
   private sendWithRetry(packet: Buffer, seq: number, isRetransmission: boolean): void {
-    if (!this.socket) return;
+    if (this.transport.kind !== "udp" || !this.transport.socket) return;
 
     try {
-      this.socket.send(packet, this.dataHPAI.port, this.dataHPAI.ipAddress);
+      this.transport.socket.send(packet, this.dataHPAI.port, this.dataHPAI.ipAddress);
     } catch (err: any) {
       this.logger.error(`Failed to send packet to ${this.dataHPAI.ipAddress}: ${err.message}`);
       this.onDisconnect(this.channelId, false);
@@ -133,6 +187,9 @@ export class TunnelConnection {
    */
   public handleAck(seq: number, status: number): void {
     this.resetHeartbeat();
+    if (this.transport.kind === "tcp") {
+      return;
+    }
 
     if (this.pendingAck && this.pendingAck.seq === seq) {
       clearTimeout(this.pendingAck.timer);
@@ -157,6 +214,9 @@ export class TunnelConnection {
    */
   public validateRequest(seq: number): { action: "process" | "discard" | "retransmit_ack"; status: number } {
     this.resetHeartbeat();
+    if (this.transport.kind === "tcp") {
+      return { action: "process", status: KNXnetIPErrorCodes.E_NO_ERROR };
+    }
 
     if (seq === this.rno) {
       // Expected sequence number

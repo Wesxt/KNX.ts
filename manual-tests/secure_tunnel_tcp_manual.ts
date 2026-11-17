@@ -1,243 +1,257 @@
 import net from "node:net";
-import {
-  CEMI,
-  ConnectionType,
-  KNXnetIPErrorCodes,
-  KNXnetIPServiceType,
-  KNXTunneling,
-  SecureSessionStatus,
-  SecureWrapper,
-  SessionAuthenticate,
-  SessionRequest,
-  SessionResponse,
-  SessionStatus,
-  TcpFrameReader,
-  computeSessionKey,
-  deriveDeviceAuthenticationCode,
-  deriveUserPasswordKey,
-  generateX25519KeyPair,
-} from "../src";
+import { KNXnetIPServer } from "../src/connection/KNXnetIPServer";
+import { KNXTunneling } from "../src/connection/KNXTunneling";
+import { TcpFrameReader } from "../src/connection/TcpFrameReader";
 import { KNXnetIPHeader } from "../src/core/KNXnetIPHeader";
-import { CRD, HPAI } from "../src/core/KNXnetIPStructures";
+import { DIB, HPAI, SecuredServiceFamiliesDIB, SupportedServicesDIB } from "../src/core/KNXnetIPStructures";
+import { AllowedSupportedServiceFamilies, DescriptionType, KNXnetIPServiceType } from "../src/core/enum/KNXnetIPEnum";
+import { KNXHelper } from "../src/utils/KNXHelper";
 
-const USER_PASSWORD = process.env.KNX_USER_PASSWORD || "secret";
-const DEVICE_AUTH_PASSWORD = process.env.KNX_DEVICE_AUTH || "trustme";
-const USER_ID = Number(process.env.KNX_USER_ID) || 2;
+const USER_ID = 2;
+const USER_PASSWORD = "tunnel-user-pass";
+const DEVICE_AUTH_PASSWORD = "device-auth-password";
 
-/**
- * Simulated KNX IP Secure TCP Server (03_08_04 & 03_08_09).
- * Note: `KNXnetIPServer` currently supports UDP (Tunneling + Secure Routing Multicast) only;
- * this local TCP server implements the KNX IP Secure Unicast handshake so we can exercise
- * `KNXTunneling` in real TCP + KNX Secure mode end-to-end.
- */
-class SecureTcpManualServer {
-  private server: net.Server | null = null;
-  private clientSocket: net.Socket | null = null;
-  private reader = new TcpFrameReader();
-  public port = 0;
+function buildGroupWriteIndication(srcIA: string, dstGA: string, _dpt: string, value: unknown): Buffer {
+  const srcBuf = KNXHelper.GetAddress(srcIA, ".");
+  const dstBuf = KNXHelper.GetAddress(dstGA, "/");
+  return Buffer.from([
+    0x29,
+    0x00,
+    0xbc,
+    0xe0,
+    srcBuf[0],
+    srcBuf[1],
+    dstBuf[0],
+    dstBuf[1],
+    0x01,
+    0x00,
+    value ? 0x81 : 0x80,
+  ]);
+}
 
-  private readonly serverKeys = generateX25519KeyPair();
-  private clientPublicKey: Buffer | null = null;
-  private sessionKey: Buffer | null = null;
-  private readonly sessionId = 0x0042;
-  private readonly channelId = 0x11;
-  private readonly serverSerial = Buffer.from("00fa11223344", "hex");
-  private txWrapperSeq = 0n;
+async function verifyTcpDescription(port: number): Promise<void> {
+  const socket = await new Promise<net.Socket>((resolve, reject) => {
+    const s = net.createConnection({ host: "127.0.0.1", port }, () => resolve(s));
+    s.once("error", reject);
+  });
 
-  public async start(): Promise<number> {
-    return new Promise((resolve) => {
-      this.server = net.createServer((socket) => {
-        console.log(`[SecureTCP Server] Client TCP socket connected from ${socket.remoteAddress}:${socket.remotePort}`);
-        this.clientSocket = socket;
-        this.reader.reset();
-
-        socket.on("error", (err) => console.error("[SecureTCP Server] Socket error:", err.message));
-        socket.on("data", (chunk) => {
-          const frames = this.reader.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-          for (const frame of frames) {
-            this.onFrame(frame);
-          }
-        });
-      });
-
-      this.server.listen(0, "127.0.0.1", () => {
-        this.port = (this.server!.address() as net.AddressInfo).port;
-        resolve(this.port);
-      });
+  const reader = new TcpFrameReader();
+  const resp = await new Promise<Buffer>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("DESCRIPTION_RESPONSE timeout")), 2000);
+    socket.on("data", (chunk) => {
+      const frames = reader.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+      if (frames.length > 0) {
+        clearTimeout(timer);
+        resolve(frames[0]);
+      }
     });
-  }
-
-  public async stop(): Promise<void> {
-    if (this.clientSocket) {
-      this.clientSocket.destroy();
-      this.clientSocket = null;
-    }
-    if (this.server) {
-      await new Promise<void>((r) => this.server!.close(() => r()));
-      this.server = null;
-    }
-  }
-
-  public wrapAndSend(innerFrame: Buffer): void {
-    const seq = this.txWrapperSeq++;
-    const wrapped = SecureWrapper.wrap({
-      sessionId: this.sessionId,
-      sequenceNumber: seq,
-      serialNumber: this.serverSerial,
-      innerFrame,
-      key: this.sessionKey!,
-    });
-    this.clientSocket?.write(wrapped);
-  }
-
-  public sendTunnelIndication(cemiHex = "2900bce011010901010081", seq = 0): void {
-    const cemi = Buffer.from(cemiHex, "hex");
-    const connHeader = Buffer.from([0x04, this.channelId, seq & 0xff, 0x00]);
-    const header = new KNXnetIPHeader(
-      KNXnetIPServiceType.TUNNELLING_REQUEST,
-      6 + connHeader.length + cemi.length,
+    const hpai = HPAI.NULL_TCP_HPAI.toBuffer();
+    const hdr = new KNXnetIPHeader(
+      KNXnetIPServiceType.DESCRIPTION_REQUEST,
+      KNXnetIPHeader.HEADER_SIZE_10 + hpai.length,
     );
-    const frame = Buffer.concat([header.toBuffer(), connHeader, cemi]);
-    console.log(`[SecureTCP Server] Sending wrapped TUNNELLING_REQUEST (L_Data.ind 1/1/1 = true)`);
-    this.wrapAndSend(frame);
+    socket.write(Buffer.concat([hdr.toBuffer(), hpai]));
+  });
+
+  const hdr = KNXnetIPHeader.fromBuffer(resp);
+  if (hdr.serviceType !== KNXnetIPServiceType.DESCRIPTION_RESPONSE) {
+    throw new Error(`Expected DESCRIPTION_RESPONSE, got 0x${hdr.serviceType.toString(16)}`);
   }
 
-  private onFrame(frame: Buffer): void {
-    const header = KNXnetIPHeader.fromBuffer(frame);
-
-    if (header.serviceType === KNXnetIPServiceType.SESSION_REQUEST) {
-      const req = SessionRequest.fromBuffer(frame);
-      this.clientPublicKey = req.clientPublicKey;
-      this.sessionKey = computeSessionKey(this.serverKeys.privateKey, this.clientPublicKey);
-      this.txWrapperSeq = 0n;
-
-      console.log("[SecureTCP Server] <- Received SESSION_REQUEST (X25519 ECDH)");
-      console.log("[SecureTCP Server]    Derived AES-128 Session Key:", this.sessionKey.toString("hex"));
-
-      const devAuthCode = deriveDeviceAuthenticationCode(DEVICE_AUTH_PASSWORD);
-      const resp = SessionResponse.createAuthenticated(
-        this.sessionId,
-        this.serverKeys.publicKeyRaw,
-        this.clientPublicKey,
-        devAuthCode,
-      );
-      console.log(`[SecureTCP Server] -> Sending SESSION_RESPONSE (Session ID: 0x${this.sessionId.toString(16).padStart(4, "0")})`);
-      this.clientSocket?.write(resp.toBuffer());
-      return;
+  let offset = 6;
+  let hasSecurity = false;
+  let securedFamilies: number[] = [];
+  while (offset < resp.length) {
+    const len = resp.readUInt8(offset);
+    const type = resp.readUInt8(offset + 1);
+    const dibBuf = resp.subarray(offset, offset + len);
+    if (type === DescriptionType.SUPP_SVC_FAMILIES) {
+      const supp = SupportedServicesDIB.fromBuffer(dibBuf);
+      hasSecurity = supp.services.some((s) => s.family === AllowedSupportedServiceFamilies.Security);
+    } else if (type === DescriptionType.SECURED_SERVICE_FAMILIES) {
+      const sec = SecuredServiceFamiliesDIB.fromBuffer(dibBuf);
+      securedFamilies = sec.services.map((s) => s.family);
+    } else {
+      DIB.fromBuffer(dibBuf);
     }
-
-    if (header.serviceType === KNXnetIPServiceType.SECURE_WRAPPER) {
-      const unwrapped = SecureWrapper.unwrap(frame, this.sessionKey!);
-      const inner = unwrapped.innerFrame;
-      const innerHeader = KNXnetIPHeader.fromBuffer(inner);
-
-      if (innerHeader.serviceType === KNXnetIPServiceType.SESSION_AUTHENTICATE) {
-        const auth = SessionAuthenticate.fromBuffer(inner);
-        const expectedUserKey = deriveUserPasswordKey(USER_PASSWORD);
-        const ok = auth.verifyMac(this.clientPublicKey!, this.serverKeys.publicKeyRaw, expectedUserKey);
-        const statusVal = ok
-          ? SecureSessionStatus.STATUS_AUTHENTICATION_SUCCESS
-          : SecureSessionStatus.STATUS_AUTHENTICATION_FAILED;
-
-        console.log(`[SecureTCP Server] <- Received SECURE_WRAPPER(SESSION_AUTHENTICATE) userId=${auth.userId}, valid=${ok}`);
-        console.log(`[SecureTCP Server] -> Sending SECURE_WRAPPER(SESSION_STATUS=${ok ? "SUCCESS" : "FAILED"})`);
-        this.wrapAndSend(new SessionStatus(statusVal).toBuffer());
-        return;
-      }
-
-      if (innerHeader.serviceType === KNXnetIPServiceType.CONNECT_REQUEST) {
-        console.log("[SecureTCP Server] <- Received SECURE_WRAPPER(CONNECT_REQUEST)");
-        const hpai = HPAI.NULL_TCP_HPAI.toBuffer();
-        const crd = new CRD(ConnectionType.TUNNEL_CONNECTION, 0x11fa).toBuffer(); // 1.1.250
-        const respHeader = new KNXnetIPHeader(
-          KNXnetIPServiceType.CONNECT_RESPONSE,
-          6 + 2 + hpai.length + crd.length,
-        );
-        const resp = Buffer.concat([
-          respHeader.toBuffer(),
-          Buffer.from([this.channelId, KNXnetIPErrorCodes.E_NO_ERROR]),
-          hpai,
-          crd,
-        ]);
-        console.log("[SecureTCP Server] -> Sending SECURE_WRAPPER(CONNECT_RESPONSE, IA=1.1.250)");
-        this.wrapAndSend(resp);
-        return;
-      }
-
-      if (innerHeader.serviceType === KNXnetIPServiceType.TUNNELLING_REQUEST) {
-        const cemiBuf = inner.subarray(10);
-        const cemi = CEMI.fromBuffer(cemiBuf) as any;
-        console.log(
-          `[SecureTCP Server] <- Received SECURE_WRAPPER(TUNNELLING_REQUEST): ${cemi.sourceAddress} -> ${cemi.destinationAddress} (raw=${cemiBuf.toString("hex")})`,
-        );
-        return;
-      }
-
-      if (innerHeader.serviceType === KNXnetIPServiceType.DISCONNECT_REQUEST) {
-        console.log("[SecureTCP Server] <- Received SECURE_WRAPPER(DISCONNECT_REQUEST)");
-        const respHeader = new KNXnetIPHeader(KNXnetIPServiceType.DISCONNECT_RESPONSE, 8);
-        const resp = Buffer.concat([
-          respHeader.toBuffer(),
-          Buffer.from([this.channelId, KNXnetIPErrorCodes.E_NO_ERROR]),
-        ]);
-        this.wrapAndSend(resp);
-        return;
-      }
-    }
+    offset += len;
   }
+
+  console.log(
+    `[ManualTest] TCP DESCRIPTION_RESPONSE received (socket stayed open=${!socket.destroyed}, Security=${hasSecurity}, SecuredFamilies=[${securedFamilies.join(", ")}])`,
+  );
+  socket.destroy();
 }
 
 async function main() {
-  console.log("==================================================================");
-  console.log("  KNX IP Secure TCP Manual Test (Simulated Server + KNXTunneling)");
-  console.log("==================================================================\n");
+  console.log("=======================================================================");
+  console.log("  KNXnetIPServer TCP + KNX IP Secure Manual Test (Real KNXnetIPServer)");
+  console.log("=======================================================================\n");
 
-  const server = new SecureTcpManualServer();
-  const port = await server.start();
-  console.log(`[SecureTCP Server] Listening on 127.0.0.1:${port}\n`);
-
-  const client = new KNXTunneling({
+  const server = new KNXnetIPServer({
     ip: "127.0.0.1",
-    port,
-    transport: "TCP",
-    autoReconnect: false,
+    localIp: "127.0.0.1",
+    tcpHost: "127.0.0.1",
+    port: 0,
+    individualAddress: "15.15.0",
+    clientAddrs: "15.15.240:4",
+    friendlyName: "KNX.ts Secure TCP Server",
     logOptions: { level: "info", enabled: true },
     secure: {
       userId: USER_ID,
       userPassword: USER_PASSWORD,
       deviceAuthenticationPassword: DEVICE_AUTH_PASSWORD,
-      requireDeviceAuthentication: true,
     },
   });
 
-  client.on("indication", (cemi: any) => {
-    console.log(
-      `[TunnelClient] <- Decrypted indication received: ${cemi.sourceAddress} -> ${cemi.destinationAddress}`,
-    );
-  });
-
-  client.on("error", (err) => {
-    console.error("[TunnelClient] Error:", err.message);
-  });
+  await server.connect();
+  const port = server.tcpListeningPort;
+  console.log(`[KNXnetIPServer] Listening on UDP+TCP 127.0.0.1:${port}\n`);
 
   try {
-    console.log("[TunnelClient] Connecting via TCP + KNX IP Secure...");
-    await client.connect();
-    console.log(`[TunnelClient] Connected! Assigned IA: ${client.individualAddress}\n`);
+    // 1. Discovery over TCP (DESCRIPTION_REQUEST)
+    await verifyTcpDescription(port);
 
-    console.log('[TunnelClient] -> Sending encrypted write("1/1/1", "1.001", true)...');
-    await client.write("1/1/1", "1.001", true);
-    await new Promise((r) => setTimeout(r, 150));
+    // 2. KNX IP Secure TCP Tunnelling E2E
+    console.log("\n[1/3] Connecting KNXTunneling via KNX IP Secure over TCP...");
+    const secureClient = new KNXTunneling({
+      ip: "127.0.0.1",
+      port,
+      transport: "TCP",
+      autoReconnect: false,
+      logOptions: { level: "info", enabled: true },
+      secure: {
+        userId: USER_ID,
+        userPassword: USER_PASSWORD,
+        deviceAuthenticationPassword: DEVICE_AUTH_PASSWORD,
+        requireDeviceAuthentication: true,
+      },
+    });
 
-    server.sendTunnelIndication();
-    await new Promise((r) => setTimeout(r, 150));
+    let serverRxCount = 0;
+    let clientConCount = 0;
+    let clientIndCount = 0;
 
-    console.log("\n[TunnelClient] Disconnecting...");
-    client.disconnect();
-    await new Promise((r) => setTimeout(r, 150));
+    const onServerInd = (cemi: any) => {
+      serverRxCount++;
+      console.log(
+        `[KNXnetIPServer] <- Received CEMI (#${serverRxCount}): ${cemi.sourceAddress} -> ${cemi.destinationAddress}`,
+      );
+    };
+    server.on("indication", onServerInd);
+
+    secureClient.on("indication", (cemi: any) => {
+      if (cemi.messageCode === 0x2e) {
+        clientConCount++;
+      } else {
+        clientIndCount++;
+      }
+      const totalClient = clientConCount + clientIndCount;
+      if (totalClient <= 5 || totalClient % 10 === 0) {
+        console.log(
+          `[SecureClient] <- Decrypted frame (#${totalClient}, msgCode=0x${cemi.messageCode.toString(16)}): ${cemi.sourceAddress} -> ${cemi.destinationAddress}`,
+        );
+      }
+    });
+    secureClient.on("error", (err) => {
+      console.error("[SecureClient] Error:", err.message);
+    });
+
+    await secureClient.connect();
+    console.log(`[SecureClient] Connected! Assigned IA: ${secureClient.individualAddress}`);
+
+    const clientWriteCount = 20;
+    console.log(`[SecureClient] -> Sending ${clientWriteCount} encrypted GroupValue_Write telegrams...`);
+    for (let i = 1; i <= clientWriteCount; i++) {
+      await secureClient.write(`1/1/${i}`, "1.001", i % 2 === 1);
+      console.log(`[SecureClient] -> Sending 1/1/${i}`);
+    }
+
+    const clientReadCount = 5;
+    console.log(`[SecureClient] -> Sending ${clientReadCount} encrypted GroupValue_Read telegrams...`);
+    for (let i = 1; i <= clientReadCount; i++) {
+      await secureClient.read(`1/2/${i}`);
+    }
+
+    const serverTxCount = 20;
+    console.log(`[KNXnetIPServer] -> Broadcasting ${serverTxCount} L_Data.ind telegrams over Secure TCP...`);
+    for (let i = 1; i <= serverTxCount; i++) {
+      await server.send(buildGroupWriteIndication(`1.1.${10 + i}`, `2/1/${i}`, "1.001", i % 2 === 0));
+    }
+
+    const expectedClientTotal = clientWriteCount + clientReadCount;
+    const deadline = Date.now() + 3000;
+    while (
+      (serverRxCount < expectedClientTotal || clientConCount < expectedClientTotal || clientIndCount < serverTxCount) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+
+    console.log(
+      `[1/3 Summary] Server received=${serverRxCount}/${expectedClientTotal}, Client L_Data.con=${clientConCount}/${expectedClientTotal}, Client L_Data.ind=${clientIndCount}/${serverTxCount}`,
+    );
+    if (
+      serverRxCount !== expectedClientTotal ||
+      clientConCount !== expectedClientTotal ||
+      clientIndCount !== serverTxCount
+    ) {
+      throw new Error("Telegram count mismatch in [1/3]");
+    }
+    server.removeListener("indication", onServerInd);
+
+    console.log("[SecureClient] Disconnecting...");
+    secureClient.disconnect();
+    await new Promise((r) => setTimeout(r, 100));
+
+    // 3. Plain TCP Tunnelling E2E on the same server
+    console.log("\n[2/3] Connecting KNXTunneling via Plain TCP...");
+    server.on("indication", (cemi: any) => {
+      console.log(`[KNXnetIPServer] <- Received CEMI: ${cemi.sourceAddress} -> ${cemi.destinationAddress}`);
+    });
+    const plainClient = new KNXTunneling({
+      ip: "127.0.0.1",
+      port,
+      transport: "TCP",
+      autoReconnect: false,
+      logOptions: { level: "warn", enabled: true },
+    });
+    await plainClient.connect();
+    console.log(`[PlainClient] Connected! Assigned IA: ${plainClient.individualAddress}`);
+    await plainClient.write("1/1/3", "1.001", false);
+    await new Promise((r) => setTimeout(r, 80));
+    plainClient.disconnect();
+    await new Promise((r) => setTimeout(r, 80));
+
+    // 4. Negative check: Wrong password must fail
+    console.log("\n[3/3] Verifying invalid password rejection...");
+    const badClient = new KNXTunneling({
+      ip: "127.0.0.1",
+      port,
+      transport: "TCP",
+      autoReconnect: false,
+      logOptions: { level: "noLog", enabled: false },
+      secure: {
+        userId: USER_ID,
+        userPassword: "wrong-password",
+        deviceAuthenticationPassword: DEVICE_AUTH_PASSWORD,
+        requireDeviceAuthentication: true,
+      },
+    });
+    badClient.on("error", () => {});
+    try {
+      await badClient.connect();
+      throw new Error("Expected badClient.connect() to fail, but it succeeded");
+    } catch (err: any) {
+      console.log(`[BadClient] Rejected as expected: ${err.message}`);
+    } finally {
+      badClient.disconnect();
+    }
+
+    console.log("\nAll real KNXnetIPServer TCP + Secure checks succeeded.");
   } finally {
-    await server.stop();
-    console.log("[SecureTCP Server] Stopped.");
+    server.disconnect();
+    console.log("[KNXnetIPServer] Stopped.");
   }
 }
 

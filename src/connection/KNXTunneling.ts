@@ -392,7 +392,6 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         const body = Buffer.concat([Buffer.from([this.channelId, 0x00]), hpai.toBuffer()]);
         header.totalLength = 6 + body.length;
         this.sendRaw(Buffer.concat([header.toBuffer(), body]));
-        this.closeSecureSessionIfOpen();
       } catch {
         /* empty */
       }
