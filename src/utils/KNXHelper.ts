@@ -41,11 +41,11 @@ export class KNXHelper {
     throw new Error("This class is static");
   }
   /**
-   * Parsea un Buffer KNX (2 bytes) a su representación en string según el formato especificado.
-   * Si es un buffer la dirección entonces se delega a {@link GetAddress_} para retornar un buffer
-   * @param addr Buffer de 2 bytes conteniendo la dirección raw o un string indicando la dirección.
-   * @param separator Separador visual ("." para Individual, "/" para Grupo). Por defecto infiere Grupo.
-   * @param threeLevelAddressing Si es true, fuerza formato de grupo 3 niveles (x/y/z). Si es false y es grupo, usa 2 niveles (x/y).
+   * Parses a KNX Buffer (2 bytes) into its string representation according to the specified format.
+   * If `addr` is a string, delegates to {@link GetAddress_} to return a Buffer.
+   * @param addr 2-byte Buffer containing the raw address, a numeric 16-bit address, or a string address.
+   * @param separator Visual separator ("." for Individual, "/" for Group). Defaults to Group ("/").
+   * @param threeLevelAddressing If true, forces 3-level group format (x/y/z). If false and group, uses 2-level (x/y).
    */
   static GetAddress(addr: string, separator?: "." | "/", threeLevelAddressing?: boolean): Buffer;
   static GetAddress(addr: number, separator?: "." | "/", threeLevelAddressing?: boolean): string;
@@ -55,19 +55,19 @@ export class KNXHelper {
     separator: "." | "/" = "/",
     threeLevelAddressing: boolean = true,
   ): Buffer | string {
-    // 1. Caso String: Delegar a GetAddress_
+    // 1. String case: delegate to GetAddress_
     if (typeof addr === "string") {
       return this.GetAddress_(addr);
     }
 
-    // 2. Caso Number: llamar recursivamente
+    // 2. Number case: convert to 2-byte Buffer and recurse
     if (typeof addr === "number") {
       const buffer = Buffer.alloc(2);
       buffer.writeUint16BE(addr & 0xffff);
       return this.GetAddress(buffer, separator, threeLevelAddressing) as string;
     }
 
-    // 3. Caso Buffer
+    // 3. Buffer case
     if (Buffer.isBuffer(addr)) {
       if (addr.length < 2) {
         throw new Error("KNX Address buffer must be at least 2 bytes");
@@ -77,15 +77,15 @@ export class KNXHelper {
       const lowByte = addr[1];
       const isGroup = separator === "/";
 
-      // Caso A: Dirección de Grupo 2 Niveles (Main/Sub11)
+      // Case A: 2-level Group Address (Main/Sub11)
       if (isGroup && !threeLevelAddressing) {
         const main = highByte >> 3; // 5 bits
-        const sub = ((highByte & 0x07) << 8) | lowByte; // 3 bits altos + 8 bits bajos (Usar OR bitwise | es más seguro que +)
+        const sub = ((highByte & 0x07) << 8) | lowByte; // 3 high bits + 8 low bits (bitwise OR is safer than +)
 
         return `${main}/${sub}`;
       }
 
-      // Caso B: Dirección de Grupo 3 Niveles (Main/Mid/Sub)
+      // Case B: 3-level Group Address (Main/Mid/Sub)
       if (isGroup) {
         const main = (highByte >> 3) & 0x1f; // 5 bits (0-31)
         const middle = highByte & 0x07; // 3 bits (0-7)
@@ -94,8 +94,8 @@ export class KNXHelper {
         return `${main}/${middle}/${sub}`;
       }
 
-      // Caso C: Dirección Individual (Area.Line.Device)
-      // Estándar: Area (4 bits), Line (4 bits), Device (8 bits)
+      // Case C: Individual Address (Area.Line.Device)
+      // Standard: Area (4 bits), Line (4 bits), Device (8 bits)
       const area = highByte >> 4; // 4 bits
       const line = highByte & 0x0f; // 4 bits
       const device = lowByte; // 8 bits
@@ -256,54 +256,41 @@ export class KNXHelper {
   // }
 
   /**
-   * Escribe los datos en el datagrama.
+   * Writes data into the datagram.
    * @param datagram PDU
-   * @param data
-   * @param dataStart Debe ser siempre en el indice donde están los bits menos significativos del APCI
-   * @param isShort Si es true, el dato se incrusta en los 6 bits del APCI (DPT 1, 2, 3)
+   * @param data Payload buffer
+   * @param dataStart Index of the byte containing the least significant bits of the APCI
+   * @param isShort If true, the data is embedded in the 6 bits of the APCI (DPT 1, 2, 3)
    */
   static WriteData(datagram: Buffer, data: Buffer, dataStart: number, isShort: boolean = false) {
     if (!data || data.length === 0) return;
 
-    // ESTRATEGIA: DPT9 (Float 16-bit)
-    // Asumimos que si vienen 4 bytes, es un Float32 crudo que debe convertirse a DPT9
-    // !! No es necesario si ya hay una clase que lo codifica, decidir procesarlo aqui desafia lo que se espera de esta escritura
-    // if (data.length === 4) {
-    //   const floatValue = data.readFloatLE(0);
-    //   const dpt9Buffer = this.encodeFloatToDPT9(floatValue);
-
-    //   // DPT9 siempre ocupa 2 bytes y va después del byte de control APCI
-    //   datagram[dataStart + 1] = dpt9Buffer[0];
-    //   datagram[dataStart + 2] = dpt9Buffer[1];
-    //   return;
-    // }
-
-    // ESTRATEGIA: Optimización "Short Data" (6 bits)
-    // Si es 1 byte y el valor es pequeño (<= 0x3F), asumimos que es DPT1/2/3 y lo incrustamos.
+    // STRATEGY: "Short Data" optimization (6 bits)
+    // If 1 byte and small value (<= 0x3F), assume DPT1/2/3 and embed it.
     if (isShort) {
-      // Usamos OR para mezclar los 6 bits bajos con el comando existente en dataStart
+      // Use OR to merge the lower 6 bits with the existing command at dataStart
       datagram[dataStart] = (datagram[dataStart] & 0xc0) | (data[0] & 0x3f);
       return;
     }
 
-    // ESTRATEGIA: Datos estándar (> 6 bits o arrays largos)
-    // Se escriben a partir del siguiente byte (dataStart + 1)
+    // STRATEGY: Standard data (> 6 bits or longer arrays)
+    // Written starting at the next byte (dataStart + 1)
     for (let i = 0; i < data.length; i++) {
       datagram[dataStart + 1 + i] = data[i];
     }
   }
 
   /**
-   * Verifica si una dirección de grupo KNX es válida.
-   * Los formatos admitidos son:
-   *   - 3 niveles: "main/middle/sub" donde:
+   * Checks whether a KNX group address string is valid.
+   * Supported formats:
+   *   - 3-level: "main/middle/sub" where:
    *       main: 0-31, middle: 0-7, sub: 0-255.
-   *   - 2 niveles: "main/sub" donde:
+   *   - 2-level: "main/sub" where:
    *       main: 0-31, sub: 0-2047.
-   *   - 1 nivel: un número entre 0 y 65535.
+   *   - 1-level: a number between 0 and 65535.
    *
-   * @param address Dirección de grupo en formato string.
-   * @returns true si la dirección es válida; false en caso contrario.
+   * @param address Group address string.
+   * @returns true if the address is valid; false otherwise.
    */
   static isValidGroupAddress(address: string): boolean {
     const threeLevelRegex = /^(\d{1,2})\/(\d{1,2})\/(\d{1,3})$/;
@@ -328,14 +315,14 @@ export class KNXHelper {
   }
 
   /**
-   * Verifica si una dirección individual KNX es válida.
-   * Formato válido: "area.line.device" donde:
+   * Checks whether a KNX individual address string is valid.
+   * Valid format: "area.line.device" where:
    *   - area: 0–15
    *   - line: 0–15
    *   - device: 0–255
    *
-   * @param address Dirección individual en formato string.
-   * @returns true si la dirección es válida; false en caso contrario.
+   * @param address Individual address string.
+   * @returns true if the address is valid; false otherwise.
    */
   static isValidIndividualAddress(address: string): boolean {
     const regex = /^(\d{1,2})\.(\d{1,2})\.(\d{1,3})$/;
@@ -350,12 +337,28 @@ export class KNXHelper {
   }
 
   /**
-   * Verifica si un Buffer de 2 octetos representa una dirección de grupo KNX válida.
+   * Converts a numeric 16-bit KNX individual address to string (`"area.line.device"`).
    *
-   * Se asume que la dirección se codifica en 2 bytes (0–65535).
+   * @param address 16-bit encoded individual address (`0..65535`, e.g. `0x1101` -> `"1.1.1"`).
+   * @returns Individual address in `"area.line.device"` format.
+   */
+  static individualAddressToString(address: number): string {
+    if (!Number.isInteger(address) || address < 0 || address > 0xffff) {
+      throw new InvalidKnxAddressException(`Invalid individual address number: ${address}`);
+    }
+    const area = (address >> 12) & 0x0f;
+    const line = (address >> 8) & 0x0f;
+    const device = address & 0xff;
+    return `${area}.${line}.${device}`;
+  }
+
+  /**
+   * Checks whether a 2-octet Buffer represents a valid KNX group address.
    *
-   * @param buffer Buffer con la dirección de grupo.
-   * @returns true si el buffer es válido; false en caso contrario.
+   * Assumes the address is encoded in 2 bytes (0–65535).
+   *
+   * @param buffer Buffer containing the group address.
+   * @returns true if the buffer is valid; false otherwise.
    */
   static isValidGroupAddressBuffer(buffer: Buffer): boolean {
     if (buffer.length !== 2) return false;

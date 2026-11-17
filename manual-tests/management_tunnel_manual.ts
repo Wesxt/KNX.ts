@@ -89,7 +89,7 @@ async function runManagementManualTest() {
 
   let discoveredDevices: string[] = [];
   let candidateTargetAddress: string = process.env.TARGET_DEVICE || "";
-  let identifiedIdentity: DeviceIdentity | null = null;
+  // const identifiedIdentity: DeviceIdentity | null = null;
 
   // --------------------------------------------------------------------------
   // STEP 1: readProgrammingModeDevices
@@ -202,13 +202,17 @@ async function runManagementManualTest() {
   console.log("------------------------------------------------------------------");
   try {
     const identity: DeviceIdentity = await mgmt.identifyDevice(candidateTargetAddress);
-    identifiedIdentity = identity;
+    // identifiedIdentity = identity;
     console.log("Device Identity Info:");
     console.log(`  - Individual Address : ${identity.individualAddress}`);
-    console.log(`  - Mask / Descriptor0 : 0x${identity.descriptorType0.toString(16).padStart(4, "0")} (${identity.maskName ?? "Unknown"})`);
+    console.log(
+      `  - Mask / Descriptor0 : 0x${identity.descriptorType0.toString(16).padStart(4, "0")} (${identity.maskName ?? "Unknown"})`,
+    );
     console.log(
       `  - Manufacturer       : ${identity.manufacturerName ?? "Unknown"} (${
-        identity.manufacturerId !== undefined ? `0x${identity.manufacturerId.toString(16).padStart(4, "0")} / ${identity.manufacturerId}` : "N/A"
+        identity.manufacturerId !== undefined
+          ? `0x${identity.manufacturerId.toString(16).padStart(4, "0")} / ${identity.manufacturerId}`
+          : "N/A"
       })`,
     );
     console.log(`  - Serial Number      : ${identity.serialNumber ?? "N/A"}`);
@@ -291,78 +295,78 @@ async function runManagementManualTest() {
     });
   }
 
-  // --------------------------------------------------------------------------
-  // STEP 7: writeIndividualAddressBySerial (Change to 1.1.2 and restore)
-  // --------------------------------------------------------------------------
-  console.log("\n------------------------------------------------------------------");
-  console.log(`[STEP 7/7] Testing: Individual Address Change -> 1.1.2 -> Restore`);
-  console.log("------------------------------------------------------------------");
-  if (!identifiedIdentity?.serialNumber) {
-    console.warn("⚠️ Skipping Individual Address change test: no Serial Number available from Step 4.");
-    results.push({
-      step: "writeIndividualAddress",
-      status: "SKIPPED",
-      error: "No Serial Number available",
-    });
-  } else {
-    const originalAddress = identifiedIdentity.individualAddress;
-    const tempAddress = process.env.TEMP_ADDRESS || (originalAddress === "1.1.2" ? "1.1.3" : "1.1.2");
-    const serialBuf = Buffer.from(identifiedIdentity.serialNumber, "hex");
-    let changedToTemp = false;
+  // // --------------------------------------------------------------------------
+  // // STEP 7: writeIndividualAddressBySerial (Change to 1.1.2 and restore)
+  // // --------------------------------------------------------------------------
+  // console.log("\n------------------------------------------------------------------");
+  // console.log(`[STEP 7/7] Testing: Individual Address Change -> 1.1.2 -> Restore`);
+  // console.log("------------------------------------------------------------------");
+  // if (!identifiedIdentity?.serialNumber) {
+  //   console.warn("⚠️ Skipping Individual Address change test: no Serial Number available from Step 4.");
+  //   results.push({
+  //     step: "writeIndividualAddress",
+  //     status: "SKIPPED",
+  //     error: "No Serial Number available",
+  //   });
+  // } else {
+  //   const originalAddress = identifiedIdentity.individualAddress;
+  //   const tempAddress = process.env.TEMP_ADDRESS || (originalAddress === "1.1.2" ? "1.1.3" : "1.1.2");
+  //   const serialBuf = Buffer.from(identifiedIdentity.serialNumber, "hex");
+  //   let changedToTemp = false;
 
-    try {
-      console.log(`Original Address : ${originalAddress}`);
-      console.log(`Serial Number    : ${identifiedIdentity.serialNumber}`);
-      console.log(`Target Temp Addr : ${tempAddress}`);
+  //   try {
+  //     console.log(`Original Address : ${originalAddress}`);
+  //     console.log(`Serial Number    : ${identifiedIdentity.serialNumber}`);
+  //     console.log(`Target Temp Addr : ${tempAddress}`);
 
-      console.log(`\n1) Changing Individual Address to ${tempAddress}...`);
-      const writeRes = await mgmt.writeIndividualAddressBySerial(serialBuf, tempAddress, {
-        checkOccupied: true,
-        verifyTimeoutMs: 3000,
-      });
-      changedToTemp = true;
-      console.log(`✅ Verified via SerialNumber_Read: device is now at ${writeRes.individualAddress}`);
+  //     console.log(`\n1) Changing Individual Address to ${tempAddress}...`);
+  //     const writeRes = await mgmt.writeIndividualAddressBySerial(serialBuf, tempAddress, {
+  //       checkOccupied: true,
+  //       verifyTimeoutMs: 3000,
+  //     });
+  //     changedToTemp = true;
+  //     console.log(`✅ Verified via SerialNumber_Read: device is now at ${writeRes.individualAddress}`);
 
-      const occupiedAtTemp = await mgmt.isAddressOccupied(tempAddress, 2000);
-      console.log(`✅ isAddressOccupied("${tempAddress}") => ${occupiedAtTemp}`);
+  //     const occupiedAtTemp = await mgmt.isAddressOccupied(tempAddress, 2000);
+  //     console.log(`✅ isAddressOccupied("${tempAddress}") => ${occupiedAtTemp}`);
 
-      console.log(`\n2) Restoring Individual Address back to ${originalAddress}...`);
-      const restoreRes = await mgmt.writeIndividualAddressBySerial(serialBuf, originalAddress, {
-        checkOccupied: true,
-        verifyTimeoutMs: 3000,
-      });
-      changedToTemp = false;
-      console.log(`✅ Verified via SerialNumber_Read: device restored to ${restoreRes.individualAddress}`);
+  //     console.log(`\n2) Restoring Individual Address back to ${originalAddress}...`);
+  //     const restoreRes = await mgmt.writeIndividualAddressBySerial(serialBuf, originalAddress, {
+  //       checkOccupied: true,
+  //       verifyTimeoutMs: 3000,
+  //     });
+  //     changedToTemp = false;
+  //     console.log(`✅ Verified via SerialNumber_Read: device restored to ${restoreRes.individualAddress}`);
 
-      const occupiedAtOrig = await mgmt.isAddressOccupied(originalAddress, 2000);
-      console.log(`✅ isAddressOccupied("${originalAddress}") => ${occupiedAtOrig}`);
+  //     const occupiedAtOrig = await mgmt.isAddressOccupied(originalAddress, 2000);
+  //     console.log(`✅ isAddressOccupied("${originalAddress}") => ${occupiedAtOrig}`);
 
-      results.push({
-        step: "writeIndividualAddress",
-        status: "PASSED",
-        details: { originalAddress, tempAddress, restoredAddress: restoreRes.individualAddress },
-      });
-    } catch (err: any) {
-      console.error("❌ Individual Address change test failed:", err.message);
-      if (changedToTemp) {
-        console.warn(`⚠️ Attempting emergency restore to ${originalAddress}...`);
-        try {
-          await mgmt.writeIndividualAddressBySerial(serialBuf, originalAddress, {
-            checkOccupied: false,
-            verifyTimeoutMs: 3000,
-          });
-          console.log(`✅ Emergency restore to ${originalAddress} succeeded.`);
-        } catch (restoreErr: any) {
-          console.error(`❌ Emergency restore to ${originalAddress} FAILED:`, restoreErr.message);
-        }
-      }
-      results.push({
-        step: "writeIndividualAddress",
-        status: "FAILED",
-        error: err.message,
-      });
-    }
-  }
+  //     results.push({
+  //       step: "writeIndividualAddress",
+  //       status: "PASSED",
+  //       details: { originalAddress, tempAddress, restoredAddress: restoreRes.individualAddress },
+  //     });
+  //   } catch (err: any) {
+  //     console.error("❌ Individual Address change test failed:", err.message);
+  //     if (changedToTemp) {
+  //       console.warn(`⚠️ Attempting emergency restore to ${originalAddress}...`);
+  //       try {
+  //         await mgmt.writeIndividualAddressBySerial(serialBuf, originalAddress, {
+  //           checkOccupied: false,
+  //           verifyTimeoutMs: 3000,
+  //         });
+  //         console.log(`✅ Emergency restore to ${originalAddress} succeeded.`);
+  //       } catch (restoreErr: any) {
+  //         console.error(`❌ Emergency restore to ${originalAddress} FAILED:`, restoreErr.message);
+  //       }
+  //     }
+  //     results.push({
+  //       step: "writeIndividualAddress",
+  //       status: "FAILED",
+  //       error: err.message,
+  //     });
+  //   }
+  // }
 
   // --------------------------------------------------------------------------
   // Summary

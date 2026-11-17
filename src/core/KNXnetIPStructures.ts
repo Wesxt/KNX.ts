@@ -1,4 +1,4 @@
-import { HostProtocolCode, ConnectionType, TunnelLink } from "./enum/KNXnetIPEnum";
+import { HostProtocolCode, ConnectionType, TunnelLink, SRPType } from "./enum/KNXnetIPEnum";
 import { DescriptionType, KNXMedium } from "./enum/KNXnetIPEnum";
 import { DeviceDescriptorType0 } from "./resources/DeviceDescriptorType";
 
@@ -214,6 +214,8 @@ export abstract class DIB {
         return IPConfigDIB.fromBuffer(data);
       case DescriptionType.IP_CUR_CONFIG:
         return IPCurrentConfigDIB.fromBuffer(data);
+      case DescriptionType.KNX_ADDRESSES:
+        return KNXAddressesDIB.fromBuffer(data);
       case DescriptionType.SECURED_SERVICE_FAMILIES:
         return SecuredServiceFamiliesDIB.fromBuffer(data);
       case DescriptionType.TUNNELLING_INFO:
@@ -683,5 +685,33 @@ export class SRP {
     const type = buffer.readUInt8(1);
     const data = buffer.subarray(2, len);
     return new SRP(type & 0x7f, data, (type & 0x80) !== 0);
+  }
+
+  /** Creates a Select By Programming Mode SRP (03_08_02 §7.6.3.3.3). */
+  static selectByProgrammingMode(isMandatory: boolean = true): SRP {
+    return new SRP(SRPType.SELECT_BY_PROGRAMMING_MODE, Buffer.alloc(0), isMandatory);
+  }
+
+  /** Creates a Select By MAC Address SRP (03_08_02 §7.6.3.3.4). */
+  static selectByMacAddress(macAddress: string | Buffer, isMandatory: boolean = true): SRP {
+    const macBuf = Buffer.isBuffer(macAddress) ? macAddress : Buffer.from(macAddress.replace(/[:-]/g, ""), "hex");
+    if (macBuf.length !== 6) {
+      throw new Error(`Invalid MAC address for SRP: expected 6 octets, got ${macBuf.length}`);
+    }
+    return new SRP(SRPType.SELECT_BY_MAC_ADDRESS, macBuf, isMandatory);
+  }
+
+  /** Creates a Select By Service SRP (03_08_02 §7.6.3.3.5). */
+  static selectByService(family: number, minVersion: number, isMandatory: boolean = true): SRP {
+    return new SRP(SRPType.SELECT_BY_SERVICE, Buffer.from([family, minVersion]), isMandatory);
+  }
+
+  /**
+   * Creates a Request DIBs SRP (03_08_02 §7.6.3.3.6).
+   * Odd lists are padded with 0x00 so the SRP structure length is even.
+   */
+  static requestDibs(dibTypes: number[], isMandatory: boolean = false): SRP {
+    const bytes = dibTypes.length % 2 === 1 ? [...dibTypes, 0x00] : [...dibTypes];
+    return new SRP(SRPType.REQUEST_DIBS, Buffer.from(bytes), isMandatory);
   }
 }

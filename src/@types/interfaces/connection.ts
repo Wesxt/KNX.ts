@@ -1,4 +1,4 @@
-import { ConnectionType } from "../../core/enum/KNXnetIPEnum";
+import { ConnectionType, KNXLayer, TunnelLink } from "../../core/enum/KNXnetIPEnum";
 import { CEMIInstance } from "../../core/CEMI";
 
 /**
@@ -96,6 +96,16 @@ export interface KNXTunnelingOptions extends KNXnetIPOptions {
    * Use DEVICE_MGMT_CONNECTION (0x03) for device configuration and management.
    */
   connectionType?: ConnectionType;
+  /**
+   * KNX link layer requested in CRI (`LINK_LAYER` 0x02, `RAW_LAYER` 0x04, `BUSMONITOR_LAYER` 0x80).
+   * Defaults to `LINK_LAYER` (03_08_04 §2.2.2–2.2.4).
+   */
+  knxLayer?: KNXLayer | TunnelLink;
+  /**
+   * Optional specific KNX Individual Address to request via Extended CRI (03_08_04 §5.4.3.2).
+   * Can be a string (`"15.15.2"`) or a 16-bit integer.
+   */
+  individualAddress?: string | number;
   /**
    * If true, sends a "Route Back" HPAI (IP 0.0.0.0 and port 0).
    * This instructs the KNXnet/IP server to respond directly to the source IP and port
@@ -346,6 +356,8 @@ export interface KNXUSBOptions extends BaseConnectionOptions {
 
 export type AllConnectionOptions = TPUARTOptions | KNXUSBOptions | KNXnetIPServerOptions | KNXTunnelingOptions;
 
+import type { SRP } from "../../core/KNXnetIPStructures";
+
 /**
  * Interface for a discovered KNXnet/IP device.
  */
@@ -357,11 +369,92 @@ export interface KNXDiscoveredDevice {
   deviceStatusRaw: number;
   deviceStatus: string;
   individualAddress: number;
+  individualAddressText: string;
   projectInstallationId: number;
   serialNumber: Buffer;
+  serialNumberHex?: string;
   routingMulticastAddress: string;
   macAddress: string;
   friendlyName: string;
+  supportedServices?: { family: number; familyName: string; version: number }[];
+  ipConfig?: {
+    ipAddress: string;
+    subnetMask: string;
+    defaultGateway: string;
+    ipCapabilities: number;
+    ipCapabilitiesText: string[];
+    ipAssignmentMethod: number;
+    ipAssignmentMethodText: string;
+  };
+  ipCurrentConfig?: {
+    ipAddress: string;
+    subnetMask: string;
+    defaultGateway: string;
+    dhcpServer: string;
+    ipAssignmentMethod: number;
+    ipAssignmentMethodText: string;
+  };
+  knxAddresses?: {
+    individualAddress: number;
+    individualAddressText: string;
+    additionalIndividualAddresses: number[];
+    additionalIndividualAddressesText: string[];
+  };
+  securedServices?: { family: number; familyName: string; securityVersion: number }[];
+  tunnellingInfo?: {
+    apduLength: number;
+    slots: { address: number; addressText: string; usable: boolean; authorised: boolean; free: boolean }[];
+  };
+  extendedDeviceInfo?: {
+    mediumStatus: number;
+    mediumStatusText: string;
+    maximalLocalApduLength: number;
+    deviceDescriptorType0: number;
+    deviceDescriptorType0Hex: string;
+    deviceDescriptorType0Name: string;
+  };
+  manufacturerData?: {
+    manufacturerId: number;
+    data: Buffer;
+    dataHex: string;
+  };
+  supportsTcp?: boolean;
+  supportsSecurity?: boolean;
+}
+
+/**
+ * Options for KNXnet/IP discovery (`SEARCH_REQUEST` / `SEARCH_REQUEST_EXTENDED` with SRPs).
+ */
+export interface KNXDiscoverOptions {
+  /** Target unicast IP (optional for UDP multicast, required for TCP). */
+  ip?: string;
+  /** Local interface IP for UDP discovery endpoint HPAI. */
+  ipLocal?: string;
+  /** Multicast destination IP when `ip` is omitted (default `"224.0.23.12"`). */
+  ipMulticast?: string;
+  /** Target port (default `3671`). */
+  port?: number;
+  /** Discovery wait timeout in milliseconds (default `3000`). */
+  timeout?: number;
+  /** Transport protocol (`"UDP"` multicast/unicast or `"TCP"` unicast extended search). */
+  transport?: "UDP" | "TCP";
+  /** Whether to send `SEARCH_REQUEST_EXTENDED` on UDP (default `true`). */
+  useExtended?: boolean;
+  /**
+   * Whether to also send legacy `SEARCH_REQUEST` on UDP.
+   * Defaults to `true` when no SRPs are provided and `false` when SRPs are present so SRP filters take effect.
+   */
+  includeLegacySearch?: boolean;
+  /** Raw Search Request Parameter (SRP) blocks to include in `SEARCH_REQUEST_EXTENDED`. */
+  srps?: SRP[];
+  /** Convenience SRP: filter for servers in programming mode (`0x01`). */
+  programmingModeOnly?: boolean;
+  /** Convenience SRP: filter by server MAC address (`0x02`). */
+  macAddress?: string;
+  /** Convenience SRP: filter by minimum supported service family version (`0x03`). */
+  minService?: { family: number; version: number; mandatory?: boolean };
+  /** Convenience SRP: request specific Description Information Block (DIB) type codes (`0x04`). */
+  requestDibs?: number[];
 }
 
 export interface IndicationRouterLink {

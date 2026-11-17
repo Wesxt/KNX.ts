@@ -10,8 +10,12 @@ import {
   KNXnetIPErrorCodes,
   ConnectionType,
   AllowedSupportedServiceFamilies,
+  DescriptionType,
+  InterfaceFeatureId,
   KNXLayer,
   KNXTimeoutConstants,
+  SRPType,
+  TunnellingFeatureReturnCode,
 } from "../core/enum/KNXnetIPEnum";
 import { CEMI, CEMIInstance } from "../core/CEMI";
 import {
@@ -25,14 +29,17 @@ import {
   ExtendedDeviceInformationDIB,
   IPConfigDIB,
   IPCurrentConfigDIB,
+  KNXAddressesDIB,
   TunnellingInfoDIB,
   CRI,
   CRD,
+  SRP,
   StatusTunnelingSlot,
 } from "../core/KNXnetIPStructures";
 import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { KNXHelper } from "../utils/KNXHelper";
 import { KNXDiscoveredDevice, KNXnetIPServerOptions } from "../@types/interfaces/connection";
+import { discoverKnxDevices } from "./KNXDiscovery";
 import { getNetworkInfo } from "../utils/localIp";
 import os from "node:os";
 import { DeviceDescriptorType0 } from "../core/resources/DeviceDescriptorType";
@@ -292,7 +299,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
     if (sec.users) {
       const entries =
-        sec.users instanceof Map ? Array.from(sec.users.entries()) : Object.entries(sec.users).map(([k, v]) => [Number(k), v] as const);
+        sec.users instanceof Map
+          ? Array.from(sec.users.entries())
+          : Object.entries(sec.users).map(([k, v]) => [Number(k), v] as const);
       for (const [uid, pwd] of entries) {
         if (uid >= 1 && uid <= 0x7f) {
           this.userPasswordHashes.set(uid, this.resolveKey16(pwd, "user"));
@@ -571,113 +580,12 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     timeout: number = 3000,
     useExtended: boolean = true,
   ): Promise<KNXDiscoveredDevice[]> {
-    return new Promise<KNXDiscoveredDevice[]>((resolve, reject) => {
-      const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
-      const discoveredDevices = new Map<string, KNXDiscoveredDevice>();
-
-      socket.on("message", (msg: Buffer) => {
-        try {
-          const header = KNXnetIPHeader.fromBuffer(msg);
-          if (
-            header.serviceType === KNXnetIPServiceType.SEARCH_RESPONSE ||
-            header.serviceType === KNXnetIPServiceType.SEARCH_RESPONSE_EXTENDED
-          ) {
-            const body = msg.subarray(KNXnetIPHeader.HEADER_SIZE_10);
-            if (body.length < 8) return;
-            const hpai = HPAI.fromBuffer(body);
-            let offset = 8; // Size of HPAI
-
-            let deviceInfo: DeviceInformationDIB | null = null;
-            while (offset < body.length) {
-              const dibLen = body.readUInt8(offset);
-              if (dibLen === 0) break;
-              if (offset + dibLen > body.length) break;
-              const dibBuffer = body.subarray(offset, offset + dibLen);
-              const dib = DIB.fromBuffer(dibBuffer);
-              if (dib instanceof DeviceInformationDIB) {
-                deviceInfo = dib;
-              }
-              offset += dibLen;
-            }
-
-            if (deviceInfo) {
-              const deviceKey = `${hpai.ipAddress}:${hpai.port}`; // Unique by IP/Port
-              if (!discoveredDevices.has(deviceKey)) {
-                let knxMediumStr = `Unknown (${deviceInfo.knxMedium})`;
-                if (deviceInfo.knxMedium === KNXMedium.TP1) knxMediumStr = "TP1";
-                else if (deviceInfo.knxMedium === KNXMedium.PL110) knxMediumStr = "PL110";
-                else if (deviceInfo.knxMedium === KNXMedium.RF) knxMediumStr = "RF";
-                else if (deviceInfo.knxMedium === KNXMedium.KNXIP) knxMediumStr = "KNXIP";
-
-                const deviceStatusStr =
-                  deviceInfo.deviceStatus === 1
-                    ? "Programmed"
-                    : deviceInfo.deviceStatus === 0
-                      ? "Not Programmed"
-                      : `Unknown (${deviceInfo.deviceStatus})`;
-
-                discoveredDevices.set(deviceKey, {
-                  ip: hpai.ipAddress,
-                  port: hpai.port,
-                  knxMediumRaw: deviceInfo.knxMedium,
-                  knxMedium: knxMediumStr,
-                  deviceStatusRaw: deviceInfo.deviceStatus,
-                  deviceStatus: deviceStatusStr,
-                  individualAddress: deviceInfo.individualAddress,
-                  projectInstallationId: deviceInfo.projectInstallationId,
-                  serialNumber: deviceInfo.serialNumber,
-                  routingMulticastAddress: deviceInfo.routingMulticastAddress,
-                  macAddress: deviceInfo.macAddress,
-                  friendlyName: deviceInfo.friendlyName,
-                });
-              }
-            }
-          }
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (e) {
-          // Ignore parsing errors for individual packets
-        }
-      });
-
-      const timer: NodeJS.Timeout = setTimeout(() => {
-        socket.close();
-        resolve(Array.from(discoveredDevices.values()));
-      }, timeout);
-
-      socket.on("error", (err) => {
-        clearTimeout(timer);
-        socket.close();
-        reject(err);
-      });
-
-      socket.bind(0, () => {
-        const netInfo = getNetworkInfo();
-        const serverHPAI = new HPAI(
-          HostProtocolCode.IPV4_UDP,
-          ipLocal !== "" ? ipLocal : netInfo.address,
-          socket.address().port,
-        );
-
-        const sendRequest = (serviceType: KNXnetIPServiceType) => {
-          const hpaiBuf = serverHPAI.toBuffer();
-          const header = new KNXnetIPHeader(serviceType, KNXnetIPHeader.HEADER_SIZE_10 + hpaiBuf.length);
-          const packet = Buffer.concat([header.toBuffer(), hpaiBuf]);
-          socket.send(packet, port, ipMulticast);
-        };
-
-        try {
-          socket.setBroadcast(true);
-          socket.setMulticastTTL(128);
-          sendRequest(KNXnetIPServiceType.SEARCH_REQUEST);
-          if (useExtended) {
-            sendRequest(KNXnetIPServiceType.SEARCH_REQUEST_EXTENDED);
-          }
-        } catch (e) {
-          clearTimeout(timer);
-          socket.close();
-          reject(e);
-        }
-      });
+    return discoverKnxDevices({
+      ipLocal,
+      ipMulticast,
+      port,
+      timeout,
+      useExtended,
     });
   }
 
@@ -946,8 +854,12 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       return;
     }
 
-    // Plaintext KNXnet/IP frame on TCP
-    if (!this.allowPlainTcp && header.serviceType !== KNXnetIPServiceType.DESCRIPTION_REQUEST) {
+    // Plaintext KNXnet/IP frame on TCP: discovery & self-description are always permitted
+    if (
+      !this.allowPlainTcp &&
+      header.serviceType !== KNXnetIPServiceType.DESCRIPTION_REQUEST &&
+      header.serviceType !== KNXnetIPServiceType.SEARCH_REQUEST_EXTENDED
+    ) {
       if (header.serviceType === KNXnetIPServiceType.CONNECT_REQUEST) {
         const errResp = Buffer.concat([
           new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_RESPONSE, 8).toBuffer(),
@@ -957,7 +869,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           ctx.socket.write(errResp);
         }
       } else {
-        this.logger.debug(`Ignoring plaintext service 0x${header.serviceType.toString(16)} on ${ctx.id} (allowPlainTcp=false)`);
+        this.logger.debug(
+          `Ignoring plaintext service 0x${header.serviceType.toString(16)} on ${ctx.id} (allowPlainTcp=false)`,
+        );
       }
       return;
     }
@@ -1303,14 +1217,14 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     const header = KNXnetIPHeader.fromBuffer(msg);
     switch (header.serviceType) {
       case KNXnetIPServiceType.SEARCH_REQUEST:
+        // 03_08_02 §7.6.1: SEARCH_REQUEST is only allowed over UDP
         if (ctx.transport === "udp" && ctx.rinfo) {
-          this.handleSearchRequest(msg, ctx.rinfo, false);
+          this.handleSearchRequest(msg, ctx, false);
         }
         break;
       case KNXnetIPServiceType.SEARCH_REQUEST_EXTENDED:
-        if (ctx.transport === "udp" && ctx.rinfo) {
-          this.handleSearchRequest(msg, ctx.rinfo, true);
-        }
+        // 03_08_02 §7.6.3.1: SEARCH_REQUEST_EXTENDED is allowed over UDP or TCP
+        this.handleSearchRequest(msg, ctx, true);
         break;
       case KNXnetIPServiceType.DESCRIPTION_REQUEST:
         this.handleDescriptionRequest(msg, ctx);
@@ -1335,6 +1249,9 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
         break;
       case KNXnetIPServiceType.TUNNELLING_FEATURE_GET:
         this.handleTunnelingFeatureGet(msg, ctx);
+        break;
+      case KNXnetIPServiceType.TUNNELLING_FEATURE_SET:
+        this.handleTunnelingFeatureSet(msg, ctx);
         break;
       case KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST:
         this.handleDeviceConfigurationRequest(msg, ctx);
@@ -1401,37 +1318,101 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     }
   }
 
-  private handleSearchRequest(msg: Buffer, rinfo: dgram.RemoteInfo, isExtended: boolean) {
+  private parseAndMatchSearchSrps(msg: Buffer): { matched: boolean; requestedDibs?: number[] } {
+    let offset = KNXnetIPHeader.HEADER_SIZE_10 + 8;
+    let requestedDibs: number[] | undefined;
+
+    while (offset < msg.length) {
+      if (offset + 2 > msg.length) {
+        return { matched: false };
+      }
+      const len = msg.readUInt8(offset);
+      if (len < 2 || offset + len > msg.length) {
+        return { matched: false };
+      }
+      const srp = SRP.fromBuffer(msg.subarray(offset, offset + len));
+      offset += len;
+
+      switch (srp.type) {
+        case SRPType.SELECT_BY_PROGRAMMING_MODE:
+          // DeviceInformationDIB currently always reports deviceStatus = 0 (not in programming mode)
+          return { matched: false };
+
+        case SRPType.SELECT_BY_MAC_ADDRESS: {
+          if (srp.data.length !== 6) return { matched: false };
+          const serverMac = Buffer.from((this.options.macAddress ?? "").replace(/[:-]/g, ""), "hex");
+          if (serverMac.length !== 6 || !srp.data.equals(serverMac)) {
+            return { matched: false };
+          }
+          break;
+        }
+
+        case SRPType.SELECT_BY_SERVICE: {
+          if (srp.data.length !== 2) return { matched: false };
+          const familyId = srp.data.readUInt8(0);
+          const minVersion = srp.data.readUInt8(1);
+          const supported = this.getSupportedServiceFamilies(true).find((s) => s.family === familyId);
+          if (!supported || supported.version < minVersion) {
+            return { matched: false };
+          }
+          break;
+        }
+
+        case SRPType.REQUEST_DIBS:
+          if (!requestedDibs) requestedDibs = [];
+          for (let i = 0; i < srp.data.length; i++) {
+            const dibType = srp.data.readUInt8(i);
+            if (dibType !== 0x00 && !requestedDibs.includes(dibType)) {
+              requestedDibs.push(dibType);
+            }
+          }
+          break;
+
+        default:
+          // 03_08_02 §7.6.3.3.1: Unknown SRP with M bit set -> do not respond; otherwise ignore
+          if (srp.isMandatory) {
+            return { matched: false };
+          }
+          break;
+      }
+    }
+
+    return { matched: true, requestedDibs };
+  }
+
+  private handleSearchRequest(msg: Buffer, ctx: RequestContext, isExtended: boolean) {
+    if (msg.length < KNXnetIPHeader.HEADER_SIZE_10 + 8) return;
     const clientHPAI = HPAI.fromBuffer(msg.subarray(6));
 
-    // [MEJORA] Route Back validation
-    if (!this.resolveRouteBack(clientHPAI, rinfo)) {
-      return; // Silently drop invalid HPAI
+    // 03_08_02 §7.6.1 / §7.6.3.1: Validate host protocol and Route Back HPAI
+    const check = this.validateHPAIForContext(clientHPAI, ctx);
+    if (!check.valid) return;
+
+    let requestedDibs: number[] | undefined;
+    if (isExtended) {
+      const srpEval = this.parseAndMatchSearchSrps(msg);
+      if (!srpEval.matched) return;
+      requestedDibs = srpEval.requestedDibs;
     }
 
     const responseType = isExtended
       ? KNXnetIPServiceType.SEARCH_RESPONSE_EXTENDED
       : KNXnetIPServiceType.SEARCH_RESPONSE;
 
-    const serverHPAI = this.getHPAI(rinfo);
-    const localIp = serverHPAI.ipAddress;
-    const localPort = serverHPAI.port;
+    // 03_08_02 §7.6.2 / §7.6.4.1: Always announce the UDP control endpoint HPAI
+    const localIp = this.getLocalIpForContext(ctx);
+    const udpPort = this.socket ? (this.socket as dgram.Socket).address().port : this._udpPort;
+    const serverHPAI = new HPAI(HostProtocolCode.IPV4_UDP, localIp, udpPort);
 
     this.logger.debug(
-      `Responding to search from ${clientHPAI.ipAddress}:${clientHPAI.port} with ${localIp}:${localPort}`,
+      `Responding to ${isExtended ? "extended " : ""}search on ${ctx.transport} from ${clientHPAI.ipAddress}:${clientHPAI.port} with ${localIp}:${udpPort}`,
     );
 
-    const dibs = this.getIdentificationDIBs(responseType, localIp);
+    const dibs = this.getIdentificationDIBs(responseType, localIp, requestedDibs, !!ctx.secureSession);
     const body = Buffer.concat([serverHPAI.toBuffer(), ...dibs.map((d) => d.toBuffer())]);
     const responseHeader = new KNXnetIPHeader(responseType, KNXnetIPHeader.HEADER_SIZE_10 + body.length);
 
-    if (this.socket) {
-      (this.socket as dgram.Socket).send(
-        Buffer.concat([responseHeader.toBuffer(), body]),
-        clientHPAI.port,
-        clientHPAI.ipAddress,
-      );
-    }
+    ctx.sendToEndpoint(Buffer.concat([responseHeader.toBuffer(), body]), clientHPAI);
   }
 
   private handleDescriptionRequest(msg: Buffer, ctx: RequestContext) {
@@ -1440,7 +1421,12 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     if (!check.valid) return;
 
     const localIp = this.getLocalIpForContext(ctx);
-    const dibs = this.getIdentificationDIBs(KNXnetIPServiceType.DESCRIPTION_RESPONSE, localIp);
+    const dibs = this.getIdentificationDIBs(
+      KNXnetIPServiceType.DESCRIPTION_RESPONSE,
+      localIp,
+      undefined,
+      !!ctx.secureSession,
+    );
     const body = Buffer.concat(dibs.map((d) => d.toBuffer()));
     const responseHeader = new KNXnetIPHeader(
       KNXnetIPServiceType.DESCRIPTION_RESPONSE,
@@ -1527,11 +1513,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     );
 
     // 03_08_09 §2.2.3.8.3: Device Management connection in a Secure Session requires Management Level (userId === 1)
-    if (
-      cri.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION &&
-      ctx.secureSession &&
-      ctx.secureUserId !== 1
-    ) {
+    if (cri.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION && ctx.secureSession && ctx.secureUserId !== 1) {
       this.logger.warn(
         `Connect Request refused: userId=${ctx.secureUserId} is not authorized for DEVICE_MGMT_CONNECTION (requires userId=1)`,
       );
@@ -1544,7 +1526,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     }
 
     // Check if a stale connection from the same remote IP already exists with the same IA (UDP / same host)
-    let knxAddress = cri.individualAddress;
+    const knxAddress = cri.individualAddress;
     if (knxAddress !== null && knxAddress !== 0) {
       for (const [cid, conn] of this._tunnelConnections.entries()) {
         if (
@@ -1552,9 +1534,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           ((ctx.transport === "udp" && !conn.isTcp && conn.controlHPAI.ipAddress === ctx.remoteAddress) ||
             (ctx.transport === "tcp" && conn.tcpConnectionId === ctx.tcpContext?.id))
         ) {
-          this.logger.warn(
-            `IA ${knxAddress} already in use by stale connection on channel ${cid}. Replacing channel.`,
-          );
+          this.logger.warn(`IA ${knxAddress} already in use by stale connection on channel ${cid}. Replacing channel.`);
           this.closeConnection(cid, true);
           break;
         }
@@ -1620,11 +1600,23 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       ctx.sendToEndpoint(Buffer.concat([responseHeader.toBuffer(), body]), clientControlHPAI);
       return;
     } else if (cri.connectionType === ConnectionType.TUNNEL_CONNECTION) {
-      if (knxAddress === null || knxAddress === 0) {
-        knxAddress = this.clientAddrsStartInt + channelId - 1;
+      let assignedAddress: number = knxAddress ?? 0;
+      if (assignedAddress === 0) {
+        const occupied = this.getOccupiedTunnelAddresses();
+        for (let i = 0; i < this.maxTunnelConnections; i++) {
+          const candidate = this.clientAddrsStartInt + i;
+          if (!occupied.has(candidate)) {
+            assignedAddress = candidate;
+            break;
+          }
+        }
+        if (assignedAddress === 0) {
+          status = KNXnetIPErrorCodes.E_NO_MORE_UNIQUE_CONNECTIONS;
+        }
       }
 
       if (
+        status === KNXnetIPErrorCodes.E_NO_ERROR &&
         cri.knxLayer !== KNXLayer.LINK_LAYER &&
         cri.knxLayer !== KNXLayer.BUSMONITOR_LAYER &&
         cri.knxLayer !== KNXLayer.RAW_LAYER
@@ -1635,8 +1627,8 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
 
       if (status === KNXnetIPErrorCodes.E_NO_ERROR) {
         for (const [cid, conn] of this._tunnelConnections.entries()) {
-          if (conn.knxAddress === knxAddress) {
-            this.logger.warn(`Connect Request refused: IA ${knxAddress} already in use by channel ${cid}`);
+          if (conn.knxAddress === assignedAddress) {
+            this.logger.warn(`Connect Request refused: IA ${assignedAddress} already in use by channel ${cid}`);
             status = KNXnetIPErrorCodes.E_NO_MORE_UNIQUE_CONNECTIONS;
             break;
           }
@@ -1644,9 +1636,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       }
 
       if (status === KNXnetIPErrorCodes.E_NO_ERROR) {
-        const addrBuf = Buffer.alloc(2);
-        addrBuf.writeUInt16BE(knxAddress);
-        const knxAddressStr = KNXHelper.GetAddress(addrBuf, ".") as string;
+        const knxAddressStr = KNXHelper.individualAddressToString(assignedAddress);
 
         this.logger.info(
           `Tunnel Connection established! Channel: ${channelId}, IA: ${knxAddressStr}, Layer: ${cri.knxLayer} (${ctx.transport})`,
@@ -1657,7 +1647,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             channelId,
             clientControlHPAI,
             clientDataHPAI,
-            knxAddress,
+            assignedAddress,
             knxAddressStr,
             cri.knxLayer,
             transportTarget,
@@ -1671,7 +1661,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
         );
         if (ctx.tcpContext) this.refreshTcpIdleTimer(ctx.tcpContext);
 
-        const crd = new CRD(cri.connectionType, knxAddress);
+        const crd = new CRD(cri.connectionType, assignedAddress);
         const body = Buffer.concat([Buffer.from([channelId, status]), serverDataHPAI.toBuffer(), crd.toBuffer()]);
         const responseHeader = new KNXnetIPHeader(
           KNXnetIPServiceType.CONNECT_RESPONSE,
@@ -1878,48 +1868,176 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     }
   }
 
-  private handleTunnelingFeatureGet(msg: Buffer, ctx: RequestContext) {
+  /**
+   * Validates connection header, channel ownership, sequence number and sends UDP TUNNELLING_ACK
+   * for TUNNELLING_FEATURE_GET / TUNNELLING_FEATURE_SET (03_08_04 §3.1, §3.5).
+   */
+  private validateFeatureRequest(
+    msg: Buffer,
+    ctx: RequestContext,
+  ): { conn: TunnelConnection; featId: number; payload: Buffer } | null {
+    if (msg.length < KNXnetIPHeader.HEADER_SIZE_10 + 6) return null;
+    const headerLen = msg.readUInt8(6);
+    if (headerLen < 4 || msg.length < 6 + headerLen + 2) return null;
+
     const channelId = msg.readUInt8(7);
     const seq = msg.readUInt8(8);
-    const featId = msg.readUInt8(10);
     const conn = this._tunnelConnections.get(channelId);
+
+    // 03_08_04 §3.5: Unknown communication channel ID shall be ignored
     if (!conn || !this.isChannelOwnedByContext(conn, ctx)) {
-      if (ctx.transport === "udp") {
-        this.sendTunnelACK(channelId, seq, KNXnetIPErrorCodes.E_CONNECTION_ID, ctx.rinfo);
-      }
-      return;
+      return null;
     }
 
     const { action, status } = conn.validateRequest(seq);
-    this.logger.debug(`Feature Get for channel ${channelId}, feat: ${featId}, seq: ${seq}`);
     if (action === "retransmit_ack") {
       if (ctx.transport === "udp") {
         this.sendTunnelACK(channelId, seq, status, ctx.rinfo);
       }
-      return;
+      return null;
     }
-    if (action === "discard") return;
+    if (action === "discard") return null;
 
     if (ctx.transport === "udp") {
       this.sendTunnelACK(channelId, seq, KNXnetIPErrorCodes.E_NO_ERROR, ctx.rinfo);
     }
 
-    let featVal: Buffer;
-    let retCode = 0x00;
+    const featOffset = 6 + headerLen;
+    return {
+      conn,
+      featId: msg.readUInt8(featOffset),
+      payload: msg.subarray(featOffset + 2),
+    };
+  }
+
+  private isReadOnlyInterfaceFeature(featId: number): boolean {
     switch (featId) {
-      case 0x07:
-        featVal = Buffer.alloc(2);
-        featVal.writeUInt16BE(254);
-        break;
-      case 0x06:
-        featVal = Buffer.alloc(2);
-        featVal.writeUInt16BE(conn.knxAddress);
-        break;
+      case InterfaceFeatureId.SUPPORTED_EMI_TYPE:
+      case InterfaceFeatureId.DEVICE_DESCRIPTOR_TYPE_0:
+      case InterfaceFeatureId.BUS_CONNECTION_STATUS:
+      case InterfaceFeatureId.KNX_MANUFACTURER_CODE:
+      case InterfaceFeatureId.ACTIVE_EMI_TYPE:
+      case InterfaceFeatureId.MAX_APDU_LENGTH:
+        return true;
+      case InterfaceFeatureId.INTERFACE_INDIVIDUAL_ADDRESS:
+        // 03_08_04 §3.6.7 Table 6: read-only when Security Mode is enabled
+        return this.hasUnicastSecurity;
       default:
-        featVal = Buffer.alloc(0);
-        retCode = 0x01;
+        return false;
     }
-    const featBody = Buffer.concat([Buffer.from([featId, retCode]), featVal]);
+  }
+
+  private getInterfaceFeatureValue(conn: TunnelConnection, featId: number): Buffer | null {
+    switch (featId) {
+      case InterfaceFeatureId.SUPPORTED_EMI_TYPE:
+        return Buffer.from([0x00, 0x04]); // cEMI bitmask (03_08_04 §3.6.2, 08_TSSK §2.7.1)
+      case InterfaceFeatureId.DEVICE_DESCRIPTOR_TYPE_0: {
+        const buf = Buffer.alloc(2);
+        buf.writeUInt16BE(DeviceDescriptorType0.KNXNET_IP_ROUTER.value);
+        return buf;
+      }
+      case InterfaceFeatureId.BUS_CONNECTION_STATUS:
+        return Buffer.from([0x01]); // Active (03_08_04 §3.6.4)
+      case InterfaceFeatureId.KNX_MANUFACTURER_CODE:
+        return Buffer.from([0x00, 0x00]); // U16 (03_08_04 §3.6.5)
+      case InterfaceFeatureId.ACTIVE_EMI_TYPE:
+        return Buffer.from([0x03]); // cEMI (03_08_04 §3.6.6, 08_TSSK §2.7.1)
+      case InterfaceFeatureId.INTERFACE_INDIVIDUAL_ADDRESS: {
+        const buf = Buffer.alloc(2);
+        buf.writeUInt16BE(conn.knxAddress);
+        return buf;
+      }
+      case InterfaceFeatureId.MAX_APDU_LENGTH: {
+        const buf = Buffer.alloc(2);
+        buf.writeUInt16BE(254);
+        return buf;
+      }
+      case InterfaceFeatureId.INTERFACE_FEATURE_INFO_ENABLE:
+        return Buffer.from([conn.featureInfoEnabled ? 0x01 : 0x00]);
+      default:
+        return null;
+    }
+  }
+
+  private handleTunnelingFeatureGet(msg: Buffer, ctx: RequestContext) {
+    const parsed = this.validateFeatureRequest(msg, ctx);
+    if (!parsed) return;
+
+    const { conn, featId } = parsed;
+    this.logger.debug(`Feature Get for channel ${conn.channelId}, feat: ${featId}`);
+
+    const val = this.getInterfaceFeatureValue(conn, featId);
+    const retCode = val ? TunnellingFeatureReturnCode.E_NO_ERROR : TunnellingFeatureReturnCode.E_ADDRESS_VOID;
+    const featBody = Buffer.concat([Buffer.from([featId, retCode]), val ?? Buffer.alloc(0)]);
+    conn.enqueue(featBody, KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE);
+  }
+
+  private handleTunnelingFeatureSet(msg: Buffer, ctx: RequestContext) {
+    const parsed = this.validateFeatureRequest(msg, ctx);
+    if (!parsed) return;
+
+    const { conn, featId, payload } = parsed;
+    this.logger.debug(`Feature Set for channel ${conn.channelId}, feat: ${featId}, len: ${payload.length}`);
+
+    let retCode: TunnellingFeatureReturnCode;
+    let respVal: Buffer = Buffer.alloc(0);
+
+    if (featId < InterfaceFeatureId.SUPPORTED_EMI_TYPE || featId > InterfaceFeatureId.INTERFACE_FEATURE_INFO_ENABLE) {
+      // 03_08_04 §3.5: Unknown/unsupported feature -> E_ADDRESS_VOID, Feature Value omitted
+      retCode = TunnellingFeatureReturnCode.E_ADDRESS_VOID;
+    } else if (this.isReadOnlyInterfaceFeature(featId)) {
+      // 03_08_04 §3.3 & §3.6: Read-only feature -> E_ACCESS_READ_ONLY
+      retCode = TunnellingFeatureReturnCode.E_ACCESS_READ_ONLY;
+    } else if (featId === InterfaceFeatureId.INTERFACE_INDIVIDUAL_ADDRESS) {
+      if (payload.length !== 2) {
+        retCode = TunnellingFeatureReturnCode.E_DATA_TYPE_CONFLICT;
+      } else {
+        const newIA = payload.readUInt16BE(0);
+        const isInPool =
+          newIA >= this.clientAddrsStartInt && newIA < this.clientAddrsStartInt + this.maxTunnelConnections;
+        const usedByOther = Array.from(this._tunnelConnections.values()).some(
+          (c) => c.channelId !== conn.channelId && c.knxAddress === newIA,
+        );
+
+        // 03_08_04 §3.6.7: Host IA or PID_ADDITIONAL_INDIVIDUAL_ADDRESSES (or already in use) -> E_DATA_VOID + copy value
+        if (newIA === this.serverIAInt || (isInPool && newIA !== conn.knxAddress) || usedByOther) {
+          retCode = TunnellingFeatureReturnCode.E_DATA_VOID;
+          respVal = payload;
+        } else {
+          const changed = conn.knxAddress !== newIA;
+          conn.knxAddress = newIA;
+          conn.knxAddressStr = KNXHelper.individualAddressToString(newIA);
+          retCode = TunnellingFeatureReturnCode.E_NO_ERROR;
+          respVal = payload;
+
+          const featBody = Buffer.concat([Buffer.from([featId, retCode]), respVal]);
+          conn.enqueue(featBody, KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE);
+
+          if (changed && conn.featureInfoEnabled) {
+            const infoBody = Buffer.concat([Buffer.from([featId, 0x00]), payload]);
+            conn.enqueue(infoBody, KNXnetIPServiceType.TUNNELLING_FEATURE_INFO);
+          }
+          return;
+        }
+      }
+    } else {
+      // InterfaceFeatureId.INTERFACE_FEATURE_INFO_ENABLE (0x08, 03_08_04 §3.6.9)
+      if (payload.length !== 1) {
+        retCode = TunnellingFeatureReturnCode.E_DATA_TYPE_CONFLICT;
+      } else {
+        const enableVal = payload.readUInt8(0);
+        if (enableVal > 1) {
+          retCode = TunnellingFeatureReturnCode.E_DATA_VOID;
+          respVal = payload;
+        } else {
+          conn.featureInfoEnabled = enableVal === 1;
+          retCode = TunnellingFeatureReturnCode.E_NO_ERROR;
+          respVal = payload;
+        }
+      }
+    }
+
+    const featBody = Buffer.concat([Buffer.from([featId, retCode]), respVal]);
     conn.enqueue(featBody, KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE);
   }
 
@@ -2012,7 +2130,45 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     }
   }
 
-  private getIdentificationDIBs(serviceType?: KNXnetIPServiceType, requestLocalIp?: string) {
+  private get hasSecurityEnabled(): boolean {
+    return this.hasUnicastSecurity || !!this.secureRoutingTimer;
+  }
+
+  /**
+   * Returns the KNXnet/IP service family versions supported by this server.
+   * Per 03_08_02 §7.5.4.3, §7.6.2, §7.7.2 & 08_TSSK §2.6.20:
+   * - Core v2 (02h) is reported when TCP + Extended Search are enabled.
+   * - Security (09h) is only included in SEARCH_RESPONSE_EXTENDED (Table 3).
+   */
+  private getSupportedServiceFamilies(includeSecurity: boolean): { family: number; version: number }[] {
+    const services: { family: number; version: number }[] = [
+      { family: AllowedSupportedServiceFamilies.Core, version: this.tcpEnabled ? 2 : 1 },
+      { family: AllowedSupportedServiceFamilies.DeviceManagement, version: 1 },
+      { family: AllowedSupportedServiceFamilies.Tunnelling, version: 2 },
+      { family: AllowedSupportedServiceFamilies.Routing, version: this.secureRoutingTimer ? 2 : 1 },
+    ];
+    if (includeSecurity && this.hasSecurityEnabled) {
+      services.push({ family: AllowedSupportedServiceFamilies.Security, version: 1 });
+    }
+    return services;
+  }
+
+  private getOccupiedTunnelAddresses(): Set<number> {
+    const occupied = new Set<number>();
+    for (const conn of this._tunnelConnections.values()) {
+      if (conn.knxAddress > 0) {
+        occupied.add(conn.knxAddress);
+      }
+    }
+    return occupied;
+  }
+
+  private getIdentificationDIBs(
+    serviceType?: KNXnetIPServiceType,
+    requestLocalIp?: string,
+    requestedDibs?: number[],
+    inSecureSession: boolean = false,
+  ): DIB[] {
     const routingOptions = this.options;
     const netInfo = getNetworkInfo();
     const effectiveLocalIp = requestLocalIp || netInfo.address;
@@ -2029,7 +2185,6 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       }
     }
 
-    // Spec says use TP1 (0x02) for gateway reporting
     const devInfo = new DeviceInformationDIB(
       KNXMedium.KNXIP,
       0,
@@ -2041,43 +2196,46 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       routingOptions.friendlyName!,
     );
 
-    const services: { family: number; version: number }[] = [
-      { family: AllowedSupportedServiceFamilies.Core, version: 1 },
-      { family: AllowedSupportedServiceFamilies.DeviceManagement, version: 1 },
-      { family: AllowedSupportedServiceFamilies.Tunnelling, version: 1 },
-      { family: AllowedSupportedServiceFamilies.Routing, version: 1 },
-    ];
+    const isExtendedSearch = serviceType === KNXnetIPServiceType.SEARCH_RESPONSE_EXTENDED;
+    const suppSvc = new SupportedServicesDIB(this.getSupportedServiceFamilies(isExtendedSearch));
 
-    const hasSecurity = this.hasUnicastSecurity || !!this.secureRoutingTimer;
-    if (serviceType !== KNXnetIPServiceType.SEARCH_RESPONSE && hasSecurity) {
-      services.push({ family: AllowedSupportedServiceFamilies.Security, version: 1 });
-    }
-
-    const suppSvc = new SupportedServicesDIB(services);
-
+    // 03_08_02 §7.6.2 & 06 Profiles note 20: SEARCH_RESPONSE strictly carries Device Info + Supported Services
     if (serviceType === KNXnetIPServiceType.SEARCH_RESPONSE) {
       return [devInfo, suppSvc];
     }
-    const deviceDescriptorType0 = DeviceDescriptorType0.KNXNET_IP_ROUTER;
-    const extDevInfo = new ExtendedDeviceInformationDIB(false, 254, deviceDescriptorType0);
+
     const ipConfig = new IPConfigDIB(effectiveLocalIp, effectiveNetmask, "0.0.0.0", 0x01, 0x02);
     const ipCurrent = new IPCurrentConfigDIB(effectiveLocalIp, effectiveNetmask, "0.0.0.0", "0.0.0.0", 0x02);
-    const slots: { address: number; status: StatusTunnelingSlot }[] = [];
-    for (let i = 1; i <= this.maxTunnelConnections; i++) {
-      const conn = this._tunnelConnections.get(i);
-      const status = new StatusTunnelingSlot();
-      status.authorised = true;
-      status.usable = !!conn;
-      status.free = !conn;
-      slots.push({
-        address: conn ? conn.knxAddress : this.clientAddrsStartInt + i - 1,
-        status: status,
-      });
+    const additionalAddresses: number[] = [];
+    for (let i = 0; i < this.maxTunnelConnections; i++) {
+      additionalAddresses.push(this.clientAddrsStartInt + i);
+    }
+    const knxAddresses = new KNXAddressesDIB(this.serverIAInt, additionalAddresses);
+
+    // 03_08_02 Tables 3, 4, 5 & 08_TSSK §2.6.20: DESCRIPTION_RESPONSE only carries pre-security DIBs
+    if (!isExtendedSearch) {
+      return [devInfo, suppSvc, ipConfig, ipCurrent, knxAddresses];
     }
 
-    const dibs: DIB[] = [devInfo, suppSvc, extDevInfo, ipConfig, ipCurrent, new TunnellingInfoDIB(254, slots)];
+    const deviceDescriptorType0 = DeviceDescriptorType0.KNXNET_IP_ROUTER;
+    const extDevInfo = new ExtendedDeviceInformationDIB(false, 254, deviceDescriptorType0);
+    const occupiedAddresses = this.getOccupiedTunnelAddresses();
+    const slots: { address: number; status: StatusTunnelingSlot }[] = [];
+    for (let i = 0; i < this.maxTunnelConnections; i++) {
+      const slotAddress = this.clientAddrsStartInt + i;
+      const status = new StatusTunnelingSlot();
+      status.authorised = inSecureSession || !this.hasUnicastSecurity;
+      status.usable = true;
+      status.free = !occupiedAddresses.has(slotAddress);
+      slots.push({
+        address: slotAddress,
+        status,
+      });
+    }
+    const tunnellingInfo = new TunnellingInfoDIB(254, slots);
 
-    if (hasSecurity) {
+    let securedDib: SecuredServiceFamiliesDIB | null = null;
+    if (this.hasSecurityEnabled) {
       let securedList: { family: number; securityVersion: number }[];
       if (this.options.secure?.securedServiceFamilies) {
         securedList = this.options.secure.securedServiceFamilies.map((s) => ({
@@ -2099,9 +2257,34 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           securedList.push({ family: AllowedSupportedServiceFamilies.Routing, securityVersion: 1 });
         }
       }
-      dibs.push(new SecuredServiceFamiliesDIB(securedList));
+      securedDib = new SecuredServiceFamiliesDIB(securedList);
     }
 
+    if (requestedDibs && requestedDibs.length > 0) {
+      const dibByType = new Map<number, DIB>([
+        [DescriptionType.DEVICE_INFO, devInfo],
+        [DescriptionType.SUPP_SVC_FAMILIES, suppSvc],
+        [DescriptionType.IP_CONFIG, ipConfig],
+        [DescriptionType.IP_CUR_CONFIG, ipCurrent],
+        [DescriptionType.KNX_ADDRESSES, knxAddresses],
+        [DescriptionType.TUNNELLING_INFO, tunnellingInfo],
+        [DescriptionType.DEVICE_INFO_EXTENDED, extDevInfo],
+      ]);
+      if (securedDib) {
+        dibByType.set(DescriptionType.SECURED_SERVICE_FAMILIES, securedDib);
+      }
+      const filtered: DIB[] = [];
+      for (const dibType of requestedDibs) {
+        const dib = dibByType.get(dibType);
+        if (dib) filtered.push(dib);
+      }
+      return filtered;
+    }
+
+    const dibs: DIB[] = [devInfo, suppSvc, extDevInfo, ipConfig, ipCurrent, knxAddresses, tunnellingInfo];
+    if (securedDib) {
+      dibs.push(securedDib);
+    }
     return dibs;
   }
 
@@ -2144,28 +2327,41 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
   }
 
   private convertDataIndToBusmonInd(cemiBuffer: Buffer): Buffer {
+    if (cemiBuffer.length < 2) return cemiBuffer;
     const msgCode = cemiBuffer[0];
-    if (msgCode !== 0x29 && msgCode !== 0x2d && msgCode !== 0x2e && msgCode !== 0x11 && msgCode !== 0x10)
-      return cemiBuffer;
     const addInfoLen = cemiBuffer[1];
     const baseOffset = 2 + addInfoLen;
+
+    if (msgCode === 0x2b) return cemiBuffer;
+
+    // L_Raw.ind (0x2D) / L_Raw.req (0x10) already carry the raw medium frame including FCS (03_06_03 §4.1.5.7)
+    if (msgCode === 0x2d || msgCode === 0x10) {
+      return new CEMI.DataLinkLayerCEMI["L_Busmon.ind"](null, cemiBuffer.subarray(baseOffset)).toBuffer();
+    }
+
+    if (msgCode !== 0x29 && msgCode !== 0x2e && msgCode !== 0x11) {
+      return cemiBuffer;
+    }
+    if (cemiBuffer.length < baseOffset + 8) return cemiBuffer;
+
     const cf1 = cemiBuffer[baseOffset];
     const cf2 = cemiBuffer[baseOffset + 1];
     const src = cemiBuffer.subarray(baseOffset + 2, baseOffset + 4);
     const dst = cemiBuffer.subarray(baseOffset + 4, baseOffset + 6);
     const dataLen = cemiBuffer[baseOffset + 6];
-    const tpdu = cemiBuffer.subarray(baseOffset + 7);
-    const lpdu = Buffer.concat([
-      Buffer.from([cf1]),
-      src,
-      dst,
-      Buffer.from([(cf2 & 0xf0) | (dataLen + 1)]),
-      tpdu,
-      Buffer.alloc(1),
-    ]);
+    const tpduEnd = Math.min(cemiBuffer.length, baseOffset + 8 + dataLen);
+    const tpdu = cemiBuffer.subarray(baseOffset + 7, tpduEnd);
+
+    // 03_02_02 §2.2.4 (Standard FT=1, dataLen <= 15) vs §2.2.5 (Extended FT=0)
+    const isStandardFrame = (cf1 & 0x80) !== 0 && dataLen <= 15;
+    const lpduWithoutFcs = isStandardFrame
+      ? Buffer.concat([Buffer.from([cf1]), src, dst, Buffer.from([(cf2 & 0xf0) | (dataLen & 0x0f)]), tpdu])
+      : Buffer.concat([Buffer.from([cf1 & 0x7f, cf2]), src, dst, Buffer.from([dataLen]), tpdu]);
+
     let xor = 0;
-    for (let i = 0; i < lpdu.length - 1; i++) xor ^= lpdu[i];
-    lpdu[lpdu.length - 1] = ~xor & 0xff;
-    return new (CEMI.DataLinkLayerCEMI["L_Busmon.ind"] as any)(null, lpdu).toBuffer();
+    for (let i = 0; i < lpduWithoutFcs.length; i++) xor ^= lpduWithoutFcs[i];
+    const fcs = Buffer.from([~xor & 0xff]);
+
+    return new CEMI.DataLinkLayerCEMI["L_Busmon.ind"](null, Buffer.concat([lpduWithoutFcs, fcs])).toBuffer();
   }
 }

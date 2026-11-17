@@ -4,7 +4,6 @@ import { KNXnetIPServer, ServiceMessage } from "../src";
 // Standard Multicast Address for KNXnet/IP Routing
 const MULTICAST_IP = "224.0.23.12";
 const PORT = 3671;
-
 let routing: KNXnetIPServer;
 
 async function testRouting() {
@@ -18,10 +17,18 @@ async function testRouting() {
     ip: MULTICAST_IP,
     port: PORT,
     localIp: localIp,
-    friendlyName: "Arnold",
+    friendlyName: "Abelardo de la Espriella",
     clientAddrs: "1.15.1:8",
     individualAddress: "1.15.1",
     useAllInterfaces: true,
+    tcp: true,
+    secure: {
+      deviceAuthenticationPassword: "device-pass", // Device Auth Code (opcional en ETS)
+      users: {
+        1: "123456789", // Management / Commissioning (userId = 1)
+        2: "arnold123456789", // Usuario de Tunnelling (userId = 2)
+      },
+    },
     logOptions: {
       level: "debug",
       enabled: true,

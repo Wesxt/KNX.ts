@@ -165,6 +165,12 @@ npm run manualTest:router
 # Prueba manual de conexión Tunneling
 npm run manualTest:tunneling
 
+# Prueba manual de gestión de dispositivos (KNXManagement)
+npm run manualTest:management
+
+# Prueba manual de servidor TCP y KNX IP Secure
+npm run manualTest:secureTcp
+
 # Prueba manual de enrutamiento Multicast
 npm run manualTest:routing
 
@@ -202,7 +208,8 @@ Aquí tienes un breve resumen de los directorios clave del proyecto:
 - Si tiene dispositivos KNX Router deben estar en la misma ip broadcast para enrutar mensajes.
 - Evite configurar las direcciones fisicas de los clientes y del propio KNXnetIPServer ya existentes en la topologia KNX.
 - Si tiene dispositivos USB o TPUART o KNX IP Interface y quiere enrutar sus mensajes atraves de KNXnetIPServer use la clase `Router` y configure las conexiones.
-- El software ETS puede descubrir el KNXnetIPServer automaticamente por lo tanto puede conectarse y usar las funciones Monitor de Grupos, Busmonitor (tiene bugs), Descubrir dispositivos en modo programación, Descubrir direccion individual, Escaneo de linea y Programación y Desprogramación de dispositivos.
+- El software ETS puede descubrir el KNXnetIPServer automáticamente (tanto por `SEARCH_REQUEST` como por `SEARCH_REQUEST_EXTENDED` Core v2). Una vez conectado (por UDP, TCP o KNX IP Secure TCP), puedes usar Monitor de Grupos, Busmonitor (conversión TP1 estándar/extendida y `L_Raw.ind` -> `L_Busmon.ind`), Descubrir dispositivos en modo programación, Descubrir dirección individual, Escaneo de línea y Programación y Desprogramación de dispositivos.
+- Si habilitas `secure` en `KNXnetIPServer` para probar con ETS, asegúrate de configurar `users[1]` (usuario de Management / puesta en marcha) y opcionalmente `deviceAuthenticationPassword` coincidiendo con ETS o tu archivo `.knxkeys`.
 
 ### KNXTunneling
 

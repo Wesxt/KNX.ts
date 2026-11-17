@@ -6,11 +6,13 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 
 ## 🌟 Capacidades
 
-- **Túnel UDP y TCP Robusto**: Implementa una cola estricta _Stop-and-Wait_ para UDP y reensamblado de tramas sobre flujo TCP (`TcpFrameReader`, sin sobrecarga de `TUNNELLING_ACK` según `03_08_04` §2.6.2). Esto elimina los problemas comunes de "conexión interrumpida" en ETS u otras aplicaciones durante sesiones largas.
+- **Túnel UDP y TCP Robusto (v1 y v2)**: Implementa una cola estricta _Stop-and-Wait_ para UDP, reensamblado de tramas sobre flujo TCP (`TcpFrameReader`, sin sobrecarga de `TUNNELLING_ACK` según `03_08_04` §2.6.2), HPAI Route Back (`0.0.0.0:0`) para NAT/VPN, Extended CRI (solicitud de Dirección Individual específica), capas Busmonitor/Raw y **Características de Tunnelling v2** (`TUNNELLING_FEATURE_GET`, `TUNNELLING_FEATURE_SET`, `TUNNELLING_FEATURE_INFO` según `03_08_04` §3).
+- **Servidor KNXnet/IP (UDP, TCP y Pasarela ETS)**: Servidor KNXnet/IP completo con pool de ranuras de túnel (`clientAddrs`), `SEARCH_REQUEST` y Core v2 `SEARCH_REQUEST_EXTENDED` (sobre UDP y TCP con filtrado por SRP), DIBs de `DESCRIPTION_RESPONSE` (`TUNNELLING_INFO`, `DEVICE_INFO_EXTENDED`, `KNX_ADDRESSES`, `SECURED_SERVICE_FAMILIES`) y compatibilidad con **Monitor de Grupos y Busmonitor de ETS** (conversión `L_Busmon.ind` para tramas TP1 estándar/extendidas y `L_Raw.ind`).
 - **KNXnet/IP Secure (`03_08_09`)**:
-  - **Cliente de Túnel Seguro (TCP)**: Intercambio de claves ECDH con X25519, autenticación mutua de usuario y dispositivo con PBKDF2-HMAC-SHA256 (`SESSION_REQUEST`, `SESSION_RESPONSE`, `SESSION_AUTHENTICATE`, `SESSION_STATUS`) y cifrado/autenticación AES-128-CCM en `SECURE_WRAPPER`.
+  - **Cliente y Servidor de Túnel Seguro (TCP Unicast)**: Intercambio de claves ECDH con X25519, autenticación mutua de usuario y dispositivo con PBKDF2-HMAC-SHA256 (`SESSION_REQUEST`, `SESSION_RESPONSE`, `SESSION_AUTHENTICATE`, `SESSION_STATUS`) y cifrado/autenticación AES-128-CCM en `SECURE_WRAPPER` tanto en `KNXTunneling` como en `KNXnetIPServer` (`ServerSecureSession`).
   - **Enrutamiento Multicast Seguro (Secure Routing)**: Cifrado multicast en `SECURE_WRAPPER` y máquina de estados de sincronización de reloj de 48 bits con `TIMER_NOTIFY` (`SecureRoutingTimer`) en `KNXnetIPServer`.
   - **Lector `.knxkeys` de ETS sin dependencias (`KnxKeyring`)**: Carga, verifica la firma canónica de ETS y descifra archivos `.knxkeys` usando únicamente `crypto` y `zlib` nativos de Node.js.
+- **Descubrimiento Extendido Core v2 (`KNXTunneling.discover` / `KNXnetIPServer.discover`)**: Descubre servidores KNXnet/IP por multicast/unicast UDP o unicast TCP con Search Request Parameters (SRP: modo programación, dirección MAC, versión mínima de familia de servicio, DIBs solicitados) y decodifica metadatos legibles (`KNXDiscoveredDevice`).
 - **Gestión Completa de Red y Dispositivos KNX (`KNXManagement` y `KNXManagementSession`)**: Implementación completa del stack de gestión KNX (`03_05_02 Management Procedures`, `03_03_07 Application Layer`, `03_05_01 Resources` y `03_08_03 / 03_06_03 Gestión Local cEMI`) sobre una capa de transporte orientada a conexión punto a punto (`TransportConnection`, `03_03_04`), además de modos broadcast, system broadcast y sin conexión:
   - **Gestión de Dirección Individual y de Dominio (`NM_*`)**: Lectura de dispositivos en modo programación (con detección de direcciones duplicadas), programación de Dirección Individual mediante botón (`writeIndividualAddress`) o por número de serie de 6 bytes sin pulsar botón (`writeIndividualAddressBySerial`), restablecimiento a `15.15.255` (`resetIndividualAddress`), lectura/escritura de Dirección de Dominio (`readDomainAddress`, `writeDomainAddress`, `readDomainAddressSelective`, `readDomainAddressBySerial`, `writeDomainAddressBySerial`) y lectura/escritura de parámetros de red (`A_NetworkParameter_*` y `A_SystemNetworkParameter_*`).
   - **Gestión de Dispositivos (`DM_*`)**: Sesiones persistentes autenticadas (`openSession` / `withSession`), autorización de acceso (`authorize` / `A_Authorize_Request`) y escritura de claves (`setKey` / `A_Key_Write`), conmutación remota del modo programación (`setProgrammingMode`), lectura/escritura/descripción/escaneo de propiedades y funciones de objetos de interfaz (estándar y extendidas), lectura/escritura de memoria estándar (16 bits), memoria de usuario (20 bits), memoria extendida (24 bits) y escritura por bits con segmentación automática y verificación de lectura (`DMP_MemWrite_RCoV`), control de las máquinas de estados de carga y ejecución (`PID_LOAD_STATE_CONTROL` / `PID_RUN_STATE_CONTROL`), lectura/escritura de enlaces de objetos de grupo (`A_Link_Read` / `A_Link_Write`), y reinicio básico o *Master Reset* confirmado (`A_Restart` con `RestartEraseCode`).
@@ -24,12 +26,12 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 - **Cancelación de Eco**: Filtra automáticamente los mensajes de bucle invertido (loopback) para evitar bucles de procesamiento de telegramas.
 - **Alto Rendimiento**: Optimizado para entornos Node.js con una sobrecarga mínima.
 
-## 🚧 Estado: Experimental y Pendiente de Pruebas en Hardware Real
+## 🚧 Estado: Experimental y Validación en Hardware
 
-Según el `TODO.md`, varias características cuentan ya con su implementación completa en código y tests automatizados, pero **tienen pendiente su validación en dispositivos físicos reales**:
+Según el `TODO.md`, varias características han sido verificadas mediante suites automatizadas e integración con ETS, mientras otras permanecen pendientes de validación extendida en hardware físico:
 
-- **KNX IP Secure, Túnel TCP y `KNXManagement` (Pendiente de pruebas en dispositivos reales)**: Implementados conforme al estándar KNX v3.0.0 y verificados contra los vectores criptográficos oficiales del Anexo A, archivos `.knxkeys` reales de ETS, capturas XML reales de ETS y simuladores de pasarela/dispositivo. **Queda pendiente su prueba directa con hardware KNX físico.**
-- **Servidor TCP en `KNXnetIPServer`**: El soporte TCP y Secure está implementado en el cliente `KNXTunneling` y en Secure Routing multicast; la recepción de clientes TCP / sesiones seguras entrantes en `KNXnetIPServer` queda para una fase futura.
+- **Integración con ETS5 y Cumplimiento del Estándar**: El descubrimiento (`SEARCH_REQUEST` / `SEARCH_REQUEST_EXTENDED` con SRPs), `DESCRIPTION_RESPONSE`, túnel UDP/TCP, características de Tunnelling v2, sesiones seguras TCP y Monitor de Grupos / Busmonitor en ETS están implementados y verificados con pruebas automatizadas y sesiones reales contra ETS5.
+- **Secure Routing Multicast y `KNXManagement` (Pendiente de pruebas en hardware físico dedicado)**: Implementados conforme al estándar KNX v3.0.0 y verificados contra los vectores criptográficos oficiales del Anexo A, archivos `.knxkeys` reales de ETS, capturas XML reales de ETS y simuladores de pasarela/dispositivo. **Queda pendiente su validación directa con routers KNX IP Secure físicos y dispositivos de bus físicos.**
 - **Filtrado de Origen**: El filtrado basado en direcciones de origen y el enrutamiento selectivo están en la hoja de ruta.
 - **Uso de las capas NPDU, TPDU y APDU**: En EMI hace falta usarlas para una correcta deserialización.
 
@@ -67,8 +69,8 @@ La librería expone un conjunto rico de clases y utilidades que permiten tanto e
 
 Estas clases forman el núcleo de tu interacción con la red. Todas ellas heredan de una base `KNXService` y emiten eventos comunes.
 
-- `KNXnetIPServer`: Crea un servidor KNXnet/IP estándar (Gateway) con soporte opcional de Secure Routing multicast (`secure.backboneKey` / `keyringFile`). Perfecto para proporcionar ranuras de túnel (slots) a ETS u otros clientes tunneling.
-- `KNXTunneling`: Se conecta como cliente a una pasarela KNXnet/IP existente mediante UDP, TCP plano (`transport: "TCP"`) o **KNX IP Secure sobre TCP** (`secure: { ... }`).
+- `KNXnetIPServer`: Crea un servidor KNXnet/IP completo (Gateway) con listeners UDP y TCP (`tcp`, `tcpPort`, `tcpHost`, `allowPlainTcp`), sesiones unicast KNX IP Secure (`secure.users`, `secure.deviceAuthenticationPassword`), Secure Routing multicast opcional (`secure.backboneKey` / `keyringFile`), Extended Search Core v2 (evaluación SRP), Interface Features Tunnelling v2 y soporte para Monitor de Grupos y Busmonitor en ETS (`L_Busmon.ind`).
+- `KNXTunneling`: Se conecta como cliente a una pasarela KNXnet/IP existente mediante UDP (`useRouteBack`), TCP plano (`transport: "TCP"`) o **KNX IP Secure sobre TCP** (`secure: { ... }`), con Extended CRI (`individualAddress`, `knxLayer`), características Tunnelling v2 (`getFeature`, `setFeature`) y descubrimiento estático (`KNXTunneling.discover`).
 - `KNXManagement`, `KNXManagementSession` y `TransportConnection`: Stack completo de gestión de red y dispositivos KNX (`03_05_02`, `03_03_07`, `03_08_03`) para leer y escribir Direcciones Individuales/de Dominio, Propiedades y Funciones de Objetos de Interfaz, Memoria de Dispositivo/Usuario/Extendida, Claves de Autorización, Máquinas de Estados de Carga y Ejecución, Enlaces de Objetos de Grupo y Reinicio Básico o *Master Reset* sin depender de ETS.
 - `KnxKeyring`: Lector y descifrador sin dependencias externas para archivos `.knxkeys` exportados desde ETS.
 - `KNXUSBConnection`: Se conecta directamente a interfaces USB KNX locales (ABB, MDT, Weinzierl, Zennio, etc.).
@@ -93,6 +95,9 @@ Para desarrolladores que construyen herramientas avanzadas de monitoreo o inyecc
 - `APCIEnum` Es un enumerable que ayuda a escribir el APCI según la especificación, **Advertencia**: Esta enumeración asume todos comandos dentro son 10 bits o 2 bytes pero dentro de la mascara 0x3FF, los que son de longitud de 4 bits simplemente están en una mascara 0x3C0.
 - `TPCI` Es para analizar y serializar los TPCI que están en la capa TPDU.
 - `TPCIType` Es un enumerable que ayuda a escribir o indentificar los TPCI según la especificación.
+- `SRP`: Construye y analiza bloques *Search Request Parameter* (`selectByProgrammingMode`, `selectByMacAddress`, `selectByService`, `requestDibs`) para `SEARCH_REQUEST_EXTENDED` de Core v2.
+- `KNXnetIPStructures` / `KNXnetIPEnum`: Incluye DIBs, HPAIs, CRIs, CRDs, `DescriptionType`, `KNXLayer`, `InterfaceFeatureId`, `TunnellingFeatureReturnCode`, `AllowedSupportedServiceFamilies` y `SRPType`.
+- Tipos de Configuración y Descubrimiento: `KNXnetIPServerOptions`, `KNXTunnelingOptions`, `KNXSecureOptions`, `KNXDiscoverOptions`, `KNXDiscoveredDevice`, `RouterConnOptions`, `TPUARTOptions`, `KNXUSBOptions` y `KNXLoggerOptions`.
 - `DPTs`: La librería exporta interfaces como `DPT5001`, `DPT1` o `DPT10001`. Los tipos de DPT de valor único admiten tanto valores primitivos directos como objetos `{ value: T }`. Estas interfaces son utilizadas por `KnxDataDecode` para tipar los valores decodificados y por `KnxDataEncoder` para validar y convertir los parámetros en `Buffer`.
 - `ServiceMessage` Es una interfaz que implementan todos los mensajes del CEMI y EMI, tambien todas las capas NPDU, TPDU y APCI, esto sirve para que contegan dos metodos utiles: `toBuffer` para devolver la instancia en un buffer y `describe` que otorga información sobre la instancia de una forma amigable de ver. **Nota**: En la mayoria de clases que exporta esta librería y no implementa esta interfaz como el APCI aún tienen el metodo `describe`.
 - `CEMIInstance` Es un tipo de todas las instancias de CEMI.
@@ -184,6 +189,162 @@ tunnel.on("1/1/1", (cemi: CEMIInstance) => {
   console.log("Decoded data:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data)); // Converted JavaScript value
 });
 ```
+
+### Guía Detallada de Descubrimiento (`KNXTunneling.discover` y `KNXnetIPServer.discover`)
+
+Tanto `KNXTunneling.discover(options?: KNXDiscoverOptions)` como `KNXnetIPServer.discover(...)` implementan el descubrimiento KNXnet/IP Core v1 (`SEARCH_REQUEST`) y Core v2 (`SEARCH_REQUEST_EXTENDED` con SRPs), devolviendo objetos `KNXDiscoveredDevice[]` enriquecidos con campos legibles (`individualAddressText`, `knxMedium`, `deviceStatus`, `supportedServices`, `tunnellingInfo.slots`, `extendedDeviceInfo`, `supportsTcp`, `supportsSecurity`, etc.).
+
+```typescript
+import {
+  KNXTunneling,
+  KNXnetIPServer,
+  AllowedSupportedServiceFamilies,
+  DescriptionType,
+  SRP,
+} from "knx.ts";
+
+// 1. Descubrimiento estándar UDP Multicast (envía SEARCH_REQUEST_EXTENDED + SEARCH_REQUEST)
+const devices = await KNXTunneling.discover({
+  timeout: 3000,
+  ipLocal: "192.168.1.50", // IP de la interfaz local (opcional)
+});
+
+for (const dev of devices) {
+  console.log(
+    `${dev.friendlyName} @ ${dev.ip}:${dev.port} | IA: ${dev.individualAddressText} | Medio: ${dev.knxMedium} | TCP: ${dev.supportsTcp} | Secure: ${dev.supportsSecurity}`,
+  );
+  console.log("Servicios:", dev.supportedServices); // ej. [{ family: 4, familyName: "Tunnelling", version: 2 }]
+  console.log("Slots de túnel:", dev.tunnellingInfo?.slots); // [{ addressText: "1.1.2", usable: true, authorised: true, free: true }]
+}
+
+// 2. Descubrimiento Extendido UDP con filtros SRP de conveniencia
+// Cuando se especifican SRPs, includeLegacySearch pasa a false por defecto para que solo respondan servidores que cumplan el filtro
+const progDevices = await KNXTunneling.discover({
+  programmingModeOnly: true,
+  timeout: 2000,
+});
+
+// Filtrar por dirección MAC o versión mínima de familia de servicio (ej. Security v1)
+const secureRouters = await KNXTunneling.discover({
+  minService: {
+    family: AllowedSupportedServiceFamilies.Security,
+    version: 1,
+    mandatory: true,
+  },
+  requestDibs: [
+    DescriptionType.DEVICE_INFO,
+    DescriptionType.SUPP_SVC_FAMILIES,
+    DescriptionType.SECURED_SERVICE_FAMILIES,
+    DescriptionType.TUNNELLING_INFO,
+  ],
+});
+
+// 3. Descubrimiento Unicast sobre TCP (Core v2 SEARCH_REQUEST_EXTENDED sobre TCP)
+const tcpDevices = await KNXTunneling.discover({
+  ip: "192.168.1.100",
+  port: 3671,
+  transport: "TCP",
+  srps: [SRP.requestDibs([DescriptionType.DEVICE_INFO, DescriptionType.TUNNELLING_INFO], false)],
+});
+
+// 4. Atajo posicional en KNXnetIPServer:
+const simpleList = await KNXnetIPServer.discover("192.168.1.50", "224.0.23.12", 3671, 3000, true);
+```
+
+### Guía Detallada de `KNXTunneling` (UDP, TCP, Route Back, Capas y Características v2)
+
+`KNXTunneling` soporta UDP (`useRouteBack`), TCP plano (`03_08_04` §2.6.2), KNX IP Secure sobre TCP (`03_08_09`), Extended CRI para solicitar una Dirección Individual específica, capas Raw/Busmonitor y Características de Interfaz de Tunnelling v2 (`03_08_04` §3):
+
+```typescript
+import {
+  KNXTunneling,
+  ConnectionType,
+  KNXLayer,
+  InterfaceFeatureId,
+} from "knx.ts";
+
+// 1. Túnel TCP plano solicitando una Dirección Individual específica mediante Extended CRI (0x08)
+const tunnelV2 = new KNXTunneling({
+  ip: "192.168.1.100",
+  port: 3671,
+  transport: "TCP", // Usa automáticamente HPAI nulo (0.0.0.0:0) y omite TUNNELLING_ACK
+  connectionType: ConnectionType.TUNNEL_CONNECTION,
+  knxLayer: KNXLayer.LINK_LAYER, // Opciones: LINK_LAYER (0x02), RAW_LAYER (0x04), BUSMONITOR_LAYER (0x80)
+  individualAddress: "1.1.15", // Opcional: solicita una IA específica vía Extended CRI
+  maxQueueSize: 100,
+});
+
+// Escuchar notificaciones asíncronas de cambio de características (TUNNELLING_FEATURE_INFO)
+tunnelV2.on("feature_info", (featureId: number, value: Buffer) => {
+  console.log(`Característica 0x${featureId.toString(16)} actualizada:`, value.toString("hex"));
+});
+
+await tunnelV2.connect();
+console.log("IA asignada:", tunnelV2.individualAddress);
+
+// 2. Características de Interfaz Tunnelling v2 (TUNNELLING_FEATURE_GET / TUNNELLING_FEATURE_SET)
+const maxApduBuf = await tunnelV2.getFeature(InterfaceFeatureId.MAX_APDU_LENGTH);
+const dd0Buf = await tunnelV2.getFeature(InterfaceFeatureId.DEVICE_DESCRIPTOR_TYPE_0);
+const assignedIaBuf = await tunnelV2.getFeature(InterfaceFeatureId.INTERFACE_INDIVIDUAL_ADDRESS);
+
+// Habilitar notificaciones TUNNELLING_FEATURE_INFO (1 = habilitar, 0 = deshabilitar)
+await tunnelV2.setFeature(InterfaceFeatureId.INTERFACE_FEATURE_INFO_ENABLE, Buffer.from([0x01]));
+
+// Libera siempre el canal al cerrar (especialmente importante en UDP)
+await tunnelV2.disconnect();
+```
+
+> **Consejo para VPN / ZeroTier / NAT (`UDP`)**: Activa `useRouteBack: true` en conexiones UDP para enviar un HPAI *Route Back* (`0.0.0.0:0`), permitiendo que pasarelas detrás de NAT o VPN respondan directamente a tu IP y puerto de origen.
+
+### Guía Detallada de `KNXnetIPServer` (UDP, TCP, Sesiones Seguras, Routing y Busmonitor ETS)
+
+`KNXnetIPServer` actúa simultáneamente como servidor Tunnelling v1/v2 (UDP y TCP), Router KNXnet/IP (multicast plano y Secure Routing) y servidor de sesiones unicast KNX IP Secure:
+
+```typescript
+import { KNXnetIPServer } from "knx.ts";
+
+const server = new KNXnetIPServer({
+  ip: "224.0.23.12",
+  localIp: "192.168.1.50",
+  port: 3671, // Usa 0 para puerto efímero UDP/TCP asignado por el sistema operativo
+  individualAddress: "1.15.1",
+  friendlyName: "KNX.ts IP Gateway",
+  clientAddrs: "1.15.2:8", // Pool de 8 slots de túnel (1.15.2 .. 1.15.9)
+  useAllInterfaces: true, // Multi-homing multicast en las interfaces activas del host
+  routingDelay: 20, // Espera mínima en ms entre tramas multicast salientes (defecto 20ms)
+  ignoreACKTimeout: false,
+  MAX_PENDING_REQUESTS_PER_CLIENT: 100,
+
+  // Opciones del Servidor TCP Unicast (03_08_02 §8.4.3)
+  tcp: true, // Habilita listener TCP (defecto: true)
+  tcpHost: "0.0.0.0", // Host de escucha TCP
+  tcpPort: 3671, // Por defecto usa `port`
+  tcpIdleTimeoutMs: 10000, // Cierra sockets TCP inactivos sin canal ni sesión segura
+  allowPlainTcp: true, // Usa false para exigir KNX IP Secure en TCP
+
+  // Configuración opcional de KNXnet/IP Secure (TCP Unicast + Routing Multicast)
+  secure: {
+    deviceAuthenticationPassword: "miDeviceAuthPassword", // FDSK / contraseña de puesta en marcha (opcional)
+    users: {
+      1: "miPasswordManagement", // User ID 1 = Management / Puesta en marcha (ETS)
+      2: "miPasswordTunnel", // User ID >= 2 = Cliente de Tunnelling
+    },
+    // Opcionalmente habilita Secure Routing multicast (o carga todo desde un .knxkeys de ETS):
+    // keyringFile: "./proyecto.knxkeys",
+    // keyringPassword: "passwordDelKeyring",
+    multicastLatencyToleranceMs: 2000,
+    sessionAuthenticationTimeoutMs: 10000,
+    sessionTimeoutMs: 60000,
+    sessionKeepAliveIntervalMs: 30000,
+  },
+});
+
+await server.connect();
+console.log("Puerto UDP:", server.udpListeningPort, "Puerto TCP:", server.tcpListeningPort);
+```
+
+- **Busmonitor y Monitor de Grupos en ETS**: Cuando ETS (u otro cliente) abre un túnel con `KNXLayer.BUSMONITOR_LAYER` (`0x80`), `KNXnetIPServer` convierte automáticamente las tramas `L_Data.ind`, `L_Data.con`, `L_Data.req`, `L_Raw.ind` y `L_Raw.req` a `L_Busmon.ind` (`0x2b`) válidas en formato TP1 Estándar (`FT=1`, `LG = dataLen`) o TP1 Extendido (`FT=0`) con su `FCS`, e incluye la información adicional `BusmonitorStatusInfo` (`0x03`) y `TimestampRelative` (`0x04`). Según la especificación KNX `03_08_04`, el modo Busmonitor acepta un único cliente exclusivo mientras no existan túneles link-layer activos.
+- **Descubrimiento Compatible Pre-Seguridad**: Incluso cuando se configuran `secure.users` o `secure.deviceAuthenticationPassword`, `DESCRIPTION_RESPONSE` / `SEARCH_RESPONSE_EXTENDED` anuncian las familias `SUPP_SVC_FAMILIES` (`Core v2`, `DeviceManagement v1`, `Tunnelling v2`, `Routing v1`, `Security v1`) junto con `SECURED_SERVICE_FAMILIES` (`0x06`), permitiendo que ETS descubra la pasarela y negocie sesiones seguras TCP sin errores de compatibilidad.
 
 ### Guía de KNX IP Secure y TCP (`KNXTunneling`, `KNXnetIPServer`, `KnxKeyring`)
 
@@ -651,6 +812,10 @@ Dependiendo del tipo de conexión, algunas clases emiten eventos específicos ad
 #### **KNXnetIPServer**
 
 - `queue_overflow`: Se dispara cuando la cola interna de Tunnelling para un cliente conectado se desborda.
+- `routing_busy`: Se emite cuando se recibe una trama `ROUTING_BUSY` (`RoutingBusy` con `waitTime`).
+- `routing_ready`: Se emite cuando finaliza la espera de `ROUTING_BUSY` y se reanuda el enrutamiento.
+- `routing_lost_message`: Se emite cuando llega una indicación `ROUTING_LOST_MESSAGE` (`RoutingLostMessage`).
+- `routing_system_broadcast`: Se emite con la carga útil cEMI cruda de un `ROUTING_SYSTEM_BROADCAST` entrante.
 - `<DirecciónDeGrupo>` (ej., `"1/1/1"`): Escucha direcciones de grupo específicas directamente (ej., `server.on("1/1/1", (cemi) => {...})`).
 
 #### **TPUARTConnection**
@@ -665,7 +830,9 @@ Dependiendo del tipo de conexión, algunas clases emiten eventos específicos ad
 
 #### **KNXTunneling**
 
-- `feature_info`: Emitido al consultar las características soportadas por un servidor KNXnet/IP.
+- `feature_info`: Emitido al recibir una notificación `TUNNELLING_FEATURE_INFO` desde el servidor (`(featureId: number, value: Buffer) => void`).
+- `secure_session_established`: Emitido cuando se autentica una sesión KNX IP Secure sobre TCP (`({ sessionId }) => void`).
+- `secure_session_closed`: Emitido cuando el servidor envía `SESSION_STATUS` cerrando o rechazando la sesión segura (`(status: number) => void`).
 - `raw_message`: Emitido con la carga útil IP sin procesar (incluyendo las cabeceras KNXnet/IP completas, no solo cEMI).
 
 #### **Router (Puente de Aprendizaje)**
@@ -925,20 +1092,35 @@ await tunnel.send(cemi.toBuffer());
 
 ## 🛠️ Desarrollo
 
-Para compilar el proyecto:
+Para compilar y verificar el proyecto:
 
 ```bash
+# Compilar TypeScript hacia dist/
 npm run build
+
+# Ejecutar toda la suite de pruebas Jest
+npm test
+
+# Validar linting sobre src/
+npx eslint src/
 ```
 
-Para ejecutar las pruebas de enrutamiento:
+Scripts de estabilidad y pruebas manuales (según `package.json`):
 
 ```bash
-npm run test:routing
-```
+# Scripts de estabilidad de conexión
+npm run test:stability
+npm run test:server-stability
 
-```bash
-npm run test:connection
+# Scripts manuales (pruebas con hardware / ETS)
+npm run manualTest:routing
+npm run manualTest:tunneling
+npm run manualTest:management
+npm run manualTest:secureTcp
+npm run manualTest:router
+npm run manualTest:usb
+npm run manualTest:routingUsb
+npm run manualTest:tpuart
 ```
 
 ## 👤 Autor

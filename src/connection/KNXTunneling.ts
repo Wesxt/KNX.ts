@@ -8,16 +8,20 @@ import {
   KNXnetIPErrorCodes,
   HostProtocolCode,
   ConnectionType,
+  InterfaceFeatureId,
+  KNXLayer,
   SecureSessionStatus,
+  TunnellingFeatureReturnCode,
 } from "../core/enum/KNXnetIPEnum";
 import { CEMI, CEMIInstance } from "../core/CEMI";
-import { KNXTunnelingOptions } from "../@types/interfaces/connection";
+import { KNXDiscoveredDevice, KNXDiscoverOptions, KNXTunnelingOptions } from "../@types/interfaces/connection";
 import { KNXHelper } from "../utils/KNXHelper";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
 import { FSM } from "./FSM";
 import { TcpFrameReader } from "./TcpFrameReader";
 import { SecureSession } from "./SecureSession";
 import { KnxKeyring } from "../security/KnxKeyring";
+import { discoverKnxDevices } from "./KNXDiscovery";
 
 /**
  * States for the KNXTunneling Finite State Machine.
@@ -130,6 +134,14 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     this.logger.info(
       `Tunneling initialized with ip: ${options.ip} and port: ${options.port} and transport: ${this._transport}`,
     );
+  }
+
+  /**
+   * Discovers KNXnet/IP servers using `SEARCH_REQUEST` / `SEARCH_REQUEST_EXTENDED`
+   * with optional Search Request Parameters (SRPs).
+   */
+  public static async discover(options: KNXDiscoverOptions = {}): Promise<KNXDiscoveredDevice[]> {
+    return discoverKnxDevices(options);
   }
 
   /**
@@ -372,7 +384,15 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
 
   private sendConnectRequest() {
     const hpai = this.getControlHPAI();
-    const cri = new CRI(this.options.connectionType!);
+    const knxLayer = this.options.knxLayer ?? KNXLayer.LINK_LAYER;
+    let requestedIA: number | null = null;
+    if (this.options.individualAddress !== undefined) {
+      requestedIA =
+        typeof this.options.individualAddress === "number"
+          ? this.options.individualAddress
+          : KNXHelper.GetAddress(this.options.individualAddress, ".").readUInt16BE(0);
+    }
+    const cri = new CRI(this.options.connectionType!, knxLayer, requestedIA);
 
     const header = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_REQUEST, 0);
     const body = Buffer.concat([hpai.toBuffer(), hpai.toBuffer(), cri.toBuffer()]);
@@ -666,23 +686,43 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   // #endregion
 
   // #region Tunneling Features
-  public async getFeature(featureId: number): Promise<Buffer> {
+  private sendFeatureRequest(
+    serviceType: KNXnetIPServiceType.TUNNELLING_FEATURE_GET | KNXnetIPServiceType.TUNNELLING_FEATURE_SET,
+    featureId: number,
+    value?: Buffer,
+  ): Promise<Buffer> {
     if (!this.isConnected) throw new Error("Not connected");
     if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
       throw new Error("Outgoing queue full");
     }
 
+    const header = Buffer.from([featureId & 0xff, 0x00]);
+    const body = value && value.length > 0 ? Buffer.concat([header, value]) : header;
+
     return new Promise((resolve, reject) => {
-      const body = Buffer.from([featureId, 0x00]); // FeatureID + Reserved
       this.msgQueue.push({
         packet: body,
-        serviceType: KNXnetIPServiceType.TUNNELLING_FEATURE_GET,
+        serviceType,
         resolve,
         reject,
         responseType: KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE,
       });
       this.processQueue();
     });
+  }
+
+  /**
+   * Reads a Tunnelling Interface Feature via `TUNNELLING_FEATURE_GET` (03_08_04 §3.2).
+   */
+  public async getFeature(featureId: number): Promise<Buffer> {
+    return this.sendFeatureRequest(KNXnetIPServiceType.TUNNELLING_FEATURE_GET, featureId);
+  }
+
+  /**
+   * Writes a Tunnelling Interface Feature via `TUNNELLING_FEATURE_SET` (03_08_04 §3.3).
+   */
+  public async setFeature(featureId: number, value: Buffer): Promise<Buffer> {
+    return this.sendFeatureRequest(KNXnetIPServiceType.TUNNELLING_FEATURE_SET, featureId, value);
   }
   // #endregion
 
@@ -770,7 +810,8 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
           }
           this.fsm.transition(KNXTunnelingEvent.CONNECTED);
         } else {
-          this.emit("error", new Error(`Connect Error: 0x${status.toString(16)}`));
+          const codeName = KNXnetIPErrorCodes[status] ?? "UNKNOWN";
+          this.emit("error", new Error(`Connect Error: 0x${status.toString(16)} (${codeName})`));
         }
         break;
       }
@@ -841,16 +882,17 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         break;
       case KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE:
         // Body: ConnHeader(4) + FeatureID(1) + ReturnCode(1) + Value(n)
-        if (this.isSending && this.activeRequest?.responseType === KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE) {
-          if (
-            body[0] === 0x04 &&
-            body[1] === this.channelId &&
-            (this._transport === "TCP" || body[2] === this.sequenceNumber)
-          ) {
+        if (body.length >= 6 && body[0] === 0x04 && body[1] === this.channelId) {
+          // 03_08_04 §3.1: Confirmed identically to TUNNELLING_REQUEST (UDP sends TUNNELLING_ACK)
+          if (!this.confirmIncomingSequence(body, KNXnetIPServiceType.TUNNELLING_ACK)) {
+            break;
+          }
+          if (this.isSending && this.activeRequest?.responseType === KNXnetIPServiceType.TUNNELLING_FEATURE_RESPONSE) {
             if (this.pendingAck) {
               clearTimeout(this.pendingAck.timer);
               this.pendingAck = null;
             }
+            const featureId = body[4];
             const returnCode = body[5];
             const val = body.subarray(6);
 
@@ -861,10 +903,14 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
             this.activeRequest = null;
             this.sequenceNumber = (this.sequenceNumber + 1) & 0xff;
 
-            if (returnCode === KNXnetIPErrorCodes.E_NO_ERROR) {
+            if (returnCode === TunnellingFeatureReturnCode.E_NO_ERROR) {
+              if (featureId === InterfaceFeatureId.INTERFACE_INDIVIDUAL_ADDRESS && val.length === 2) {
+                this.individualAddress = KNXHelper.individualAddressToString(val.readUInt16BE(0));
+              }
               resolve(val);
             } else {
-              reject(new Error(`Feature Error: 0x${returnCode.toString(16)}`));
+              const errName = TunnellingFeatureReturnCode[returnCode] ?? "UNKNOWN";
+              reject(new Error(`Feature Error: 0x${returnCode.toString(16)} (${errName})`));
             }
             this.processQueue();
           }
@@ -888,14 +934,42 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
         }
         break;
       case KNXnetIPServiceType.TUNNELLING_FEATURE_INFO:
-        // Body: ConnHeader(4) + FeatureID(1) + Len(1) + Value...
-        if (body[0] === 0x04 && body[1] === this.channelId) {
+        // Body: ConnHeader(4) + FeatureID(1) + Reserved(1) + Value(n)
+        if (body.length >= 6 && body[0] === 0x04 && body[1] === this.channelId) {
+          // 03_08_04 §3.1: Confirmed identically to TUNNELLING_REQUEST (UDP sends TUNNELLING_ACK)
+          if (!this.confirmIncomingSequence(body, KNXnetIPServiceType.TUNNELLING_ACK)) {
+            break;
+          }
           const featureId = body[4];
           const val = body.subarray(6);
+          if (featureId === InterfaceFeatureId.INTERFACE_INDIVIDUAL_ADDRESS && val.length === 2) {
+            this.individualAddress = KNXHelper.individualAddressToString(val.readUInt16BE(0));
+          }
           this.emit("feature_info", featureId, val);
         }
         break;
     }
+  }
+
+  /**
+   * Validates incoming server-to-client sequence counter and sends ACK over UDP (03_08_04 §2.6, §3.1).
+   * Returns `true` if the frame should be processed, `false` if duplicate or out-of-sequence.
+   */
+  private confirmIncomingSequence(body: Buffer, ackType: KNXnetIPServiceType): boolean {
+    if (this._transport === "TCP") {
+      return true;
+    }
+
+    const seq = body[2];
+    if (seq === this.rxSequenceNumber) {
+      this.sendAck(ackType, seq, KNXnetIPErrorCodes.E_NO_ERROR);
+      this.rxSequenceNumber = (this.rxSequenceNumber + 1) & 0xff;
+      return true;
+    }
+    if (seq === ((this.rxSequenceNumber - 1) & 0xff)) {
+      this.sendAck(ackType, seq, KNXnetIPErrorCodes.E_NO_ERROR);
+    }
+    return false;
   }
 
   private handleRequest(body: Buffer, ackType: KNXnetIPServiceType) {
@@ -903,23 +977,8 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     const channel = body[1];
     if (channel !== this.channelId) return;
 
-    // On TCP, sequence numbers are not evaluated and no TUNNELLING_ACK is sent (03_08_04 §2.6.2)
-    if (this._transport === "TCP") {
+    if (this.confirmIncomingSequence(body, ackType)) {
       this.deliverCemiFromTunnelBody(body);
-      return;
-    }
-
-    const seq = body[2];
-
-    // Check for sequence number on UDP
-    if (seq === this.rxSequenceNumber) {
-      // Correct sequence
-      this.sendAck(ackType, seq, KNXnetIPErrorCodes.E_NO_ERROR);
-      this.rxSequenceNumber = (this.rxSequenceNumber + 1) & 0xff;
-      this.deliverCemiFromTunnelBody(body);
-    } else if (seq === ((this.rxSequenceNumber - 1) & 0xff)) {
-      // Duplicate frame, send ACK again but don't process
-      this.sendAck(ackType, seq, KNXnetIPErrorCodes.E_NO_ERROR);
     }
   }
 

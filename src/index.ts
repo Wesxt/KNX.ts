@@ -14,6 +14,7 @@ export * from "./@types/interfaces/DPTs";
 export * from "./core/enum/APCIEnum";
 export * from "./core/enum/EnumControlField";
 export { AddressType } from "./core/enum/EnumControlFieldExtended";
+export { SRP } from "./core/KNXnetIPStructures";
 export * from "./core/ControlField";
 export * from "./core/ControlFieldExtended";
 export * from "./core/layers/data/APDU";
@@ -48,5 +49,6 @@ export type {
   KNXSecureOptions,
   RouterConnOptions,
   KNXDiscoveredDevice,
+  KNXDiscoverOptions,
   IndicationRouterLink,
 } from "./@types/interfaces/connection";

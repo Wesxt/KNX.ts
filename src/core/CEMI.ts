@@ -103,48 +103,45 @@ export class AdditionalInformationField implements DescribeEstructure {
         );
       }
 
-      // 3. Extraer el bloque completo (Type + Len + Data) para pasarlo a las clases específicas
-      // NOTA: Tus clases en KNXAddInfoTypes deben saber parsearse a sí mismas, idealmente con un método estático fromBuffer
-      // o un constructor que acepte el payload. Asumo aquí que pasamos la data pura.
-
-      const dataSubset = buffer.subarray(offset + 2, offset + 2 + len);
+      // 3. Extract the complete block (Type + Len + Data) for the specific AddInfo constructors
+      const blockSubset = buffer.subarray(offset, offset + totalBlockSize);
 
       let item: AddInfoBase | null = null;
 
       try {
         switch (typeId) {
           case CEMIAddInfoType.PL_MEDIUM_INFO:
-            item = new PLMediumInfo(dataSubset);
+            item = new PLMediumInfo(blockSubset);
             break;
           case CEMIAddInfoType.RF_MEDIUM_INFO:
-            item = new RFMediumInformation(dataSubset);
+            item = new RFMediumInformation(blockSubset);
             break;
           case CEMIAddInfoType.BUSMONITOR_STATUS_INFO:
-            item = new BusmonitorStatusInfo(dataSubset); // Implementar si falta
+            item = new BusmonitorStatusInfo(blockSubset);
             break;
           case CEMIAddInfoType.TIMESTAMP_RELATIVE:
-            item = new TimestampRelative(dataSubset);
+            item = new TimestampRelative(blockSubset);
             break;
           case CEMIAddInfoType.TIME_DELAY_UNTIL_SENDING:
-            item = new TimeDelayUntilSending(dataSubset);
+            item = new TimeDelayUntilSending(blockSubset);
             break;
           case CEMIAddInfoType.EXTENDED_RELATIVE_TIMESTAMP:
-            item = new ExtendedRelativeTimestamp(dataSubset);
+            item = new ExtendedRelativeTimestamp(blockSubset);
             break;
           case CEMIAddInfoType.BIBAT_INFO:
-            item = new BiBatInformation(dataSubset);
+            item = new BiBatInformation(blockSubset);
             break;
           case CEMIAddInfoType.RF_MULTI_INFO:
-            item = new RFMultiInformation(dataSubset);
+            item = new RFMultiInformation(blockSubset);
             break;
           case CEMIAddInfoType.PREAMBLE_POSTAMBLE:
-            item = new PreambleAndPostamble(dataSubset);
+            item = new PreambleAndPostamble(blockSubset);
             break;
           case CEMIAddInfoType.RF_FAST_ACK_INFO:
-            item = new RFFastACKInformation(dataSubset);
+            item = new RFFastACKInformation(blockSubset);
             break;
           case CEMIAddInfoType.MANUFACTURER_SPECIFIC:
-            item = new ManufacturerSpecificData(dataSubset);
+            item = new ManufacturerSpecificData(blockSubset);
             break;
           default:
             // Si el tipo es desconocido, decidimos si ignorarlo o guardarlo como genérico.

@@ -45,6 +45,7 @@ export enum KNXnetIPErrorCodes {
   E_KNX_CONNECTION = 0x27,
   E_AUTHORISATION_ERROR = 0x28,
   E_TUNNELLING_LAYER = 0x29,
+  E_NO_TUNNELLING_ADDRESS = 0x2d,
   E_CONNECTION_IN_USE = 0x2e,
 }
 
@@ -110,6 +111,18 @@ export const enum AllowedSupportedServiceFamilies {
   Security = 0x09,
 }
 
+/**
+ * Search Request Parameter (SRP) type codes for SEARCH_REQUEST_EXTENDED (0x020B).
+ * Defined in KNX Standard 03_08_02 §7.6.3.3.2 Table 6.
+ */
+export const enum SRPType {
+  INVALID = 0x00,
+  SELECT_BY_PROGRAMMING_MODE = 0x01,
+  SELECT_BY_MAC_ADDRESS = 0x02,
+  SELECT_BY_SERVICE = 0x03,
+  REQUEST_DIBS = 0x04,
+}
+
 export const enum KNXTimeoutConstants {
   CONNECT_REQUEST_TIMEOUT = 10,
   CONNECTIONSTATE_REQUEST_TIMEOUT = 10,
@@ -122,4 +135,32 @@ export const enum TunnelLink {
   TUNNEL_LINKLAYER = 0x02,
   TUNNEL_RAW = 0x04,
   TUNNEL_BUSMONITOR = 0x80,
+}
+
+/**
+ * Interface Feature Identifiers for KNXnet/IP Tunnelling v2 (03_08_04 §3.6).
+ */
+export enum InterfaceFeatureId {
+  SUPPORTED_EMI_TYPE = 0x01,
+  DEVICE_DESCRIPTOR_TYPE_0 = 0x02,
+  BUS_CONNECTION_STATUS = 0x03,
+  KNX_MANUFACTURER_CODE = 0x04,
+  ACTIVE_EMI_TYPE = 0x05,
+  INTERFACE_INDIVIDUAL_ADDRESS = 0x06,
+  MAX_APDU_LENGTH = 0x07,
+  INTERFACE_FEATURE_INFO_ENABLE = 0x08,
+}
+
+/**
+ * Return codes for TUNNELLING_FEATURE_RESPONSE (03_08_04 §3.3, §3.5).
+ */
+export enum TunnellingFeatureReturnCode {
+  E_NO_ERROR = 0x00,
+  E_DATA_MIN = 0xf6,
+  E_DATA_MAX = 0xf7,
+  E_DATA_VOID = 0xf8,
+  E_ACCESS_READ_ONLY = 0xfb,
+  E_ACCESS_DENIED = 0xfc,
+  E_ADDRESS_VOID = 0xfd,
+  E_DATA_TYPE_CONFLICT = 0xfe,
 }

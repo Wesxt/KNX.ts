@@ -44,14 +44,16 @@ export class TunnelConnection {
   // Rate limiting / Pacing state
   public rxCount: number = 0;
   public lastRxTime: number = Date.now();
+  /** Interface Feature 08: defaults to false on connection open and resets on close (03_08_04 §3.6.9). */
+  public featureInfoEnabled: boolean = false;
   private logger: Logger;
 
   constructor(
     public readonly channelId: number,
     public readonly controlHPAI: HPAI,
     public readonly dataHPAI: HPAI,
-    public readonly knxAddress: number,
-    public readonly knxAddressStr: string,
+    public knxAddress: number,
+    public knxAddressStr: string,
     public readonly knxLayer: KNXLayer,
     transportOrSocket: dgram.Socket | TunnelTransportTarget,
     private readonly heartbeatTimeoutMs: number,
@@ -242,5 +244,6 @@ export class TunnelConnection {
     this.pendingAck = null;
     this.queue = [];
     this.isSending = false;
+    this.featureInfoEnabled = false;
   }
 }

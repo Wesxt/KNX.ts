@@ -6,10 +6,10 @@ Pendientes.
 
 Pruebas pendientes por hacer.
 
-### Conexión TCP y KNX IP Secure
+### Conexión TCP, Tunnelling v2 y KNX IP Secure
 
-- **Cliente `KNXTunneling` (TCP plano y KNX IP Secure Unicast) y `KNXnetIPServer` (Secure Routing Multicast)**: Implementados conforme al estándar KNX (`03_08_02`, `03_08_04`, `03_08_09`) y validados con los vectores oficiales del Anexo A, archivos `.knxkeys` de ETS y pasarelas simuladas. **Queda pendiente probar con dispositivos físicos reales.**
-- **Servidor TCP / Sesiones Seguras entrantes en `KNXnetIPServer`**: Falta implementar el listener TCP y el servidor de sesiones seguras para clientes entrantes en `KNXnetIPServer`.
+- **Cliente `KNXTunneling` (UDP, TCP plano, Tunnelling v2 Features y KNX IP Secure) y `KNXnetIPServer` (TCP Unicast, Secure Sessions, Core v2 Extended Search, Tunnelling v2 Features y Secure Routing Multicast)**: Implementados conforme al estándar KNX (`03_08_02`, `03_08_04`, `03_08_09`) y validados con pruebas automatizadas, vectores oficiales del Anexo A, archivos `.knxkeys` de ETS y pruebas reales con ETS5 (descubrimiento, túnel TCP/Secure, Group Monitor y Busmonitor).
+- **Pendiente de validación extendida en hardware físico externo**: Falta validar Secure Routing Multicast y `KNXManagement` directamente frente a routers/dispositivos físicos KNX IP Secure independientes.
 
 ### Gestión de Red y Dispositivos (`KNXManagement` y `KNXManagementSession`)
 
@@ -47,9 +47,8 @@ Probar con una placa pasarela TPUART
 Implementaciones pendientes.
 
 - Implementar escucha de eventos basado en las direcciones de fuente
+- Deserialización completa de EMI apoyándose en las capas NPDU, TPDU y APDU
 
-## Caracteristicas poco fiables de mantener
+## Características recientes / resueltas
 
-Estas son caracteristicas que son dificiles de mantener o poco fiables en la implementación del protocolo o poco utiles.
-
-- Modo busmonitor en KNXnetIPServer, hay problemas de conversión de mensajes 'L_data.xxx' a mensajes busmonitor.
+- **Modo Busmonitor en `KNXnetIPServer`**: Corregida la conversión de `L_Data.ind`/`L_Data.con`/`L_Data.req` (estándar `FT=1` con `LG = dataLen`, extendido `FT=0`) y `L_Raw.ind`/`L_Raw.req` hacia `L_Busmon.ind` (`0x2b`) con su `FCS` y bloque `AdditionalInformationField` (`BusmonitorStatusInfo` `0x03`, `TimestampRelative` `0x04`), validado con ETS5 y pruebas unitarias.
