@@ -38,7 +38,6 @@ async function main() {
   const keyringPassword = process.env.KNX_KEYRING_PASSWORD;
   const transport = (process.env.KNX_TRANSPORT ?? "routing").toLowerCase();
   const localIA = process.env.KNX_LOCAL_IA ?? "1.1.200";
-  const requestIA = process.env.KNX_REQUEST_IA;
   const localIp = process.env.KNX_LOCAL_IP ?? "192.168.0.190";
   const targetIA = process.env.KNX_TARGET_IA ?? "1.1.1";
   const testGA = process.env.KNX_TEST_GA;
@@ -107,9 +106,8 @@ async function main() {
     service = new KNXTunneling({
       ip,
       port: Number(process.env.KNX_PORT ?? 3671),
-      ...(requestIA ? { individualAddress: requestIA } : {}),
+      individualAddress: localIA,
       dataSecure,
-      transport: "UDP",
       localIp,
       connectionType: ConnectionType.TUNNEL_CONNECTION,
       logOptions: { level: "info", enabled: true },
@@ -226,6 +224,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1500));
     console.log(`Enviando GroupValue_Write(${testGA}, DPT 1.001, false)...`);
     await service.write(testGA, "1.001", false);
+    console.log(service.individualAddress);
   }
 
   console.log("\nEscuchando telegramas en el bus (Ctrl+C para salir)...");

@@ -60,6 +60,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private secureSession: SecureSession | null = null;
   private secureKeepAliveTimer: NodeJS.Timeout | null = null;
   public individualAddress: string = "1.0.1"; // Assigned Individual Address
+  private isManualIA = false;
   // Heartbeat
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private heartbeatFailures: number = 0;
@@ -100,6 +101,13 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     this.options.port = options.port || 3671;
     this.MAX_QUEUE_SIZE = options.maxQueueSize || 100;
     this.logger = this.logger.child({ module: "TunnelClient" });
+    if (options.individualAddress) {
+      this.individualAddress =
+        typeof options.individualAddress === "number"
+          ? KNXHelper.individualAddressToString(options.individualAddress)
+          : options.individualAddress;
+      this.isManualIA = true;
+    }
 
     // Initialize the FSM
     this.fsm = new FSM<KNXTunnelingState, KNXTunnelingEvent>(
@@ -385,14 +393,14 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
   private sendConnectRequest() {
     const hpai = this.getControlHPAI();
     const knxLayer = this.options.knxLayer ?? KNXLayer.LINK_LAYER;
-    let requestedIA: number | null = null;
-    if (this.options.individualAddress !== undefined) {
-      requestedIA =
-        typeof this.options.individualAddress === "number"
-          ? this.options.individualAddress
-          : KNXHelper.GetAddress(this.options.individualAddress, ".").readUInt16BE(0);
-    }
-    const cri = new CRI(this.options.connectionType!, knxLayer, requestedIA);
+    // let requestedIA: number | null = null;
+    // if (this.options.individualAddress !== undefined) {
+    //   requestedIA =
+    //     typeof this.options.individualAddress === "number"
+    //       ? this.options.individualAddress
+    //       : KNXHelper.GetAddress(this.options.individualAddress, ".").readUInt16BE(0);
+    // }
+    const cri = new CRI(this.options.connectionType!, knxLayer);
 
     const header = new KNXnetIPHeader(KNXnetIPServiceType.CONNECT_REQUEST, 0);
     const body = Buffer.concat([hpai.toBuffer(), hpai.toBuffer(), cri.toBuffer()]);
@@ -807,7 +815,7 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
 
           if (body.length >= 14) {
             const crd = CRD.fromBuffer(body.subarray(10));
-            this.individualAddress = KNXHelper.GetAddress(crd.knxAddress, ".");
+            if (!this.isManualIA) this.individualAddress = KNXHelper.GetAddress(crd.knxAddress, ".");
           }
           this.fsm.transition(KNXTunnelingEvent.CONNECTED);
         } else {
