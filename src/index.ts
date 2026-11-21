@@ -28,6 +28,8 @@ export * from "./core/KNXnetIPSecureStructures";
 export * from "./security/KnxCcm";
 export * from "./security/KnxSecureKeys";
 export * from "./security/KnxKeyring";
+export * from "./security/KnxDataSecureCcm";
+export * from "./security/KnxDataSecure";
 export * from "./connection/TcpFrameReader";
 export * from "./connection/SecureSession";
 export * from "./connection/ServerSecureSession";

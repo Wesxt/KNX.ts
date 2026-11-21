@@ -423,6 +423,7 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
               if (this.options.localIp && this.options.localIp !== "0.0.0.0" && this.options.ip) {
                 try {
                   socket.addMembership(this.options.ip, this.options.localIp);
+                  socket.setMulticastInterface(this.options.localIp);
                   joinedInterfaces.add(this.options.localIp);
                   this.logger.info(`Joined multicast on primary interface (${this.options.ip})`);
                 } catch (e) {
@@ -895,12 +896,24 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
    * @param data The CEMI message or buffer to send.
    */
   async send(data: Buffer | CEMIInstance): Promise<void> {
+    let plainCemi: CEMIInstance | undefined = undefined;
+    if (Buffer.isBuffer(data)) {
+      try {
+        plainCemi = CEMI.fromBuffer(data);
+      } catch {
+        /* empty */
+      }
+    } else {
+      plainCemi = data;
+    }
+
+    const wireData = this.prepareOutgoingCemi(data);
     let cemiBuffer: Buffer;
     let cemi: CEMIInstance | undefined = undefined;
-    if (Buffer.isBuffer(data)) {
-      cemiBuffer = data;
+    if (Buffer.isBuffer(wireData)) {
+      cemiBuffer = wireData;
       try {
-        cemi = CEMI.fromBuffer(data);
+        cemi = CEMI.fromBuffer(wireData);
         if ("controlField2" in cemi) {
           const cf2 = cemi.controlField2 as ExtendedControlField;
           const hopCount = cf2.hopCount;
@@ -911,24 +924,28 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
         this.logger.debug("Error parsing CEMI buffer" + e.message);
       }
     } else {
-      cemi = data;
+      cemi = wireData;
       if ("controlField2" in cemi) {
         const cf2 = cemi.controlField2 as ExtendedControlField;
         const hopCount = cf2.hopCount;
         if (hopCount === 0) return;
         if (hopCount < 7) cf2.hopCount = hopCount - 1;
       }
-      cemiBuffer = data.toBuffer();
+      cemiBuffer = wireData.toBuffer();
+    }
+
+    const eventCemi = plainCemi ?? cemi;
+    if (eventCemi) {
+      this.emit("send", eventCemi);
+      if (!this.isCacheDelegated) {
+        GroupAddressCache.getInstance().processCEMI(eventCemi);
+      }
+      if (!this.isEventsDelegated && "destinationAddress" in eventCemi) {
+        this.emit(eventCemi.destinationAddress, eventCemi);
+      }
     }
 
     if (cemi) {
-      this.emit("send", cemi);
-      if (!this.isCacheDelegated) {
-        GroupAddressCache.getInstance().processCEMI(cemi);
-      }
-      if (!this.isEventsDelegated && "destinationAddress" in cemi) {
-        this.emit(cemi.destinationAddress, cemi);
-      }
       const body = cemiBuffer;
       const srcIAStr = "sourceAddress" in cemi ? cemi.sourceAddress : "";
       let busmonBody: Buffer | null = null;
@@ -987,6 +1004,25 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
     await this.enqueuePacket(cemiBuffer);
   }
 
+  /**
+   * Returns the current 48-bit Secure Routing multicast timer (`mc_timer`) in ms, or `null` if Secure Routing is not enabled.
+   */
+  public get secureRoutingTimerValue(): bigint | null {
+    return this.secureRoutingTimer ? this.secureRoutingTimer.getTimerValue() : null;
+  }
+
+  /**
+   * Immediately broadcasts a multicast `TIMER_NOTIFY` (0x0955) frame so peer Secure Routing nodes
+   * with a higher `mc_timer` reply promptly with an update `TIMER_NOTIFY` (03_08_09 §2.2.2.3.2).
+   */
+  public sendTimerNotify(): void {
+    if (!this.secureRoutingTimer || !this.socket || !this.options.ip) return;
+    const frame = this.secureRoutingTimer.buildTimerNotifyFrame();
+    (this.socket as dgram.Socket).send(frame, this.routingSendPort, this.options.ip, (err) => {
+      if (err) this.emit("error", err);
+    });
+  }
+
   private async enqueuePacket(cemiBuffer: Buffer): Promise<void> {
     if (this.msgQueue.length >= this.MAX_QUEUE_SIZE) {
       this.sendLostMessage(1);
@@ -994,9 +1030,19 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
       return;
     }
 
+    // Per 03_08_05 §4.1, ROUTING_INDICATION carries L_Data.ind (0x29) / L_Raw.ind (0x2d), not L_Data.req (0x11)
+    let routingPayload = cemiBuffer;
+    if (cemiBuffer.length > 0 && cemiBuffer[0] === 0x11) {
+      routingPayload = Buffer.from(cemiBuffer);
+      routingPayload[0] = 0x29;
+    } else if (cemiBuffer.length > 0 && cemiBuffer[0] === 0x10) {
+      routingPayload = Buffer.from(cemiBuffer);
+      routingPayload[0] = 0x2d;
+    }
+
     const header = new KNXnetIPHeader(KNXnetIPServiceType.ROUTING_INDICATION, 0);
-    header.totalLength = KNXnetIPHeader.HEADER_SIZE_10 + cemiBuffer.length;
-    const packet = Buffer.concat([header.toBuffer(), cemiBuffer]);
+    header.totalLength = KNXnetIPHeader.HEADER_SIZE_10 + routingPayload.length;
+    const packet = Buffer.concat([header.toBuffer(), routingPayload]);
 
     this.msgQueue.push(packet);
 
@@ -1104,7 +1150,10 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
         case KNXnetIPServiceType.TIMER_NOTIFY: {
           if (this.secureRoutingTimer && !isFromSecureWrapper) {
             try {
-              this.secureRoutingTimer.handleTimerNotify(msg);
+              const before = this.secureRoutingTimer.getTimerValue();
+              const valid = this.secureRoutingTimer.handleTimerNotify(msg);
+              const after = this.secureRoutingTimer.getTimerValue();
+              this.logger.debug(`TIMER_NOTIFY from ${rinfo.address}: valid=${valid}, mc_timer ${before} -> ${after}`);
             } catch (err: any) {
               this.logger.debug(`Ignored invalid TIMER_NOTIFY from ${rinfo.address}: ${err?.message ?? err}`);
             }
@@ -1119,6 +1168,10 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
             const inner = this.secureRoutingTimer.unwrapMulticastFrame(msg);
             if (inner) {
               this.handleMessage(inner, rinfo, true);
+            } else {
+              this.logger.debug(
+                `Discarded outdated multicast SECURE_WRAPPER from ${rinfo.address} (local mc_timer=${this.secureRoutingTimer.getTimerValue()})`,
+              );
             }
           } catch (err: any) {
             this.logger.debug(`Discarded multicast SECURE_WRAPPER from ${rinfo.address}: ${err?.message ?? err}`);
@@ -1140,15 +1193,18 @@ export class KNXnetIPServer extends KNXService<KNXnetIPServerOptions> {
           }
           this.emit("raw_indication", body);
           try {
-            const cemi = CEMI.fromBuffer(body);
-            this.emit("indication", cemi);
-            if (!this.isCacheDelegated) {
-              GroupAddressCache.getInstance().processCEMI(
-                cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
-              );
+            const rawCemi = CEMI.fromBuffer(body);
+            const cemi = this.processIncomingCemi(rawCemi);
+            if (cemi) {
+              this.emit("indication", cemi);
+              if (!this.isCacheDelegated) {
+                GroupAddressCache.getInstance().processCEMI(
+                  cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
+                );
+              }
+              if ("destinationAddress" in cemi) this.emit(cemi.destinationAddress, cemi);
             }
-            if ("destinationAddress" in cemi) this.emit(cemi.destinationAddress, cemi);
-            const srcIAStr = "sourceAddress" in cemi ? cemi.sourceAddress : "";
+            const srcIAStr = "sourceAddress" in rawCemi ? rawCemi.sourceAddress : "";
             let busmonBody: Buffer | null = null;
             this._tunnelConnections.forEach((conn) => {
               // Echo cancellation: Don't forward back to the client that originated this message

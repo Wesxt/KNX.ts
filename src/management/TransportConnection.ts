@@ -1,11 +1,33 @@
 import { KNXService } from "../connection/KNXService";
-import { CEMIInstance } from "../core/CEMI";
+import { CEMI, CEMIInstance } from "../core/CEMI";
+import { ControlField } from "../core/ControlField";
+import { ExtendedControlField } from "../core/ControlFieldExtended";
 import { APCIEnum } from "../core/enum/APCIEnum";
 import { AddressType } from "../core/enum/EnumControlFieldExtended";
 import { APDU } from "../core/layers/data/APDU";
-import { TPCIType } from "../core/layers/interfaces/TPCI";
+import { TPDU } from "../core/layers/data/TPDU";
+import { APCI } from "../core/layers/interfaces/APCI";
+import { TPCI, TPCIType } from "../core/layers/interfaces/TPCI";
 import { MESSAGE_CODE_FIELD } from "../core/MessageCodeField";
+import type { KnxDataSecure } from "../security/KnxDataSecure";
+import { APCI_DATA_SECURE, parseSecureAsduHeader, SecureAlService } from "../security/KnxDataSecureCcm";
 import { buildConnectedLDataReq, buildTAckReq, buildTConnectReq, buildTDisconnectReq } from "./apduBuilders";
+
+export interface TransportDataSecureOptions {
+  /** {@link KnxDataSecure} manager holding keys and sequence numbers. */
+  manager: KnxDataSecure;
+  /** True to use Tool Key / FDSK (`SCF.T = 1`, default `true`). */
+  toolAccess?: boolean;
+  /** Optional explicit 16-byte AES-128 key override. */
+  key?: Buffer | string;
+  /** True for Authentication + Confidentiality (`SAI = 1`, default `true`), false for Authentication only (`SAI = 0`). */
+  confidentiality?: boolean;
+  /**
+   * When true (default), automatically executes `DM_SecureSync_RCl` over the connected channel right after `T_Connect`
+   * to synchronize both local and remote 48-bit sequence numbers before sending management requests.
+   */
+  autoSync?: boolean;
+}
 
 export interface TransportConnectionOptions {
   sourceAddress?: string;
@@ -13,6 +35,8 @@ export interface TransportConnectionOptions {
   responseTimeoutMs?: number;
   connectionTimeoutMs?: number;
   maxRetries?: number;
+  /** Optional KNX Data Security configuration for securing all APDUs exchanged over this connection. */
+  dataSecure?: TransportDataSecureOptions;
 }
 
 /**
@@ -28,6 +52,7 @@ export class TransportConnection {
   private readonly responseTimeoutMs: number;
   private readonly connectionTimeoutMs: number;
   private readonly maxRetries: number;
+  private readonly dataSecure?: TransportDataSecureOptions;
 
   private txSequence: number = 0;
   private rxSequence: number = 0;
@@ -49,6 +74,12 @@ export class TransportConnection {
     timer: NodeJS.Timeout;
   } | null = null;
 
+  private pendingRawSyncResWaiter: {
+    resolve: (cemi: CEMIInstance) => void;
+    reject: (err: Error) => void;
+    timer: NodeJS.Timeout;
+  } | null = null;
+
   constructor(
     private readonly service: KNXService,
     destinationAddress: string,
@@ -60,6 +91,7 @@ export class TransportConnection {
     this.responseTimeoutMs = options.responseTimeoutMs ?? 3000;
     this.connectionTimeoutMs = options.connectionTimeoutMs ?? 6000;
     this.maxRetries = options.maxRetries ?? 3;
+    this.dataSecure = options.dataSecure;
   }
 
   public get isConnected(): boolean {
@@ -95,6 +127,63 @@ export class TransportConnection {
     this._isConnected = true;
     this.resetConnectionTimer();
     await this.service.send(connectCemi);
+
+    if (this.dataSecure && (this.dataSecure.autoSync ?? true)) {
+      await this.syncDataSecure();
+    }
+  }
+
+  /**
+   * Synchronizes 48-bit Data Security Sequence Numbers (`DM_SecureSync_RCl`, connected mode)
+   * over this active Transport Layer connection.
+   */
+  public async syncDataSecure(): Promise<void> {
+    if (!this.dataSecure) return;
+    if (!this.isConnected) {
+      throw new Error(`TransportConnection to ${this.destinationAddress} is not connected`);
+    }
+
+    await this.dataSecure.manager.syncSequenceNumber(this.service, this.destinationAddress, {
+      commMode: "connected",
+      toolAccess: this.dataSecure.toolAccess ?? true,
+      key: this.dataSecure.key,
+      sourceAddress: this.sourceAddress,
+      timeoutMs: Math.max(this.responseTimeoutMs, 6000),
+      connectedChannel: {
+        txSequence: this.txSequence,
+        sendNumbered: async (secureAsdu: Buffer) => {
+          const seq = this.txSequence;
+          const tpci = new TPCI(TPCIType.T_DATA_CONNECTED_PDU);
+          tpci.sequenceNumber = seq & 0x0f;
+          const apdu = new APDU(
+            new TPCI(tpci.getValue() as TPCIType),
+            new APCI(APCIEnum.A_DataSecure_Protocol_Data_Unit),
+            secureAsdu,
+            false,
+          );
+          const reqCemi = new CEMI.DataLinkLayerCEMI["L_Data.req"](
+            null,
+            new ControlField(0x30), // Extended Frame, System priority
+            new ExtendedControlField(0x60),
+            this.sourceAddress,
+            this.destinationAddress,
+            new TPDU(tpci, apdu, secureAsdu),
+          );
+          await this.sendWithAckRetry(reqCemi, seq);
+          this.txSequence = (this.txSequence + 1) & 0x0f;
+        },
+        waitResponse: (timeoutMs: number) =>
+          new Promise<CEMIInstance>((resolve, reject) => {
+            const timer = setTimeout(() => {
+              if (this.pendingRawSyncResWaiter) {
+                this.pendingRawSyncResWaiter = null;
+                reject(new Error(`Timeout waiting for connected S-A_Sync_Res from ${this.destinationAddress}`));
+              }
+            }, timeoutMs);
+            this.pendingRawSyncResWaiter = { resolve, reject, timer };
+          }),
+      },
+    });
   }
 
   /**
@@ -112,7 +201,7 @@ export class TransportConnection {
     }
 
     const seq = this.txSequence;
-    const reqCemi = buildConnectedLDataReq(
+    const plainReqCemi = buildConnectedLDataReq(
       this.sourceAddress,
       this.destinationAddress,
       seq,
@@ -120,6 +209,14 @@ export class TransportConnection {
       data,
       isShort,
     );
+    const reqCemi = this.dataSecure
+      ? this.dataSecure.manager.wrapCemi(plainReqCemi, {
+          key: this.dataSecure.key,
+          toolAccess: this.dataSecure.toolAccess ?? true,
+          confidentiality: this.dataSecure.confidentiality ?? true,
+          sourceAddress: this.sourceAddress,
+        })
+      : plainReqCemi;
 
     const expectedArray = Array.isArray(expectedResponseApci) ? expectedResponseApci : [expectedResponseApci];
 
@@ -174,7 +271,7 @@ export class TransportConnection {
     }
 
     const seq = this.txSequence;
-    const reqCemi = buildConnectedLDataReq(
+    const plainReqCemi = buildConnectedLDataReq(
       this.sourceAddress,
       this.destinationAddress,
       seq,
@@ -182,6 +279,14 @@ export class TransportConnection {
       data,
       isShort,
     );
+    const reqCemi = this.dataSecure
+      ? this.dataSecure.manager.wrapCemi(plainReqCemi, {
+          key: this.dataSecure.key,
+          toolAccess: this.dataSecure.toolAccess ?? true,
+          confidentiality: this.dataSecure.confidentiality ?? true,
+          sourceAddress: this.sourceAddress,
+        })
+      : plainReqCemi;
 
     await this.sendWithAckRetry(reqCemi, seq);
     this.txSequence = (this.txSequence + 1) & 0x0f;
@@ -195,7 +300,15 @@ export class TransportConnection {
     if (!this.isConnected) {
       throw new Error(`TransportConnection to ${this.destinationAddress} is not connected`);
     }
-    await this.service.send(cemi);
+    const outCemi = this.dataSecure
+      ? this.dataSecure.manager.wrapCemi(cemi, {
+          key: this.dataSecure.key,
+          toolAccess: this.dataSecure.toolAccess ?? true,
+          confidentiality: this.dataSecure.confidentiality ?? true,
+          sourceAddress: this.sourceAddress,
+        })
+      : cemi;
+    await this.service.send(outCemi);
     await this.disconnect(false);
   }
 
@@ -223,6 +336,12 @@ export class TransportConnection {
       clearTimeout(waiter.timer);
       this.pendingResponseWaiter = null;
       waiter.reject(new Error("Transport connection closed while waiting for response"));
+    }
+    if (this.pendingRawSyncResWaiter) {
+      const waiter = this.pendingRawSyncResWaiter;
+      clearTimeout(waiter.timer);
+      this.pendingRawSyncResWaiter = null;
+      waiter.reject(new Error("Transport connection closed while waiting for S-A_Sync_Res"));
     }
 
     if (wasConnected && sendDisconnectPdu && !this._remoteDisconnected) {
@@ -328,7 +447,38 @@ export class TransportConnection {
       const ackCemi = buildTAckReq(this.sourceAddress, this.destinationAddress, rxSeq);
       void this.service.send(ackCemi).catch(() => {});
 
-      const apdu: APDU = tpdu.apdu;
+      let apdu: APDU | null = tpdu.apdu;
+
+      // Handle connected KNX Data Secure frames if service.dataSecure did not already unwrap them
+      if (apdu && apdu.apci.value === APCI_DATA_SECURE) {
+        const hdr = parseSecureAsduHeader(apdu.data);
+        if (hdr.valid && hdr.service === SecureAlService.S_A_SYNC_RES) {
+          if (this.pendingRawSyncResWaiter) {
+            const waiter = this.pendingRawSyncResWaiter;
+            clearTimeout(waiter.timer);
+            this.pendingRawSyncResWaiter = null;
+            waiter.resolve(cemi);
+          }
+          return;
+        }
+        if (this.dataSecure) {
+          const explicitKey =
+            this.dataSecure.key !== undefined
+              ? Buffer.isBuffer(this.dataSecure.key)
+                ? this.dataSecure.key
+                : Buffer.from(this.dataSecure.key.replace(/^0x/i, "").replace(/[\s:-]/g, ""), "hex")
+              : undefined;
+          const unwrapped = this.dataSecure.manager.unwrapCemi(cemi, { key: explicitKey });
+          if (!unwrapped.plainCemi || !("TPDU" in unwrapped.plainCemi)) {
+            // 03_03_07 §5.5.5.2 Error handling 1: failed security check does NOT close TL connection
+            return;
+          }
+          apdu = unwrapped.plainCemi.TPDU.apdu;
+        } else {
+          return;
+        }
+      }
+
       if (this.pendingResponseWaiter && apdu) {
         const expected = this.pendingResponseWaiter.expectedApci;
         const rawApci = apdu.apci.value;

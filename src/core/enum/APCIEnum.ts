@@ -584,4 +584,9 @@ export enum APCIEnum {
    * Este comando permite enviar información sobre un flujo de datos de archivo, facilitando la gestión y transferencia de archivos en la red KNX desde la capa de aplicación.
    */
   A_FileStream_InfoReport_Protocol_Data_Unit = 0x3f0,
+  /**
+   * A_DataSecure_Protocol_Data_Unit (`APCISec = 0x3F1`, 03_03_07 §5.2.1.2) es el comando APCI dedicado
+   * que encapsula los servicios de la capa de aplicación segura (KNX Data Security: `S-A_Data`, `S-A_Sync_Req`, `S-A_Sync_Res`).
+   */
+  A_DataSecure_Protocol_Data_Unit = 0x3f1,
 }

@@ -106,7 +106,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
           [TPUARTEvent.STOP]: TPUARTState.DISCONNECTED,
         },
       },
-      (newState, oldState) => this.handleStateChange(newState, oldState)
+      (newState, oldState) => this.handleStateChange(newState, oldState),
     );
 
     this.receiver = new Receiver(this);
@@ -155,22 +155,21 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
           this.emit("busmonitor", cemi);
         } else {
           const emiBuffer = Buffer.concat([Buffer.from([0x29]), frame]);
-          const cemi = CEMIAdapter.emiToCemi(emiBuffer);
-          if (cemi) {
-            this.emit("indication", cemi);
-            if (!this.isCacheDelegated && "destinationAddress" in cemi && "sourceAddress" in cemi) {
-              try {
+          const rawCemi = CEMIAdapter.emiToCemi(emiBuffer);
+          if (rawCemi) {
+            this.emit("raw_indication", rawCemi.toBuffer());
+            const cemi = this.processIncomingCemi(rawCemi);
+            if (cemi) {
+              this.emit("indication", cemi);
+              if (!this.isCacheDelegated && "destinationAddress" in cemi && "sourceAddress" in cemi) {
                 GroupAddressCache.getInstance().processCEMI(
                   cemi as InstanceType<(typeof CEMI)["DataLinkLayerCEMI"]["L_Data.ind"]>,
                 );
-              } catch {
-                /* empty */
+              }
+              if (!this.isEventsDelegated && "destinationAddress" in cemi) {
+                this.emit(cemi.destinationAddress as string, cemi);
               }
             }
-            if (!this.isEventsDelegated && "destinationAddress" in cemi) {
-              this.emit(cemi.destinationAddress as string, cemi);
-            }
-            this.emit("raw_indication", cemi.toBuffer());
           }
         }
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -372,7 +371,8 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
       }
     }
 
-    const frame = Buffer.isBuffer(data) ? data : CEMIAdapter.cemiToEmi(data)?.toBuffer();
+    const wireData = this.prepareOutgoingCemi(data);
+    const frame = Buffer.isBuffer(wireData) ? wireData : CEMIAdapter.cemiToEmi(wireData)?.toBuffer();
     if (!frame) throw new Error("Invalid data");
     this.emit("send", data);
     return this.enqueueFrame(frame);

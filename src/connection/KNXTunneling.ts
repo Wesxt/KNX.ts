@@ -593,7 +593,8 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     }
 
     this.emit("send", cemi);
-    const cemiBuffer = Buffer.isBuffer(cemi) ? cemi : cemi.toBuffer();
+    const wireCemi = this.prepareOutgoingCemi(cemi);
+    const cemiBuffer = Buffer.isBuffer(wireCemi) ? wireCemi : wireCemi.toBuffer();
     const isDeviceMgmt = this.options.connectionType === ConnectionType.DEVICE_MGMT_CONNECTION;
     const serviceType = isDeviceMgmt
       ? KNXnetIPServiceType.DEVICE_CONFIGURATION_REQUEST
@@ -986,7 +987,10 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
     try {
       const len = body[0]; // Connection Header Length
       const data = body.subarray(len);
-      const cemi = CEMI.fromBuffer(data);
+      const rawCemi = CEMI.fromBuffer(data);
+      this.emit("raw_indication", data);
+      const cemi = this.processIncomingCemi(rawCemi);
+      if (!cemi) return;
       this.emit("indication", cemi);
       if (!this.isCacheDelegated && cemi) {
         try {
@@ -998,7 +1002,6 @@ export class KNXTunneling extends KNXService<KNXTunnelingOptions> {
       if (!this.isEventsDelegated && "destinationAddress" in cemi) {
         this.emit(cemi.destinationAddress, cemi);
       }
-      this.emit("raw_indication", data);
     } catch {
       /* empty */
     }

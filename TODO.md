@@ -8,8 +8,7 @@ Pruebas pendientes por hacer.
 
 ### Conexión TCP, Tunnelling v2 y KNX IP Secure
 
-- **Cliente `KNXTunneling` (UDP, TCP plano, Tunnelling v2 Features y KNX IP Secure) y `KNXnetIPServer` (TCP Unicast, Secure Sessions, Core v2 Extended Search, Tunnelling v2 Features y Secure Routing Multicast)**: Implementados conforme al estándar KNX (`03_08_02`, `03_08_04`, `03_08_09`) y validados con pruebas automatizadas, vectores oficiales del Anexo A, archivos `.knxkeys` de ETS y pruebas reales con ETS5 (descubrimiento, túnel TCP/Secure, Group Monitor y Busmonitor).
-- **Pendiente de validación extendida en hardware físico externo**: Falta validar Secure Routing Multicast y `KNXManagement` directamente frente a routers/dispositivos físicos KNX IP Secure independientes.
+- **Cliente `KNXTunneling` (UDP, TCP plano, Tunnelling v2 Features y KNX IP Secure) y `KNXnetIPServer` (TCP Unicast, Secure Sessions, Core v2 Extended Search, Tunnelling v2 Features y Secure Routing Multicast)**: Implementados conforme al estándar KNX (`03_08_02`, `03_08_04`, `03_08_09`) y validados con pruebas automatizadas, vectores oficiales del Anexo A, archivos `.knxkeys` de ETS, sesiones reales con ETS5 (descubrimiento, túnel TCP/Secure, Group Monitor y Busmonitor) y **hardware físico real (LogicMachine en Secure Routing Multicast con `SECURE_WRAPPER` + sincronización `TIMER_NOTIFY` + Zennio MAXinBOX 66 v3)**.
 
 ### Gestión de Red y Dispositivos (`KNXManagement` y `KNXManagementSession`)
 
@@ -19,7 +18,7 @@ Pruebas pendientes por hacer.
   - Lectura, escritura, descripción y escaneo de propiedades y funciones de objetos de interfaz (estándar y extendidas).
   - Lectura, escritura y verificación de memoria estándar (16 bits), de usuario (20 bits), extendida (24 bits) y por bits (`A_MemoryBit_Write`).
   - Control de máquinas de estados de carga (`PID_LOAD_STATE_CONTROL`) y ejecución (`PID_RUN_STATE_CONTROL`), enlaces de objetos de grupo (`A_Link_Read` / `A_Link_Write`), reinicio básico y *Master Reset* confirmado (`A_Restart`), y gestión local cEMI (`M_PropRead` / `M_PropWrite` / `M_FuncPropCommand` / `M_Reset`).
-- Validado contra capturas reales de ETS (`test_xml/`) y dispositivos simulados. **Queda pendiente probar directamente con dispositivos KNX físicos reales.**
+- Validado contra capturas reales de ETS (`test_xml/`), dispositivos simulados y **hardware físico real (Zennio MAXinBOX 66 v3 con gestión segura Data Secure + `ToolKey` sobre `TransportConnection`)**. Queda pendiente ampliar pruebas físicas para procedimientos de memoria/descarga completa.
 
 ### Enrutado de conexiones
 
@@ -51,4 +50,5 @@ Implementaciones pendientes.
 
 ## Características recientes / resueltas
 
+- **KNX Data Secure (`03_03_07` §5, `03_05_01` §6.3, `03_05_02` §4)**: Implementado soporte completo para `S-A_Data` (`APCISec = 0x03F1`, modos *Auth+Conf* y *Auth-only*, cambio automático a *Extended Frame* cuando APDU > 15 bytes), `S-A_Sync` (`DM_SecureSync_RCl` y `DM_SecureSync_SBC`), anti-replay de 48 bits con persistencia en JSON, lectura/normalización de `.knxkeys` ETS5/ETS6 y sesiones de gestión segura (`KNXManagement` + Security Interface Object Tipo 17). **Validado con los 4 vectores oficiales del Anexo C (`C.1.1`–`C.1.4`) y en hardware físico real contra un Zennio MAXinBOX 66 v3** (sincronización `S-A_Sync`, lectura del Security Interface Object con `ToolKey`, y envío/recepción bidireccional de grupos Data Secure).
 - **Modo Busmonitor en `KNXnetIPServer`**: Corregida la conversión de `L_Data.ind`/`L_Data.con`/`L_Data.req` (estándar `FT=1` con `LG = dataLen`, extendido `FT=0`) y `L_Raw.ind`/`L_Raw.req` hacia `L_Busmon.ind` (`0x2b`) con su `FCS` y bloque `AdditionalInformationField` (`BusmonitorStatusInfo` `0x03`, `TimestampRelative` `0x04`), validado con ETS5 y pruebas unitarias.

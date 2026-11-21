@@ -136,7 +136,7 @@ export class TPCI {
     if (val < 0 || val > 3) {
       throw new Error("Los bits reservados deben estar entre 0 y 3");
     }
-    this._buffer[0] |= val & 0x03;
+    this._buffer[0] = (this._buffer[0] & 0xfc) | (val & 0x03);
   }
 
   /**

@@ -11,7 +11,11 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 - **KNXnet/IP Secure (`03_08_09`)**:
   - **Cliente y Servidor de Túnel Seguro (TCP Unicast)**: Intercambio de claves ECDH con X25519, autenticación mutua de usuario y dispositivo con PBKDF2-HMAC-SHA256 (`SESSION_REQUEST`, `SESSION_RESPONSE`, `SESSION_AUTHENTICATE`, `SESSION_STATUS`) y cifrado/autenticación AES-128-CCM en `SECURE_WRAPPER` tanto en `KNXTunneling` como en `KNXnetIPServer` (`ServerSecureSession`).
   - **Enrutamiento Multicast Seguro (Secure Routing)**: Cifrado multicast en `SECURE_WRAPPER` y máquina de estados de sincronización de reloj de 48 bits con `TIMER_NOTIFY` (`SecureRoutingTimer`) en `KNXnetIPServer`.
-  - **Lector `.knxkeys` de ETS sin dependencias (`KnxKeyring`)**: Carga, verifica la firma canónica de ETS y descifra archivos `.knxkeys` usando únicamente `crypto` y `zlib` nativos de Node.js.
+  - **Lector `.knxkeys` de ETS sin dependencias (`KnxKeyring`)**: Carga, verifica la firma canónica de ETS y descifra archivos `.knxkeys` usando únicamente `crypto` y `zlib` nativos de Node.js (incluyendo normalización de direcciones de grupo enteras de ETS5 y de 3 niveles de ETS6).
+- **KNX Data Secure (`03_03_07` §5, `03_05_01` §6.3, `03_05_02` §4)**:
+  - **Seguridad Transparente en Capa de Aplicación (`KnxDataSecure`)**: Cifrado y autenticación extremo a extremo AES-128-CCM (`APCISec = 0x03F1`, `S-A_Data` en modos *Autenticación + Confidencialidad* y *Solo Autenticación*, cambio automático a *Extended Frame* `FT=0` para cargas > 15 bytes) acoplable a cualquier `KNXService` (`KNXTunneling`, `KNXnetIPServer`, `KNXUSBConnection`, `TPUARTConnection`).
+  - **Contadores de 48 bits y Motor `S-A_Sync`**: Validación anti-replay por dirección fuente, persistencia opcional en JSON (`sequenceNumberFile`), `DM_SecureSync_RCl` (punto a punto / conectado) y `DM_SecureSync_SBC` (broadcast / system broadcast) con respaldo `ToolKey` ↔ `FDSK`.
+  - **Gestión Segura y Security Interface Object (Tipo 17)**: Sesiones seguras en `KNXManagement` (`openSession(ia, { secure: true })` / `withSession`) con helpers para `PID_SECURITY_MODE`, `PID_GRP_KEY_TABLE`, `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`, `PID_SECURITY_FAILURES_LOG` y `PID_SEQUENCE_NUMBER_SENDING`. *(Validado con los vectores oficiales del Anexo C de `03_03_07` y en hardware físico real contra un Zennio MAXinBOX 66 v3.)*
 - **Descubrimiento Extendido Core v2 (`KNXTunneling.discover` / `KNXnetIPServer.discover`)**: Descubre servidores KNXnet/IP por multicast/unicast UDP o unicast TCP con Search Request Parameters (SRP: modo programación, dirección MAC, versión mínima de familia de servicio, DIBs solicitados) y decodifica metadatos legibles (`KNXDiscoveredDevice`).
 - **Gestión Completa de Red y Dispositivos KNX (`KNXManagement` y `KNXManagementSession`)**: Implementación completa del stack de gestión KNX (`03_05_02 Management Procedures`, `03_03_07 Application Layer`, `03_05_01 Resources` y `03_08_03 / 03_06_03 Gestión Local cEMI`) sobre una capa de transporte orientada a conexión punto a punto (`TransportConnection`, `03_03_04`), además de modos broadcast, system broadcast y sin conexión:
   - **Gestión de Dirección Individual y de Dominio (`NM_*`)**: Lectura de dispositivos en modo programación (con detección de direcciones duplicadas), programación de Dirección Individual mediante botón (`writeIndividualAddress`) o por número de serie de 6 bytes sin pulsar botón (`writeIndividualAddressBySerial`), restablecimiento a `15.15.255` (`resetIndividualAddress`), lectura/escritura de Dirección de Dominio (`readDomainAddress`, `writeDomainAddress`, `readDomainAddressSelective`, `readDomainAddressBySerial`, `writeDomainAddressBySerial`) y lectura/escritura de parámetros de red (`A_NetworkParameter_*` y `A_SystemNetworkParameter_*`).
@@ -31,7 +35,7 @@ Este proyecto se centra en la rigurosidad del protocolo, leer y enviar cualquier
 Según el `TODO.md`, varias características han sido verificadas mediante suites automatizadas e integración con ETS, mientras otras permanecen pendientes de validación extendida en hardware físico:
 
 - **Integración con ETS5 y Cumplimiento del Estándar**: El descubrimiento (`SEARCH_REQUEST` / `SEARCH_REQUEST_EXTENDED` con SRPs), `DESCRIPTION_RESPONSE`, túnel UDP/TCP, características de Tunnelling v2, sesiones seguras TCP y Monitor de Grupos / Busmonitor en ETS están implementados y verificados con pruebas automatizadas y sesiones reales contra ETS5.
-- **Secure Routing Multicast y `KNXManagement` (Pendiente de pruebas en hardware físico dedicado)**: Implementados conforme al estándar KNX v3.0.0 y verificados contra los vectores criptográficos oficiales del Anexo A, archivos `.knxkeys` reales de ETS, capturas XML reales de ETS y simuladores de pasarela/dispositivo. **Queda pendiente su validación directa con routers KNX IP Secure físicos y dispositivos de bus físicos.**
+- **KNX IP Secure Routing, KNX Data Secure y `KNXManagement` (Validado en Hardware Físico)**: Implementados conforme al estándar KNX v3.0.0 y verificados contra los vectores criptográficos oficiales del Anexo A (`03_08_09`) y Anexo C (`03_03_07`), archivos `.knxkeys` reales de ETS, capturas XML reales de ETS y **hardware físico real** (KNX IP Secure Routing `SECURE_WRAPPER` + `TIMER_NOTIFY` con LogicMachine, y comunicación de grupo KNX Data Secure + gestión segura `ToolKey` / `S-A_Sync` / Security Interface Object 17 con un Zennio MAXinBOX 66 v3). Queda pendiente ampliar pruebas físicas de escritura/descarga de memoria en dispositivos adicionales.
 - **Filtrado de Origen**: El filtrado basado en direcciones de origen y el enrutamiento selectivo están en la hoja de ruta.
 - **Uso de las capas NPDU, TPDU y APDU**: En EMI hace falta usarlas para una correcta deserialización.
 
@@ -73,6 +77,7 @@ Estas clases forman el núcleo de tu interacción con la red. Todas ellas hereda
 - `KNXTunneling`: Se conecta como cliente a una pasarela KNXnet/IP existente mediante UDP (`useRouteBack`), TCP plano (`transport: "TCP"`) o **KNX IP Secure sobre TCP** (`secure: { ... }`), con Extended CRI (`individualAddress`, `knxLayer`), características Tunnelling v2 (`getFeature`, `setFeature`) y descubrimiento estático (`KNXTunneling.discover`).
 - `KNXManagement`, `KNXManagementSession` y `TransportConnection`: Stack completo de gestión de red y dispositivos KNX (`03_05_02`, `03_03_07`, `03_08_03`) para leer y escribir Direcciones Individuales/de Dominio, Propiedades y Funciones de Objetos de Interfaz, Memoria de Dispositivo/Usuario/Extendida, Claves de Autorización, Máquinas de Estados de Carga y Ejecución, Enlaces de Objetos de Grupo y Reinicio Básico o *Master Reset* sin depender de ETS.
 - `KnxKeyring`: Lector y descifrador sin dependencias externas para archivos `.knxkeys` exportados desde ETS.
+- `KnxDataSecure` y `KnxDataSecureCcm`: Implementación completa de la capa de aplicación segura KNX Data Security (`S-AL`, `03_03_07` §5) con soporte para `S-A_Data` (A+C y Solo Autenticación), `S-A_Sync`, persistencia de números de secuencia de 48 bits, cifrado/descifrado transparente en `KNXService` y sesiones seguras en `KNXManagement` con `ToolKey` / `P2PKey`.
 - `KNXUSBConnection`: Se conecta directamente a interfaces USB KNX locales (ABB, MDT, Weinzierl, Zennio, etc.).
 - `TPUARTConnection`: Se conecta directamente a KNX a través de hardware serie TPUART.
 - `Router`: Un potente Puente que intercomunica las distintas conexiones de hardware o clientes tunneling (**KNXUSBConnection**). Puedes adjuntar múltiples instancias de `KNXService` a él (ej., una conexión USB y 5 túneles), y enrutará automáticamente los telegramas entre ellos, gestionando el aprendizaje de Direcciones Individuales y la prevención de bucles.
@@ -348,7 +353,20 @@ console.log("Puerto UDP:", server.udpListeningPort, "Puerto TCP:", server.tcpLis
 
 ### Guía de KNX IP Secure y TCP (`KNXTunneling`, `KNXnetIPServer`, `KnxKeyring`)
 
-> **Nota**: Validado contra los vectores del Anexo A de `03_08_09`, archivos `.knxkeys` de ETS y pasarelas simuladas. **Pendiente de pruebas en dispositivos físicos reales.**
+> **Nota**: Validado contra los vectores del Anexo A de `03_08_09`, archivos `.knxkeys` reales de ETS y hardware físico de KNX IP Secure Routing (LogicMachine + Zennio MAXinBOX 66 v3). KNX IP Secure Tunneling está validado contra vectores oficiales de `03_08_09` y pasarelas simuladas.
+
+#### 0. Configuración en ETS y Exportación del Archivo `.knxkeys`
+
+Antes de usar KNX IP Secure en `KNX.ts`, configura la seguridad en ETS y exporta el anillo de claves (keyring) del proyecto:
+
+1. **Proteger el proyecto de ETS con contraseña**: Abre la configuración del proyecto en ETS5/ETS6 y establece una **Contraseña del proyecto** (ETS la exige para habilitar KNX Secure).
+2. **Configurar IP Secure en ETS**:
+   - **Para IP Secure Tunneling**: Añade tu Interfaz IP / Router IP KNX en la topología, activa la **Puesta en marcha segura / IP Secure** (introduciendo su **FDSK** o código QR cuando ETS lo solicite), revisa los slots de **Tunneling** (cada canal tiene su propia Dirección Individual y contraseña de usuario) y descarga la interfaz IP.
+   - **Para IP Secure Routing (Backbone)**: Selecciona la línea **Backbone** (`0.0`) o el Router IP en ETS, activa **Seguridad / Enrutamiento Seguro**, verifica la dirección multicast (por defecto `224.0.23.12`) y la **Clave Backbone**, y descarga el Router IP. *(Si usas un router externo como LogicMachine, puedes consultar la Backbone Key de 32 caracteres hexadecimales con `keyring.getBackbone()?.decryptedKey?.toString("hex")` y pegarla en su campo "Clave de encriptado".)*
+3. **Exportar el archivo `.knxkeys`**:
+   - **ETS5**: Ve a la vista **Proyectos** → selecciona tu proyecto → **Detalles** → **Seguridad** → **Exportar claves** (`.knxkeys`) e introduce una **Contraseña de exportación**.
+   - **ETS6**: Abre el proyecto → **Resumen / Overview** (esquina superior izquierda) → **Seguridad** → **Exportar anillo de claves / Export Keyring** (`.knxkeys`) e introduce una **Contraseña de exportación**.
+   - Usa esa contraseña de exportación como `keyringPassword` en `KNX.ts`. Vuelve a exportar el `.knxkeys` cada vez que agregues dispositivos seguros, cambies slots de túnel o regeneres claves.
 
 #### 1. Túnel sobre TCP Plano (`03_08_04` §2.6.2)
 
@@ -394,9 +412,9 @@ const secureTunnelFromKeyring = new KNXTunneling({
 });
 
 // Inspección directa de un archivo .knxkeys:
-const keyring = KnxKeyring.load("./proyecto.knxkeys", "passwordDelKeyring");
-console.log("Backbone Key:", keyring.backboneKey?.toString("hex"));
-console.log("Interfaces:", keyring.interfaces);
+const keyring = KnxKeyring.fromSource("./proyecto.knxkeys", "passwordDelKeyring");
+console.log("Backbone Key:", keyring.getBackbone()?.decryptedKey?.toString("hex"));
+console.log("Interfaces:", Array.from(keyring.getInterfaces().values()));
 ```
 
 #### 3. Enrutamiento Multicast Seguro (Secure Routing) en `KNXnetIPServer`
@@ -406,13 +424,13 @@ import { KNXnetIPServer } from "knx.ts";
 
 const secureServer = new KNXnetIPServer({
   localIp: "192.168.1.50",
-  individualAddress: "1.1.0",
+  individualAddress: "1.1.200",
   friendlyName: "Secure TypeScript KNX Router",
   secure: {
     // Proporciona una Backbone Key de 16 bytes directamente o cárgala desde .knxkeys:
     keyringFile: "./proyecto.knxkeys",
     keyringPassword: "passwordDelKeyring",
-    latencyToleranceMs: 2000,
+    multicastLatencyToleranceMs: 2000,
   },
 });
 
@@ -421,9 +439,83 @@ await secureServer.connect();
 
 ---
 
+### Guía de KNX Data Secure (`KnxDataSecure`, `03_03_07` §5)
+
+#### 1. Configuración en ETS: Asignar la Dirección Individual y Exportar `.knxkeys`
+
+Cada dispositivo KNX Data Secure mantiene una tabla interna de direcciones individuales autorizadas (**Security Individual Address Table**, `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`). En comunicación de grupo cifrada (`GroupValue_Write` / `GroupValue_Read`), el dispositivo destino **solo acepta telegramas seguros cuya Dirección Individual (IA) de origen haya sido autorizada en ETS**; de lo contrario, descarta silenciosamente la trama e incrementa su contador de fallos de seguridad.
+
+Sigue estos pasos en **ETS5 / ETS6** antes de conectar con `KNX.ts`:
+
+1. **Configurar contraseña del proyecto**: Asegúrate de que el proyecto en ETS tenga contraseña para habilitar KNX Secure.
+2. **Añadir dispositivos seguros y activar seguridad en Direcciones de Grupo**:
+   - Añade tus dispositivos KNX Data Secure (por ejemplo, actuadores o sensores) a la topología e introduce su **FDSK** (Factory Default Setup Key / código QR) cuando ETS lo pida.
+   - Crea tus Direcciones de Grupo y verifica que la propiedad **Seguridad** esté activada (*Automático* o *Activado*).
+3. **Asignar la Dirección Individual de `KNX.ts` en el proyecto de ETS**:
+   - **Si te conectas por IP Routing (`KNXnetIPServer`), USB o TP-UART**:
+     1. En la línea correspondiente de la Topología en ETS, añade un dispositivo **Dummy / Visualización** (por ejemplo, *KNX Association → Dummy*) o un **Router IP**, y asígnale una Dirección Individual libre (por ejemplo, `1.1.200`).
+     2. Asocia todas las Direcciones de Grupo seguras que `KNX.ts` va a leer o escribir a ese Dummy/Router IP (arrastrando las Direcciones de Grupo a las asociaciones de la interfaz o a sus objetos de grupo para que ETS registre `1.1.200` como emisor/receptor autorizado).
+   - **Si te conectas por IP Tunneling (`KNXTunneling`)**:
+     1. Selecciona tu Interfaz IP / Router IP en la Topología de ETS y revisa sus canales de **Tunneling** (cada canal tiene su propia IA, por ejemplo `1.1.250`).
+     2. Asocia las Direcciones de Grupo seguras al canal de Tunneling específico que usará `KNX.ts` (en las propiedades de **Asociaciones / Direcciones de Grupo** de ese túnel).
+4. **Descargar (Programar) los dispositivos KNX Data Secure**:
+   - Realiza una **Descarga de aplicación / Descarga parcial** en **todos los dispositivos KNX Data Secure** que compartan esas Direcciones de Grupo.
+   - Al programarlos, ETS escribe tu IA asignada (`1.1.200` o la IA del túnel) en la `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE` de cada dispositivo junto con las claves de grupo compartidas.
+5. **Exportar el archivo `.knxkeys`**:
+   - **ETS5**: *Proyectos* → selecciona el proyecto → **Detalles** → **Seguridad** → **Exportar claves** (`.knxkeys`) y define una contraseña de exportación.
+   - **ETS6**: Abre el proyecto → **Resumen / Overview** → **Seguridad** → **Exportar anillo de claves / Export Keyring** (`.knxkeys`) y define una contraseña de exportación.
+   - **Importante**: Exporta el `.knxkeys` **después** de asignar la IA, vincular las Direcciones de Grupo y descargar los dispositivos para que el archivo incluya las claves de grupo, `ToolKey`s y números de secuencia actualizados.
+6. **Usar la misma Dirección Individual en `KNX.ts`**:
+   - En **IP Routing (`KNXnetIPServer`)**, configura tanto `individualAddress` como `dataSecure.sourceAddress` con la IA exacta asignada en ETS (por ejemplo, `"1.1.200"`).
+   - En **Tunneling (`KNXTunneling`)**, la pasarela asigna la IA del túnel al conectar; verifica que coincida con el canal de túnel autorizado en ETS.
+   - *Nota para sesiones de gestión*: Las sesiones de gestión seguras (`KNXManagement` con `{ secure: true }`) utilizan la `ToolKey` del dispositivo desde el `.knxkeys` y no requieren que la IA esté en la tabla de grupos; sin embargo, si pasas por un router/pasarela IP (como LogicMachine), asegúrate de activar la opción *"Pasar telegramas individuales vía enrutado IP"*.
+
+#### 2. Ejemplo de Uso en `KNX.ts`
+
+Pasa `dataSecure` a cualquier `KNXService` (`KNXTunneling`, `KNXnetIPServer`, `KNXUSBConnection` o `TPUARTConnection`) para cifrar automáticamente los telegramas de grupo salientes (`write`, `read`, `respond`) y descifrar los `S-A_Data` entrantes (`0x03F1`), o úsalo con `KNXManagement` para sesiones seguras con `ToolKey`:
+
+```typescript
+import { KNXnetIPServer, KNXManagement, KnxDataSecure, KnxDataDecode, DataSecureCEMI } from "knx.ts";
+
+const dataSecure = new KnxDataSecure({
+  keyringFile: "./proyecto.knxkeys",
+  keyringPassword: "passwordDelKeyring",
+  sourceAddress: "1.1.200", // Debe coincidir con la IA autorizada en ETS (Paso 3)
+  sequenceNumberFile: "./seq_state.json", // Persiste los contadores de 48 bits entre reinicios
+});
+
+const knx = new KNXnetIPServer({
+  ip: "224.0.23.12",
+  localIp: "192.168.1.50",
+  individualAddress: "1.1.200",
+  tcp: false,
+  dataSecure,
+});
+
+knx.on("indication", (cemi: DataSecureCEMI) => {
+  if (cemi.dataSecure) {
+    console.log("Telegrama Data Secure descifrado:", cemi.sourceAddress, "->", cemi.destinationAddress, "seq:", cemi.dataSecure.sequenceNumber);
+    console.log("Valor:", KnxDataDecode.decodeThis("1.001", cemi.TPDU.apdu.data));
+  }
+});
+
+await knx.connect();
+await knx.write("1/0/1", "1.001", true); // Se cifra automáticamente con la clave de grupo (A+C)
+
+// Sesión de gestión segura usando ToolKey + S-A_Sync automático:
+const mgmt = new KNXManagement(knx, { dataSecure });
+await mgmt.withSession("1.1.1", async (session) => {
+  console.log("Security Mode:", await session.readSecurityMode());
+  console.log("Security IA Table:", await session.readSecurityIndividualAddressTable());
+  console.log("Failures Log:", await session.readSecurityFailuresLog());
+}, { secure: true });
+```
+
+---
+
 ### Guía Completa de Gestión de Red y Dispositivos (`KNXManagement`)
 
-> **Nota**: Implementa el stack completo de KNX Management (`03_05_02`, `03_03_07`, `03_08_03`) tanto para lectura como para escritura. Validado contra capturas reales de ETS (`test_xml/`) y dispositivos simulados. **Pendiente de pruebas en dispositivos físicos reales.**
+> **Nota**: Implementa el stack completo de KNX Management (`03_05_02`, `03_03_07`, `03_08_03`) tanto para lectura como para escritura. Validado contra capturas reales de ETS (`test_xml/`), dispositivos simulados y hardware físico KNX Data Secure (Security Interface Object Type 17 y sesiones con `ToolKey` en Zennio MAXinBOX 66 v3).
 
 ```typescript
 import {

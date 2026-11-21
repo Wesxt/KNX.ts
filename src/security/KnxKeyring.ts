@@ -1,7 +1,30 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import zlib from "node:zlib";
+import { KNXHelper } from "../utils/KNXHelper";
 import { deriveKeyringPasswordKey } from "./KnxSecureKeys";
+
+/**
+ * Normalizes a KNX Group Address from ETS integer string (e.g. `"2049"`), number (`2049`),
+ * 2-level string (`"1/1"`), or 3-level string (`"1/0/1"`) to canonical 3-level string (`"1/0/1"`) and 16-bit integer.
+ */
+export function normalizeKeyringGroupAddress(address: string | number): {
+  formatted: string;
+  intValue: number;
+} {
+  if (typeof address === "number") {
+    const intValue = address & 0xffff;
+    return { formatted: KNXHelper.GetAddress(intValue, "/"), intValue };
+  }
+  const trimmed = address.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const intValue = parseInt(trimmed, 10) & 0xffff;
+    return { formatted: KNXHelper.GetAddress(intValue, "/"), intValue };
+  }
+  const buf = KNXHelper.GetAddress_(trimmed);
+  const intValue = buf.readUInt16BE(0);
+  return { formatted: KNXHelper.GetAddress(buf, "/"), intValue };
+}
 
 export interface KeyringInterfaceEntry {
   type: string;
@@ -23,7 +46,12 @@ export interface KeyringBackboneEntry {
 }
 
 export interface KeyringGroupAddressEntry {
+  /** Raw `Address` attribute as stored in the XML (e.g. `"2049"` in ETS5 or `"1/2/3"`). */
   address: string;
+  /** Canonical 3-level group address (e.g. `"1/0/1"`). */
+  addressFormatted?: string;
+  /** 16-bit unsigned integer encoding of the group address (e.g. `2049`). */
+  addressInt?: number;
   key: string;
   decryptedKey?: Buffer;
 }
@@ -37,6 +65,8 @@ export interface KeyringDeviceEntry {
   authentication?: string;
   decryptedAuthentication?: string;
   sequenceNumber?: number;
+  /** Exact 48-bit sequence number as BigInt (lossless up to `0xFFFFFFFFFFFFn`). */
+  sequenceNumberBigInt?: bigint;
   serialNumber?: string;
 }
 
@@ -143,9 +173,7 @@ function extractXmlFromZipBuffer(zipBuffer: Buffer): string {
     }
 
     const compressedSlice =
-      compressedSize > 0
-        ? zipBuffer.subarray(dataOffset, dataOffset + compressedSize)
-        : zipBuffer.subarray(dataOffset);
+      compressedSize > 0 ? zipBuffer.subarray(dataOffset, dataOffset + compressedSize) : zipBuffer.subarray(dataOffset);
 
     if (compressionMethod === 0) {
       return compressedSlice.toString("utf8");
@@ -202,9 +230,7 @@ export function computeKeyringSignatureFromXml(
   walk(root);
   appendString(passwordHash.toString("base64"));
 
-  const computed = Buffer.from(
-    crypto.createHash("sha256").update(Buffer.concat(chunks)).digest().subarray(0, 16),
-  );
+  const computed = Buffer.from(crypto.createHash("sha256").update(Buffer.concat(chunks)).digest().subarray(0, 16));
   const signature = signatureB64.trim() ? Buffer.from(signatureB64, "base64") : undefined;
   return { signature, computed };
 }
@@ -216,6 +242,7 @@ export class KnxKeyring {
   private readonly interfaces: Map<string, KeyringInterfaceEntry> = new Map();
   private readonly backbones: KeyringBackboneEntry[] = [];
   private readonly groupAddresses: Map<string, KeyringGroupAddressEntry> = new Map();
+  private readonly groupAddressesByInt: Map<number, KeyringGroupAddressEntry> = new Map();
   private readonly devices: Map<string, KeyringDeviceEntry> = new Map();
 
   private passwordHash?: Buffer;
@@ -275,6 +302,7 @@ export class KnxKeyring {
     this.interfaces.clear();
     this.backbones.length = 0;
     this.groupAddresses.clear();
+    this.groupAddressesByInt.clear();
     this.devices.clear();
 
     this.createdBy = root.attrs.CreatedBy;
@@ -365,23 +393,48 @@ export class KnxKeyring {
   private parseGroupNode(node: XmlElementNode): void {
     const a = node.attrs;
     if (!a.Address || !a.Key) return;
+    let addressFormatted: string | undefined;
+    let addressInt: number | undefined;
+    try {
+      const normalized = normalizeKeyringGroupAddress(a.Address);
+      addressFormatted = normalized.formatted;
+      addressInt = normalized.intValue;
+    } catch {
+      // Keep raw address if non-standard
+    }
     const entry: KeyringGroupAddressEntry = {
       address: a.Address,
+      addressFormatted,
+      addressInt,
       key: a.Key,
       decryptedKey: this.decryptAes128Cbc(a.Key),
     };
     this.groupAddresses.set(entry.address, entry);
+    if (addressInt !== undefined) {
+      this.groupAddressesByInt.set(addressInt, entry);
+    }
   }
 
   private parseDeviceNode(node: XmlElementNode): void {
     const a = node.attrs;
     if (!a.IndividualAddress) return;
+    let sequenceNumber: number | undefined;
+    let sequenceNumberBigInt: bigint | undefined;
+    if (a.SequenceNumber !== undefined && a.SequenceNumber.trim() !== "") {
+      sequenceNumber = parseInt(a.SequenceNumber, 10);
+      try {
+        sequenceNumberBigInt = BigInt(a.SequenceNumber.trim());
+      } catch {
+        // Ignore malformed non-integer SequenceNumber
+      }
+    }
     const entry: KeyringDeviceEntry = {
       individualAddress: a.IndividualAddress,
       toolKey: a.ToolKey,
       managementPassword: a.ManagementPassword,
       authentication: a.Authentication,
-      sequenceNumber: a.SequenceNumber !== undefined ? parseInt(a.SequenceNumber, 10) : undefined,
+      sequenceNumber,
+      sequenceNumberBigInt,
       serialNumber: a.SerialNumber,
     };
     if (entry.toolKey) {
@@ -424,11 +477,72 @@ export class KnxKeyring {
     return this.groupAddresses;
   }
 
+  /**
+   * Looks up a group address entry by 3-level string (`"1/0/1"`), 2-level string (`"1/1"`),
+   * integer string (`"2049"`), or 16-bit integer (`2049`).
+   */
+  public getGroupAddress(address: string | number): KeyringGroupAddressEntry | undefined {
+    if (typeof address === "string") {
+      const exact = this.groupAddresses.get(address);
+      if (exact) return exact;
+    }
+    try {
+      const { intValue } = normalizeKeyringGroupAddress(address);
+      return this.groupAddressesByInt.get(intValue);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Returns the decrypted 16-byte KNX Data Secure Group Key for a group address (if present).
+   */
+  public getGroupKey(address: string | number): Buffer | undefined {
+    return this.getGroupAddress(address)?.decryptedKey;
+  }
+
+  /**
+   * Returns all authorized sender Individual Addresses declared across `<Interface><Group ... Senders="..." />`
+   * entries for the given group address (if any).
+   */
+  public getGroupSenders(address: string | number): string[] {
+    let targetInt: number | undefined;
+    try {
+      targetInt = normalizeKeyringGroupAddress(address).intValue;
+    } catch {
+      // Fall back to exact string match
+    }
+    const senders = new Set<string>();
+    for (const iface of this.interfaces.values()) {
+      for (const [gaKey, list] of iface.groupAddresses.entries()) {
+        let match = typeof address === "string" && gaKey === address;
+        if (!match && targetInt !== undefined) {
+          try {
+            match = normalizeKeyringGroupAddress(gaKey).intValue === targetInt;
+          } catch {
+            match = false;
+          }
+        }
+        if (match) {
+          for (const ia of list) senders.add(ia);
+        }
+      }
+    }
+    return Array.from(senders);
+  }
+
   public getDevices(): Map<string, KeyringDeviceEntry> {
     return this.devices;
   }
 
   public getDevice(individualAddress: string): KeyringDeviceEntry | undefined {
     return this.devices.get(individualAddress);
+  }
+
+  /**
+   * Returns the decrypted 16-byte Tool Key for the given device Individual Address (if present).
+   */
+  public getDeviceToolKey(individualAddress: string): Buffer | undefined {
+    return this.devices.get(individualAddress)?.decryptedToolKey;
   }
 }

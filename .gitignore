@@ -25,3 +25,5 @@ GEMINI.md
 log/
 logs/
 Ignore
+testKey/
+KNX.ts.code-workspace

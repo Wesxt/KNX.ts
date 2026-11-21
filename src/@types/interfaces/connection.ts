@@ -1,5 +1,6 @@
 import { ConnectionType, KNXLayer, TunnelLink } from "../../core/enum/KNXnetIPEnum";
 import { CEMIInstance } from "../../core/CEMI";
+import type { KnxDataSecure, KNXDataSecureOptions } from "../../security/KnxDataSecure";
 
 /**
  * Configuration options for KNXnet/IP Secure (KNX Standard 03_08_09).
@@ -258,6 +259,12 @@ export interface BaseConnectionOptions {
   autoReconnect?: boolean;
   maxReconnectAttempts?: number;
   reconnectDelay?: number;
+  /**
+   * Optional KNX Data Security (`03_03_07` §5) configuration or pre-created {@link KnxDataSecure} manager.
+   * When configured, outgoing Group telegrams for configured Group Addresses are automatically encrypted
+   * and incoming `S-A_Data` frames are automatically verified and decrypted before emitting `indication` / GA events.
+   */
+  dataSecure?: KnxDataSecure | KNXDataSecureOptions;
 }
 
 export interface KNXnetIPOptions extends BaseConnectionOptions {

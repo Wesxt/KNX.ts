@@ -6,6 +6,7 @@ import { AddressType } from "../core/enum/EnumControlFieldExtended";
 import { MessageCodeTranslator } from "./MessageCodeTranslator";
 import { EMI, EMIInstance } from "../core/EMI";
 import { NPDU } from "../core/layers/data/NPDU";
+import { TPDU } from "../core/layers/data/TPDU";
 
 /**
  * Adapter utility to convert between EMI (External Message Interface) and cEMI (Common External Message Interface).
@@ -14,22 +15,46 @@ import { NPDU } from "../core/layers/data/NPDU";
 export class CEMIAdapter {
   /**
    * Adapts a raw EMI2 message (Buffer) to a cEMI instance.
-   * Typical EMI structure: [MC] [Ctrl] [Src] [Dst] [Len] [NPDU(NPCI + TPDU)]
+   * Standard frame structure: [MC] [Ctrl(FT=1)] [Src(2)] [Dst(2)] [NPCI] [TPDU...]
+   * Extended frame structure: [MC] [Ctrl(FT=0)] [CtrlE] [Src(2)] [Dst(2)] [Len] [TPDU(Len+1)...]
    */
   static emiToCemi(emiBuffer: Buffer): CEMIInstance | null {
     if (emiBuffer.length < 7) throw new Error("EMI buffer too short");
 
     const messageCode = emiBuffer.readUInt8(0);
     const ctrlByte = emiBuffer.readUInt8(1);
+    const isExtended = (ctrlByte & 0x80) === 0;
+
+    // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
+    const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
+    const serviceName = MessageCodeTranslator.getServiceName(messageCode, "EMI2/IMI2");
+    if (cemiCode === null || !serviceName || !MessageCodeTranslator.isDataLinkLayerMessage(serviceName)) return null;
+
+    if (isExtended) {
+      if (emiBuffer.length < 9) throw new Error("Extended EMI buffer too short");
+      const controlField1 = new ControlField(ctrlByte);
+      const controlField2 = new ExtendedControlField(emiBuffer.readUInt8(2));
+      const srcAddr = KNXHelper.GetAddress(emiBuffer.subarray(3, 5), ".") as string;
+      const dstAddr = KNXHelper.GetAddress(
+        emiBuffer.subarray(5, 7),
+        controlField2.addressType === AddressType.GROUP ? "/" : ".",
+      ) as string;
+      const length = emiBuffer.readUInt8(7);
+      const tpduEnd = Math.min(8 + length + 1, emiBuffer.length);
+      const tpdu = TPDU.fromBuffer(emiBuffer.subarray(8, tpduEnd));
+      return new CEMI.DataLinkLayerCEMI[serviceName as "L_Data.ind" | "L_Data.con" | "L_Data.req"](
+        null,
+        controlField1,
+        controlField2,
+        srcAddr,
+        dstAddr,
+        tpdu,
+      );
+    }
 
     // Addresses (2 bytes each)
     const srcAddr = KNXHelper.GetAddress(emiBuffer.subarray(2, 4), ".") as string;
     let dstAddr = "";
-
-    // const oct6 = emiBuffer.readUInt8(6); // AT,NPCI,LG
-    // const addressType = (oct6 >> 7) & 0x01;
-    // const hopCount = (oct6 >> 4) & 0x07;
-    // const octNum = oct6 & 0x0f; // NPDU Length
 
     // --- Control Fields Transformation ---
     // 1. cEMI Control Field 1 is identical to EMI Control
@@ -47,16 +72,6 @@ export class CEMIAdapter {
     controlField2.hopCount = npdu.hopCount;
     controlField2.addressType = npdu.addressType;
     dstAddr = KNXHelper.GetAddress(emiBuffer.subarray(4, 6), npdu.addressType === 1 ? "/" : ".");
-    // Translate Message Code (EMI 0x11 -> cEMI 0x11, etc.)
-    const cemiCode = MessageCodeTranslator.translate(messageCode, "EMI2/IMI2", "CEMI");
-    const serviceName = MessageCodeTranslator.getServiceName(messageCode, "EMI2/IMI2");
-    if (cemiCode === null || !serviceName || !MessageCodeTranslator.isDataLinkLayerMessage(serviceName)) return null;
-
-    // Construct the appropriate cEMI class using CEMI.fromBuffer or directly
-    // Since we already parsed components, we might want to find the class
-    // But CEMI.fromBuffer takes a buffer. Let's use it for simplicity if we can re-construct a cEMI buffer
-    // Or just instantiate the specific class.
-    // Given the structure of CEMI.ts, it's better to use the constructors if possible or fromBuffer with a temporary buffer.
 
     const tempCemi = new CEMI.DataLinkLayerCEMI[serviceName as "L_Data.ind" | "L_Data.con" | "L_Data.req"](
       null,

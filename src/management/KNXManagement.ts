@@ -82,7 +82,35 @@ import {
   PropertyValueWriteParams,
   RestartEraseCode,
 } from "./apduBuilders";
-import { TransportConnection } from "./TransportConnection";
+import { TransportConnection, TransportDataSecureOptions } from "./TransportConnection";
+import {
+  KnxDataSecure,
+  KNXDataSecureOptions,
+  SyncSequenceNumberOptions,
+  SyncSequenceNumberResult,
+} from "../security/KnxDataSecure";
+import { decodeSeqNr48 } from "../security/KnxDataSecureCcm";
+
+/**
+ * Standard KNX Interface Object Types (03_05_01 §4 & §6).
+ */
+export enum KNXInterfaceObjectType {
+  DEVICE_OBJECT = 0,
+  ADDRESSTABLE_OBJECT = 1,
+  ASSOCIATIONTABLE_OBJECT = 2,
+  APPLICATIONPROGRAM_OBJECT = 3,
+  INTERFACEPROGRAM_OBJECT = 4,
+  KNXOBJECT_ASSOCIATIONTABLE_OBJECT = 5,
+  ROUTER_OBJECT = 6,
+  LTE_ADDRESS_ROUTING_TABLE_OBJECT = 7,
+  CEMI_SERVER_OBJECT = 8,
+  GROUP_OBJECT_TABLE_OBJECT = 9,
+  POLLING_MASTER_OBJECT = 10,
+  KNXNETIP_PARAMETER_OBJECT = 11,
+  FILE_SERVER_OBJECT = 13,
+  SECURITY_OBJECT = 17,
+  RF_MEDIUM_OBJECT = 19,
+}
 
 /**
  * Standard KNX Interface Object Property Identifiers (03_05_01 §4.3–4.4).
@@ -156,6 +184,26 @@ export enum KNXPropertyId {
 }
 
 /**
+ * Property Identifiers of the Security Interface Object (Object Type 17, 03_05_01 §6.3 Table 99).
+ */
+export enum KNXSecurityPropertyId {
+  PID_OBJECT_TYPE = 1,
+  PID_OBJECT_NAME = 2,
+  PID_LOAD_STATE_CONTROL = 5,
+  PID_SECURITY_MODE = 51,
+  PID_P2P_KEY_TABLE = 52,
+  PID_GRP_KEY_TABLE = 53,
+  PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE = 54,
+  PID_SECURITY_FAILURES_LOG = 55,
+  PID_TOOL_KEY = 56,
+  PID_SECURITY_REPORT = 57,
+  PID_SECURITY_REPORT_CONTROL = 58,
+  PID_SEQUENCE_NUMBER_SENDING = 59,
+  PID_ZONE_KEY_TABLE = 60,
+  PID_GO_SECURITY_FLAGS = 61,
+}
+
+/**
  * Load State Machine states (`PID_LOAD_STATE_CONTROL`, 03_05_01 §4.3.1.1 / 03_05_02 §3.31).
  */
 export enum LoadState {
@@ -220,6 +268,37 @@ export interface KNXManagementOptions {
    * Defaults to 3000 ms.
    */
   responseTimeoutMs?: number;
+  /**
+   * Optional KNX Data Security manager (or options) for secure management sessions (`ToolKey` / `P2PKey` / `DM_SecureSync_*`).
+   * If omitted, falls back to `service.dataSecure` when present.
+   */
+  dataSecure?: KnxDataSecure | KNXDataSecureOptions;
+}
+
+export interface OpenSessionOptions {
+  /**
+   * Enables KNX Data Security on the Transport Layer session.
+   * Pass `true` to use the configured `dataSecure` manager (defaulting to Tool Access + auto `S-A_Sync`),
+   * or an options object to customize `toolAccess`, `key`, `confidentiality`, or `autoSync`.
+   */
+  secure?: boolean | (Omit<TransportDataSecureOptions, "manager"> & { manager?: KnxDataSecure });
+}
+
+export interface DecodedSecurityIndividualAddressEntry {
+  individualAddress: string;
+  lastValidSeqNr: bigint;
+}
+
+export interface DecodedGroupKeyTableEntry {
+  gaIndex: number;
+  key: Buffer;
+}
+
+export interface DecodedSecurityFailuresCounters {
+  returnCode: number;
+  seqNrErrors: number;
+  cryptoErrors: number;
+  accessRoleErrors: number;
 }
 
 export interface ProgrammingModeReadResult {
@@ -1443,6 +1522,177 @@ export class KNXManagementSession {
       await this.connection.sendRestartAndAbort(restartCemi);
     }
   }
+
+  // ============================================================================
+  // Security Interface Object (Object Type 17, 03_05_01 §6.3) Helpers
+  // ============================================================================
+
+  /**
+   * Reads `PID_SECURITY_MODE` (PID 51, ReadServiceID `0x00`) on the Security Interface Object (Type 17, 03_05_01 §6.3.5.2).
+   */
+  public async readSecurityMode(objectInstance: number = 1): Promise<boolean> {
+    const res = await this.readFunctionPropertyStateExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SECURITY_MODE,
+      data: Buffer.from([0x00, 0x00]),
+    });
+    if (res.returnCode !== ManagementReturnCode.E_SUCCESS) {
+      throw new Error(
+        `PID_SECURITY_MODE read failed on ${this.destinationAddress} (returnCode=0x${res.returnCode.toString(16)})`,
+      );
+    }
+    return res.data.length >= 2 ? res.data[1] !== 0 : res.data.length === 1 ? res.data[0] !== 0 : false;
+  }
+
+  /**
+   * Writes `PID_SECURITY_MODE` (PID 51, WriteServiceID `0x00`) on the Security Interface Object (Type 17, 03_05_01 §6.3.5.1).
+   * Must be called over a KNX Data Secure session with Tool Key + A+C.
+   */
+  public async writeSecurityMode(enabled: boolean, objectInstance: number = 1): Promise<void> {
+    const res = await this.callFunctionPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SECURITY_MODE,
+      data: Buffer.from([0x00, 0x00, enabled ? 0x01 : 0x00]),
+    });
+    if (res.returnCode !== ManagementReturnCode.E_SUCCESS) {
+      throw new Error(
+        `PID_SECURITY_MODE write failed on ${this.destinationAddress} (returnCode=0x${res.returnCode.toString(16)})`,
+      );
+    }
+  }
+
+  /**
+   * Reads `PID_SECURITY_FAILURES_LOG` counters (PID 55, ReadServiceID `0x00`, ServiceInfo `0x00`, 03_05_01 §6.3.9.3.2 Fig. 77).
+   */
+  public async readSecurityFailuresLog(objectInstance: number = 1): Promise<DecodedSecurityFailuresCounters> {
+    const res = await this.readFunctionPropertyStateExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SECURITY_FAILURES_LOG,
+      data: Buffer.from([0x00, 0x00, 0x00]),
+    });
+    if (res.returnCode !== ManagementReturnCode.E_SUCCESS) {
+      throw new Error(
+        `PID_SECURITY_FAILURES_LOG read failed on ${this.destinationAddress} (returnCode=0x${res.returnCode.toString(16)})`,
+      );
+    }
+    // Data after returnCode: ReadServiceID(1) | ServiceInfo(1) | reserved(2) | seqNrErrors(2) | cryptoErrors(2) | accessRoleErrors(2)
+    if (res.data.length < 10) {
+      throw new Error(`PID_SECURITY_FAILURES_LOG response too short (${res.data.length} bytes)`);
+    }
+    return {
+      returnCode: res.returnCode,
+      seqNrErrors: res.data.readUInt16BE(4),
+      cryptoErrors: res.data.readUInt16BE(6),
+      accessRoleErrors: res.data.readUInt16BE(8),
+    };
+  }
+
+  /**
+   * Clears `PID_SECURITY_FAILURES_LOG` (PID 55, WriteServiceID `0x00`, ServiceInfo `0x00`, 03_05_01 §6.3.9.3.1).
+   */
+  public async clearSecurityFailuresLog(objectInstance: number = 1): Promise<void> {
+    const res = await this.callFunctionPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SECURITY_FAILURES_LOG,
+      data: Buffer.from([0x00, 0x00, 0x00]),
+    });
+    if (res.returnCode !== ManagementReturnCode.E_SUCCESS) {
+      throw new Error(
+        `PID_SECURITY_FAILURES_LOG clear failed on ${this.destinationAddress} (returnCode=0x${res.returnCode.toString(16)})`,
+      );
+    }
+  }
+
+  /**
+   * Reads `PID_SEQUENCE_NUMBER_SENDING` (PID 59, 6-octet counter) on the Security Interface Object (03_05_01 §6.3.13).
+   */
+  public async readSequenceNumberSending(objectInstance: number = 1): Promise<bigint> {
+    const res = await this.readPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SEQUENCE_NUMBER_SENDING,
+      count: 1,
+      startIndex: 1,
+    });
+    if (res.count === 0 || res.data.length < 6) {
+      throw new Error(`Unable to read PID_SEQUENCE_NUMBER_SENDING from ${this.destinationAddress}`);
+    }
+    return decodeSeqNr48(res.data, 0);
+  }
+
+  /**
+   * Reads `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE` (PID 54, `PDT_GENERIC_08[]`, 03_05_01 §6.3.8 Fig. 75):
+   * returns the list of authorized partner Individual Addresses and each partner's stored `LastValidSeqNr`.
+   */
+  public async readSecurityIndividualAddressTable(
+    objectInstance: number = 1,
+  ): Promise<DecodedSecurityIndividualAddressEntry[]> {
+    const countResp = await this.readPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE,
+      count: 1,
+      startIndex: 0,
+    });
+    if (countResp.count === 0 || countResp.data.length < 2) {
+      return [];
+    }
+    const total = countResp.data.readUInt16BE(0);
+    const entries: DecodedSecurityIndividualAddressEntry[] = [];
+    for (let idx = 1; idx <= total; idx++) {
+      const elem = await this.readPropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE,
+        count: 1,
+        startIndex: idx,
+      });
+      if (elem.count === 0 || elem.data.length < 8) break;
+      entries.push({
+        individualAddress: KNXHelper.GetAddress(elem.data.subarray(0, 2), "."),
+        lastValidSeqNr: decodeSeqNr48(elem.data, 2),
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * Reads `PID_GRP_KEY_TABLE` (PID 53, `PDT_GENERIC_18[]`, 03_05_01 §6.3.7 Fig. 74):
+   * returns the list of `{ gaIndex, key }` entries programmed on the device.
+   */
+  public async readGroupKeyTable(objectInstance: number = 1): Promise<DecodedGroupKeyTableEntry[]> {
+    const countResp = await this.readPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_GRP_KEY_TABLE,
+      count: 1,
+      startIndex: 0,
+    });
+    if (countResp.count === 0 || countResp.data.length < 2) {
+      return [];
+    }
+    const total = countResp.data.readUInt16BE(0);
+    const entries: DecodedGroupKeyTableEntry[] = [];
+    for (let idx = 1; idx <= total; idx++) {
+      const elem = await this.readPropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_GRP_KEY_TABLE,
+        count: 1,
+        startIndex: idx,
+      });
+      if (elem.count === 0 || elem.data.length < 18) break;
+      entries.push({
+        gaIndex: elem.data.readUInt16BE(0),
+        key: Buffer.from(elem.data.subarray(2, 18)),
+      });
+    }
+    return entries;
+  }
 }
 
 /**
@@ -1453,6 +1703,7 @@ export class KNXManagement {
   private readonly options: Required<
     Pick<KNXManagementOptions, "minFrameDelayMs" | "ackTimeoutMs" | "responseTimeoutMs">
   > & { sourceAddress?: string };
+  private readonly explicitDataSecure: KnxDataSecure | null;
 
   constructor(
     private readonly service: KNXService,
@@ -1464,33 +1715,84 @@ export class KNXManagement {
       ackTimeoutMs: options.ackTimeoutMs ?? 3000,
       responseTimeoutMs: options.responseTimeoutMs ?? 3000,
     };
+    this.explicitDataSecure = options.dataSecure
+      ? options.dataSecure instanceof KnxDataSecure
+        ? options.dataSecure
+        : new KnxDataSecure(options.dataSecure)
+      : null;
+  }
+
+  public get dataSecure(): KnxDataSecure | null {
+    return this.explicitDataSecure ?? this.service.dataSecure;
   }
 
   public get sourceAddress(): string {
     return this.options.sourceAddress ?? this.service.individualAddress ?? "0.0.0";
   }
 
-  private createTransportConnection(destinationAddress: string, timeoutOverrideMs?: number): TransportConnection {
+  private createTransportConnection(
+    destinationAddress: string,
+    timeoutOverrideMs?: number,
+    sessionOptions?: OpenSessionOptions,
+  ): TransportConnection {
+    let dataSecureCfg: TransportDataSecureOptions | undefined;
+    if (sessionOptions?.secure) {
+      const cfg = sessionOptions.secure === true ? {} : sessionOptions.secure;
+      const manager = cfg.manager ?? this.dataSecure;
+      if (!manager) {
+        throw new Error(
+          "Secure management session requested, but no KnxDataSecure manager is configured on KNXManagement or KNXService",
+        );
+      }
+      dataSecureCfg = {
+        manager,
+        toolAccess: cfg.toolAccess ?? true,
+        key: cfg.key,
+        confidentiality: cfg.confidentiality ?? true,
+        autoSync: cfg.autoSync ?? true,
+      };
+    }
+
     return new TransportConnection(this.service, destinationAddress, {
       sourceAddress: this.sourceAddress,
       ackTimeoutMs: timeoutOverrideMs ?? this.options.ackTimeoutMs,
       responseTimeoutMs: timeoutOverrideMs ?? this.options.responseTimeoutMs,
+      dataSecure: dataSecureCfg,
     });
   }
 
   // ============================================================================
-  // 1. Session Management (`DM_Connect` / `DM_Disconnect`)
+  // 1. Session Management (`DM_Connect` / `DM_Disconnect` / `DM_SecureSync_*`)
   // ============================================================================
+
+  /**
+   * Executes `DM_SecureSync_RCl` (`"individual"` / `"connected"`) or `DM_SecureSync_SBC` (`"broadcast"` / `"system_broadcast"`)
+   * per KNX Standard 03_05_02 §4.1–4.2 and 03_03_07 §5.3.2.
+   */
+  public async syncSequenceNumber(
+    individualAddress: string,
+    options: SyncSequenceNumberOptions = {},
+  ): Promise<SyncSequenceNumberResult> {
+    const manager = this.dataSecure;
+    if (!manager) {
+      throw new Error("syncSequenceNumber requires a KnxDataSecure manager configured on KNXManagement or KNXService");
+    }
+    return manager.syncSequenceNumber(this.service, individualAddress, {
+      sourceAddress: this.sourceAddress,
+      ...options,
+    });
+  }
 
   /**
    * Opens a persistent Transport Layer connection (`T_Connect`) to `individualAddress` and returns
    * a `KNXManagementSession` for executing multiple authenticated/sequential operations.
+   * Pass `{ secure: true }` to secure the session with KNX Data Security (`ToolKey` / `P2PKey` + `DM_SecureSync_RCl`).
    */
-  public async openSession(individualAddress: string): Promise<KNXManagementSession> {
+  public async openSession(individualAddress: string, options: OpenSessionOptions = {}): Promise<KNXManagementSession> {
     if (!KNXHelper.isValidIndividualAddress(individualAddress)) {
       throw new Error(`Invalid KNX Individual Address: ${individualAddress}`);
     }
-    const conn = this.createTransportConnection(individualAddress);
+    const conn = this.createTransportConnection(individualAddress, undefined, options);
     await conn.connect();
     return new KNXManagementSession(conn, this.options.minFrameDelayMs);
   }
@@ -1502,8 +1804,9 @@ export class KNXManagement {
   public async withSession<T>(
     individualAddress: string,
     fn: (session: KNXManagementSession) => Promise<T>,
+    options: OpenSessionOptions = {},
   ): Promise<T> {
-    const session = await this.openSession(individualAddress);
+    const session = await this.openSession(individualAddress, options);
     try {
       return await fn(session);
     } finally {

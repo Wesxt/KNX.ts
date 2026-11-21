@@ -25,6 +25,7 @@
     "manualTest:tunneling": "tsx manual-tests/tunneling_manual.ts",
     "manualTest:management": "tsx manual-tests/management_tunnel_manual.ts",
     "manualTest:secureTcp": "tsx manual-tests/secure_tunnel_tcp_manual.ts",
+    "manualTest:dataSecure": "tsx manual-tests/data_secure_manual.ts",
     "manualTest:routing": "tsx manual-tests/routing_manual.ts",
     "manualTest:usb": "tsx manual-tests/test_usb_manual.ts",
     "manualTest:routingUsb": "tsx manual-tests/usb_routing_manual.ts",
