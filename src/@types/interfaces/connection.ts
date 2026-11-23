@@ -354,7 +354,26 @@ export interface KNXUSBOptions extends BaseConnectionOptions {
   path?: string;
   vendorId?: number;
   productId?: number;
-  individualAddress: string;
+  /**
+   * Individual Address used as Source Address for outgoing telegrams (e.g., `"1.1.250"`).
+   * Optional: in cEMI mode, `KNXUSBConnection` automatically queries the USB interface's programmed
+   * hardware Individual Address (`PID_SUBNET_ADDR` / `PID_DEVICE_ADDR`) during initialization if omitted.
+   * For KNX Data Secure on USB sticks, this should match the interface's programmed IA (especially for
+   * point-to-point `KNXManagement` / `S-A_Sync`, where the USB hardware only ACKs its own IA).
+   */
+  individualAddress?: string;
+  /**
+   * When `true` and `individualAddress` is specified in cEMI mode, automatically writes
+   * `PID_SUBNET_ADDR` (57) and `PID_DEVICE_ADDR` (58) to the USB interface's Device Object (`0`)
+   * via `M_PropWrite.req` during initialization if the hardware IA differs.
+   * Defaults to `false` (never modifies USB interface EEPROM unless explicitly opted in).
+   */
+  programHardwareAddress?: boolean;
+  /**
+   * Optional preferred EMI mode (`"cEMI"` | `"EMI2"` | `"EMI1"`).
+   * Defaults to `"cEMI"` (required for Extended Frames and KNX Data Secure).
+   */
+  preferredEmiType?: "cEMI" | "EMI2" | "EMI1";
   /**
    * Pino logger configuration.
    */

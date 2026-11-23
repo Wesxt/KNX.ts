@@ -28,7 +28,11 @@ export class NPDU implements ServiceMessage {
     this._addressType = addressType;
     this.hopCount = hopCount; // Usa el setter para validar
     this.TPDU = InstanceOfTPDU;
-    if (length) this.length = length;
+    if (length !== undefined) {
+      this.length = length;
+    } else {
+      this.length = Math.max(0, InstanceOfTPDU.toBuffer().length - 1);
+    }
   }
 
   /**
@@ -59,15 +63,15 @@ export class NPDU implements ServiceMessage {
 
   toBuffer(): Buffer {
     const tpduBuffer = this.TPDU.toBuffer();
-    const length = tpduBuffer.length;
+    const apduLength = Math.max(0, tpduBuffer.length - 1);
 
     // Construcción del Byte NPCI (Octeto 0 del NPDU)
-    // Bits 7: address_type (0)
-    // Bits 6-4: Hop Count
-    // Bits 3-0: Length (Longitud del TPDU)
-    const npciByte = (this.addressType << 7) | (this._hopCount << 4) | (this.length & 0x0f);
+    // Bit 7   : Address Type (0 = Individual, 1 = Group)
+    // Bits 6-4: Hop Count (0..7)
+    // Bits 3-0: Length LG = longitud de APDU (TPDU.length - 1, 0..15)
+    const npciByte = (this.addressType << 7) | (this._hopCount << 4) | (apduLength & 0x0f);
 
-    const buffer = Buffer.alloc(1 + length);
+    const buffer = Buffer.alloc(1 + tpduBuffer.length);
     buffer.writeUInt8(npciByte, 0);
     tpduBuffer.copy(buffer, 1);
 
@@ -86,38 +90,35 @@ export class NPDU implements ServiceMessage {
 
   /**
    * Crea una instancia de NPDU a partir de un Buffer crudo.
-   * Estructura: [NPCI] [TPDU...]
-   * @param buffer El buffer completo comenzando con el byte NPCI.
+   * Estructura: [AT|HC|LG] [TPDU (LG + 1 octetos)...]
+   * @param buffer El buffer completo comenzando con el byte NPCI/DRL.
    */
   static fromBuffer(buffer: Buffer): NPDU {
     if (buffer.length < 2) {
-      // Mínimo 1 byte NPCI + 1 byte payload
+      // Mínimo 1 byte NPCI + 1 byte TPCI (LG = 0)
       throw new Error("Buffer too short for NPDU");
     }
 
-    // 1. Parsear el Byte NPCI (Octeto 0)
-    // Bits 7: address_type (0)
-    // Bits 6-4: Hop Count
-    // Bits 3-0: Length (Longitud del TPDU)
+    // 1. Parsear el Byte NPCI/DRL (Octeto 0)
+    // Bit 7   : Address Type (0 = Individual, 1 = Group)
+    // Bits 6-4: Hop Count (0..7)
+    // Bits 3-0: Length LG (longitud del APDU; TPDU ocupa LG + 1 bytes según 03_02_02 §2.2.4.5 y 03_03_03)
     const npci = buffer.readUInt8(0);
+    const addressType = ((npci >> 7) & 0x01) as AddressType;
     const hopCount = (npci >> 4) & 0x07;
     const length = npci & 0x0f;
+    const tpduByteLen = length + 1;
 
-    // Validación de longitud según especificación 03_03_03
-    // Nota: 'length' en NPCI indica la longitud del TPDU en bytes.
-    if (buffer.length - 1 < length) {
-      throw new Error(`NPDU declared length ${length} but buffer has only ${buffer.length - 1} bytes payload`);
+    if (buffer.length - 1 < tpduByteLen) {
+      throw new Error(
+        `NPDU declared APDU length ${length} (${tpduByteLen} TPDU bytes) but buffer has only ${buffer.length - 1} bytes payload`,
+      );
     }
 
-    // 2. Extraer el TPDU (Transport Layer PDU)
-    // El payload comienza en el índice 1.
-    const tpduBuffer = buffer.subarray(1, 1 + length);
-
-    // Llamada estática recursiva a la siguiente capa
+    // 2. Extraer el TPDU completo (1 byte TPCI + length bytes APDU)
+    const tpduBuffer = buffer.subarray(1, 1 + tpduByteLen);
     const tpdu = TPDU.fromBuffer(tpduBuffer);
 
-    // 3. Retornar nueva instancia
-    // Nota: AddressType no viene en el NPDU, viene del cEMI. Asumimos GROUP por defecto.
-    return new NPDU(tpdu, AddressType.GROUP, hopCount, length);
+    return new NPDU(tpdu, addressType, hopCount, length);
   }
 }

@@ -37,7 +37,7 @@ This project focuses on protocol strictness, reading and sending any kind of **E
 According to `TODO.md`, several features are verified through automated suites and ETS integration while others still await broader physical hardware validation:
 
 - **ETS5 Integration & Protocol Compliance**: Discovery (`SEARCH_REQUEST` / `SEARCH_REQUEST_EXTENDED` with SRPs), `DESCRIPTION_RESPONSE`, UDP/TCP Tunneling, Tunnelling v2 Features, Secure Unicast Session handshake, and ETS Busmonitor / Group Monitor are implemented and verified against automated tests and live ETS5 sessions.
-- **KNX IP Secure Routing, KNX Data Secure & `KNXManagement` (Hardware Validated)**: Implemented according to the KNX Standard v3.0.0 and verified against official Annex A (`03_08_09`) & Annex C (`03_03_07`) cryptographic test vectors, real ETS `.knxkeys` files, real ETS XML captures, and **live physical hardware** (KNX IP Secure Routing `SECURE_WRAPPER` + `TIMER_NOTIFY` with LogicMachine, and end-to-end KNX Data Secure group communication + `ToolKey` `S-A_Sync` / Security Interface Object 17 management with a Zennio MAXinBOX 66 v3). Full memory/download procedures remain to be validated on additional physical bus devices.
+- **KNX IP Secure Routing, KNX Data Secure & `KNXManagement` (Hardware Validated)**: Implemented according to the KNX Standard v3.0.0 and verified against official Annex A (`03_08_09`) & Annex C (`03_03_07`) cryptographic test vectors, real ETS `.knxkeys` files, real ETS XML captures, and **live physical hardware**: KNX IP Secure Routing (`SECURE_WRAPPER` + `TIMER_NOTIFY`) with LogicMachine, and end-to-end KNX Data Secure group communication + `ToolKey` `S-A_Sync` / Security Interface Object 17 management with a Zennio MAXinBOX 66 v3 over **KNXnet/IP (Tunneling & Secure Routing)** and **KNX USB (`cEMI` + hardware IA programming)**. TP-UART Extended Frame (`FT=0`, `U_L_DataOffset`) and multi-frame USB HID transfers (`09_03`) are verified via unit tests. Full memory/download procedures remain to be validated on additional physical bus devices.
 - **Source Filtering**: Filtering based on source addresses and selective routing is on the roadmap.
 - **Use of NPDU, TPDU, and APDU layers**: EMI still needs to use them for correct deserialization.
 
@@ -80,8 +80,8 @@ These classes form the core of your interaction with the network. All of them in
 - `KNXManagement`, `KNXManagementSession` & `TransportConnection`: Full KNX Network and Device Management stack (`03_05_02`, `03_03_07`, `03_08_03`) for reading and writing Individual/Domain Addresses, Interface Object Properties, Function Properties, Device/User/Extended Memory, Authorization Keys, Load/Run State Machines, Group Object Links, and Device Restarts/Master Resets without depending on ETS.
 - `KnxKeyring`: Zero-dependency loader and decryptor for ETS `.knxkeys` files.
 - `KnxDataSecure` & `KnxDataSecureCcm`: Full KNX Data Security Application Layer (`S-AL`, `03_03_07` §5) supporting `S-A_Data` (A+C and A-only), `S-A_Sync`, 48-bit sequence number persistence, transparent `KNXService` encryption/decryption, and secure `KNXManagement` sessions with `ToolKey` / `P2PKey`.
-- `KNXUSBConnection`: Connects directly to local KNX USB interfaces (ABB, MDT, Weinzierl, Zennio, etc.).
-- `TPUARTConnection`: Connects directly to KNX through TPUART serial hardware.
+- `KNXUSBConnection`: Connects directly to local KNX USB interfaces (ABB, MDT, Weinzierl, Zennio, etc.) with **cEMI priority** (required for Extended Frames & KNX Data Secure), **multi-frame USB HID fragmentation/reassembly** (`09_03` §3.4.1.2, up to 5 reports), automatic **hardware Individual Address discovery** (`PID_SUBNET_ADDR` / `PID_DEVICE_ADDR`), and Local Device Management IA programming (`setHardwareIndividualAddress()` / `programHardwareAddress: true`).
+- `TPUARTConnection`: Connects directly to KNX TP1 through TPUART / TP-UART2 / NCN5120 serial hardware with full **TP1 Standard (`FT=1`) & Extended Frame (`FT=0`)** encoding/decoding (`CEMIAdapter.cemiToTp1` / `tp1ToCemi`), **`U_L_DataOffset`** for frames > 64 bytes, real-time address-phase hardware ACK, System Broadcast (`SB=0`), and transparent KNX Data Secure support.
 - `Router`: A powerful bridge that interconnects different hardware connections or tunneling clients (**KNXUSBConnection**). You can attach multiple `KNXService` instances to it (e.g., one USB connection and 5 tunnels), and it will automatically route telegrams between them, handling Individual Address learning and loop prevention.
 
 ### 2. Data Conversion (DPTs)
@@ -468,16 +468,25 @@ Follow these steps in **ETS5 / ETS6** before connecting with `KNX.ts`:
    - **ETS6**: Open the project → **Overview** → **Security** → **Export Keyring** (`.knxkeys`) and define an export password.
    - **Important**: Always export `.knxkeys` **after** assigning the IA, linking the Group Addresses, and downloading the devices so the file contains the latest group keys, `ToolKey`s, and sequence numbers.
 6. **Match the Individual Address in `KNX.ts`**:
-   - For **IP Routing (`KNXnetIPServer`)**, pass the exact IA assigned in ETS to both `individualAddress` and `dataSecure.sourceAddress` (e.g., `"1.1.200"`).
+   - For **IP Routing (`KNXnetIPServer`)** and **TP-UART (`TPUARTConnection`)**, pass the exact IA assigned in ETS to both `individualAddress` and `dataSecure.sourceAddress` (e.g., `"1.1.200"`).
+   - For **KNX USB (`KNXUSBConnection`)**, `KNX.ts` automatically selects **cEMI** and reads the USB stick's programmed hardware IA (`hardwareIndividualAddress`). For both group telegrams and point-to-point `KNXManagement` / `S-A_Sync` to work together, the USB stick's hardware IA should match the IA authorized in ETS—either omit `individualAddress` to use the stick's IA, pass `programHardwareAddress: true` with `individualAddress: "1.1.200"`, or call `await usb.setHardwareIndividualAddress("1.1.200")` (writes `PID_SUBNET_ADDR` / `PID_DEVICE_ADDR` via `M_PropWrite.req`).
    - For **Tunneling (`KNXTunneling`)**, the gateway assigns the tunnel IA on connection—verify it matches the slot IA authorized in ETS.
    - *Tip for Management Sessions*: Secure management sessions (`KNXManagement` with `{ secure: true }`) use the target device's `ToolKey` from `.knxkeys` and do not require group IA authorization; however, if you route over an IP router/gateway (such as LogicMachine), make sure *"Pass individual telegrams via IP routing"* is enabled.
 
-#### 2. Usage Example in `KNX.ts`
+#### 2. Usage Examples in `KNX.ts` (IP, KNX USB & TP-UART)
 
 Attach `dataSecure` to any `KNXService` (`KNXTunneling`, `KNXnetIPServer`, `KNXUSBConnection`, or `TPUARTConnection`) to transparently encrypt outgoing secure group telegrams (`write`, `read`, `respond`) and decrypt incoming `S-A_Data` frames (`0x03F1`), or use it with `KNXManagement` for `ToolKey` secure sessions:
 
 ```typescript
-import { KNXnetIPServer, KNXManagement, KnxDataSecure, KnxDataDecode, DataSecureCEMI } from "knx.ts";
+import {
+  KNXnetIPServer,
+  KNXUSBConnection,
+  TPUARTConnection,
+  KNXManagement,
+  KnxDataSecure,
+  KnxDataDecode,
+  DataSecureCEMI,
+} from "knx.ts";
 
 const dataSecure = new KnxDataSecure({
   keyringFile: "./project.knxkeys",
@@ -486,6 +495,7 @@ const dataSecure = new KnxDataSecure({
   sequenceNumberFile: "./seq_state.json", // Persists 48-bit sequence numbers across restarts
 });
 
+// Option A: KNXnet/IP Routing (plain or combined with KNX IP Secure Routing)
 const knx = new KNXnetIPServer({
   ip: "224.0.23.12",
   localIp: "192.168.1.50",
@@ -493,6 +503,21 @@ const knx = new KNXnetIPServer({
   tcp: false,
   dataSecure,
 });
+
+// Option B: Direct KNX USB interface (cEMI + multi-frame HID + optional hardware IA programming)
+// const knx = new KNXUSBConnection({
+//   individualAddress: "1.1.200",
+//   programHardwareAddress: true, // Optional: writes 1.1.200 to USB stick via M_PropWrite.req
+//   dataSecure,
+// });
+// Or change hardware IA at runtime after connect(): await knx.setHardwareIndividualAddress("1.1.200");
+
+// Option C: Direct TP-UART / TP-UART2 / NCN5120 serial transceiver (TP1 Extended Frames)
+// const knx = new TPUARTConnection({
+//   path: "/dev/ttyUSB0",
+//   individualAddress: "1.1.200",
+//   dataSecure,
+// });
 
 knx.on("indication", (cemi: DataSecureCEMI) => {
   if (cemi.dataSecure) {

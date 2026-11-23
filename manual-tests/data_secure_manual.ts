@@ -141,10 +141,12 @@ async function main() {
       logOptions: { level: "info", enabled: true },
     });
   } else {
+    const programUsbIa = process.env.KNX_USB_PROGRAM_IA === "1" || process.env.KNX_USB_PROGRAM_IA === "true";
     service = new KNXUSBConnection({
-      individualAddress: localIA,
+      ...(process.env.KNX_LOCAL_IA || programUsbIa ? { individualAddress: localIA } : {}),
+      ...(programUsbIa ? { programHardwareAddress: true } : {}),
       dataSecure,
-      logOptions: { level: "info", enabled: true },
+      logOptions: { level: logLevel, enabled: true },
     });
   }
 

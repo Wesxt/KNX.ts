@@ -13,12 +13,15 @@ const UART_SERVICES = {
   STATE_REQ: 0x02,
   STATE_IND: 0x07,
   ACTIVATE_BUSMON: 0x05,
+  LDATA_OFFSET: 0x08,
   LDATA_CON_POS: 0x8b,
   LDATA_CON_NEG: 0x0b,
   ACK_INFO: 0x10,
   LDATA_START: 0x80,
   LDATA_END: 0x40,
   BUSY: 0xc0,
+  BUS_ACK: 0xcc,
+  BUS_NACK: 0x0c,
 } as const;
 
 export enum TPUARTState {
@@ -116,11 +119,11 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     });
 
     this.on("raw_frame", (frame: Buffer) => {
-      // 1. Echo Cancellation (knxd pattern: ignore repeat bit 0x20)
-      if (this.lastSentFrame && frame.length === this.lastSentFrame.length) {
+      // 1. Echo Cancellation (knxd pattern: ignore repeat bit 0x20 and its FCS parity delta)
+      if (this.lastSentFrame && frame.length === this.lastSentFrame.length && frame.length >= 2) {
         if (
           (frame[0] & ~0x20) === (this.lastSentFrame[0] & ~0x20) &&
-          frame.subarray(1).equals(this.lastSentFrame.subarray(1))
+          frame.subarray(1, frame.length - 1).equals(this.lastSentFrame.subarray(1, this.lastSentFrame.length - 1))
         ) {
           this.lastSentFrame = null;
           return;
@@ -129,24 +132,6 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
 
       this.resetKeepalive();
 
-      // 2. Hardware ACK (knxd pattern)
-      // Only if NOT in busmonitor mode
-      if (!this.isBusmonitorMode) {
-        const options = this.options;
-        let ackByte = 0x10; // Default: No ACK
-
-        if (options.ackGroup || options.ackIndividual) {
-          const isExtended = (frame[0] & 0x80) === 0;
-          const controlByte = isExtended ? frame[1] : frame[5];
-          const isGroup = (controlByte & 0x80) !== 0;
-
-          if ((isGroup && options.ackGroup) || (!isGroup && options.ackIndividual)) {
-            ackByte = 0x11; // Send ACK
-          }
-        }
-        this.writeRaw([ackByte]).catch(() => {});
-      }
-
       try {
         if (this.isBusmonitorMode) {
           // In Busmonitor mode, we emit L_Busmon.ind
@@ -154,8 +139,7 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
           this.emit("indication", cemi);
           this.emit("busmonitor", cemi);
         } else {
-          const emiBuffer = Buffer.concat([Buffer.from([0x29]), frame]);
-          const rawCemi = CEMIAdapter.emiToCemi(emiBuffer);
+          const rawCemi = CEMIAdapter.tp1ToCemi(frame);
           if (rawCemi) {
             this.emit("raw_indication", rawCemi.toBuffer());
             const cemi = this.processIncomingCemi(rawCemi);
@@ -179,6 +163,51 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     });
   }
 
+  /**
+   * Sends real-time `U_AckInformation` (`0x10`/`0x11`) as soon as the TP1 destination address
+   * and address-type bits have been received (byte 6 of both Standard and Extended TP1 frames).
+   * Always ACKs individual frames addressed to `this.individualAddress` (needed for point-to-point
+   * `S-A_Sync` and `KNXManagement` on TP-UART1/2 chips).
+   * @internal
+   */
+  _handleAddressPhaseAck(prefix: Buffer, isExtended: boolean): void {
+    if (this.isBusmonitorMode) return;
+    // Do not ACK our own outgoing telegram echo
+    if (
+      this.lastSentFrame &&
+      this.lastSentFrame.length >= prefix.length &&
+      (prefix[0] & ~0x20) === (this.lastSentFrame[0] & ~0x20) &&
+      prefix.subarray(1).equals(this.lastSentFrame.subarray(1, prefix.length))
+    ) {
+      return;
+    }
+
+    const controlByte = isExtended ? prefix[1] : prefix[5];
+    const isGroup = (controlByte & 0x80) !== 0;
+    const destBuf = isExtended ? prefix.subarray(4, 6) : prefix.subarray(3, 5);
+
+    let shouldAck = false;
+    if (isGroup && this.options.ackGroup) {
+      shouldAck = true;
+    } else if (!isGroup) {
+      if (this.options.ackIndividual) {
+        shouldAck = true;
+      } else if (this.individualAddress) {
+        try {
+          const ownIaBuf = KNXHelper.GetAddress_(this.individualAddress);
+          if (destBuf.equals(ownIaBuf)) {
+            shouldAck = true;
+          }
+        } catch {
+          /* ignore invalid IA */
+        }
+      }
+    }
+
+    const ackByte = shouldAck ? UART_SERVICES.ACK_INFO | 0x01 : UART_SERVICES.ACK_INFO;
+    this.writeRaw([ackByte]).catch(() => {});
+  }
+
   private handleFatalError(err: any) {
     this.fsm.transition(TPUARTEvent.ERROR);
     this.emit("error", err);
@@ -191,7 +220,6 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     this.keepaliveTimer = null;
     this.confirmationTimer = null;
     this.initTimer = null;
-    this.removeAllListeners();
   }
 
   private resetKeepalive() {
@@ -372,8 +400,21 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     }
 
     const wireData = this.prepareOutgoingCemi(data);
-    const frame = Buffer.isBuffer(wireData) ? wireData : CEMIAdapter.cemiToEmi(wireData)?.toBuffer();
-    if (!frame) throw new Error("Invalid data");
+    let frame: Buffer | null = null;
+    if (Buffer.isBuffer(wireData)) {
+      try {
+        const parsedWireCemi = CEMI.fromBuffer(wireData);
+        frame = CEMIAdapter.cemiToTp1(parsedWireCemi);
+      } catch {
+        // Already a raw TP1 LPDU buffer (starts with CTRL1 and ends with FCS)
+        frame = wireData;
+      }
+    } else {
+      frame = CEMIAdapter.cemiToTp1(wireData);
+    }
+    if (!frame || frame.length < 8 || frame.length > 263) {
+      throw new Error("Invalid TP1 frame data");
+    }
     this.emit("send", data);
     return this.enqueueFrame(frame);
   }
@@ -431,15 +472,33 @@ export class TPUARTConnection extends KNXService<TPUARTOptions> {
     });
   }
 
-  private toUartServices(telegram: Buffer): Buffer {
-    const result = Buffer.alloc(telegram.length * 2);
+  /**
+   * Encodes a raw TP1 LPDU (including trailing FCS) into TP-UART / TP-UART2 / NCN5120 serial service commands.
+   * Uses `U_L_DataStart` (`0x80`), `U_L_DataContinue` (`0x80 | i`), `U_L_DataEnd` (`0x40 | i`),
+   * and inserts 1-byte `U_L_DataOffset` (`0x08 | page`) whenever frames exceed 64 bytes (for long Extended Frames
+   * up to 263 octets such as KNX Data Secure management / large payloads).
+   */
+  public static encodeUartServices(telegram: Buffer): Buffer {
+    if (telegram.length === 0 || telegram.length > 263) {
+      throw new Error(`Invalid TP1 telegram length for TP-UART: ${telegram.length} (expected 1..263)`);
+    }
+    const bytes: number[] = [];
+    let currentPage = 0;
     for (let i = 0; i < telegram.length; i++) {
+      const page = i >> 6;
+      if (page !== currentPage) {
+        bytes.push(UART_SERVICES.LDATA_OFFSET | (page & 0x07));
+        currentPage = page;
+      }
       const ctrl =
         i === telegram.length - 1 ? UART_SERVICES.LDATA_END | (i & 0x3f) : UART_SERVICES.LDATA_START | (i & 0x3f);
-      result[i * 2] = ctrl;
-      result[i * 2 + 1] = telegram[i];
+      bytes.push(ctrl, telegram[i]);
     }
-    return result;
+    return Buffer.from(bytes);
+  }
+
+  private toUartServices(telegram: Buffer): Buffer {
+    return TPUARTConnection.encodeUartServices(telegram);
   }
 
   _handleControlByte(byte: number) {
@@ -600,6 +659,10 @@ class Receiver {
     } else {
       this.buffer = Buffer.concat([this.buffer, Buffer.from([byte])]);
       this.lastRead = now;
+      // Byte index 5 (length 6) completes [Ctrl1, SA(2), DA(2), DRL] (Standard) or [Ctrl1, Ctrl2, SA(2), DA(2)] (Extended)
+      if (this.buffer.length === 6) {
+        this.connection._handleAddressPhaseAck(this.buffer, this.extFrame);
+      }
       this.checkCompleteFrame();
     }
   }
@@ -610,19 +673,32 @@ class Receiver {
       byte === UART_SERVICES.LDATA_CON_POS ||
       byte === UART_SERVICES.LDATA_CON_NEG ||
       byte === UART_SERVICES.BUSY ||
+      byte === UART_SERVICES.BUS_ACK ||
+      byte === UART_SERVICES.BUS_NACK ||
       (byte & 0x07) === UART_SERVICES.STATE_IND
     );
   }
 
   private isFrameStart(byte: number): boolean {
+    // TP1 L_Data CTRL1 (03_02_02 §2.2.2): bit 6 = 0, bits 1..0 = 00.
+    // Bit 7 (FT): 1 = Standard, 0 = Extended.
+    // Bit 4 (SB): 1 = normal/broadcast, 0 = System Broadcast (needed for Data Secure DM_SecureSync_SBC).
+    if (byte === 0x00 || (byte & 0x43) !== 0x00) {
+      return false;
+    }
     this.extFrame = (byte & 0x80) === 0;
-    return (byte & 0x50) === 0x10;
+    return true;
   }
 
   private checkCompleteFrame() {
     const minLength = this.extFrame ? 7 : 6;
     if (this.buffer.length >= minLength) {
       const payloadLen = this.extFrame ? this.buffer[6] : this.buffer[5] & 0x0f;
+      if (this.extFrame && payloadLen === 0xff) {
+        // 0xFF is reserved escape value in TP1 Extended Frame (03_02_02 §2.2.5.4)
+        this.buffer = Buffer.alloc(0);
+        return;
+      }
       const totalLen = payloadLen + (this.extFrame ? 9 : 8);
       if (this.buffer.length >= totalLen) {
         const frame = this.buffer.subarray(0, totalLen);
