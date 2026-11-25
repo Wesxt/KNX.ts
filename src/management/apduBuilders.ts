@@ -129,6 +129,10 @@ export function buildConnectedLDataReq(
   const cf2 = new ExtendedControlField(MGMT_CF2_INDIVIDUAL);
   const tpci = makeTpciConnected(sequenceNumber);
   const apdu = new APDU(makeTpciConnected(sequenceNumber), new APCI(apciCommand as APCIEnum), data, isShort);
+  if (apdu.length > 15) {
+    // KNX 03_03_02 §2.2: frames with NPDU/APDU length > 15 octets MUST use Extended Frame format (FT = 0).
+    cf1.frameType = false;
+  }
   const tpdu = new TPDU(tpci, apdu, data);
   return new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, sourceAddress, destinationAddress, tpdu);
 }
@@ -144,6 +148,9 @@ export function buildIndividualLDataReq(
   const cf2 = new ExtendedControlField(MGMT_CF2_INDIVIDUAL);
   const tpci = new TPCI(TPCIType.T_DATA_INDIVIDUAL_PDU);
   const apdu = new APDU(new TPCI(TPCIType.T_DATA_INDIVIDUAL_PDU), new APCI(apciCommand as APCIEnum), data, isShort);
+  if (apdu.length > 15) {
+    cf1.frameType = false;
+  }
   const tpdu = new TPDU(tpci, apdu, data);
   return new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, sourceAddress, destinationAddress, tpdu);
 }
@@ -158,6 +165,9 @@ export function buildBroadcastLDataReq(
   const cf2 = new ExtendedControlField(MGMT_CF2_BROADCAST);
   const tpci = new TPCI(TPCIType.T_DATA_BROADCAST_PDU);
   const apdu = new APDU(new TPCI(TPCIType.T_DATA_BROADCAST_PDU), new APCI(apciCommand as APCIEnum), data, isShort);
+  if (apdu.length > 15) {
+    cf1.frameType = false;
+  }
   const tpdu = new TPDU(tpci, apdu, data);
   return new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, sourceAddress, "0/0/0", tpdu);
 }
@@ -172,6 +182,9 @@ export function buildSystemBroadcastLDataReq(
   const cf2 = new ExtendedControlField(MGMT_CF2_BROADCAST);
   const tpci = new TPCI(TPCIType.T_DATA_BROADCAST_PDU);
   const apdu = new APDU(new TPCI(TPCIType.T_DATA_BROADCAST_PDU), new APCI(apciCommand as APCIEnum), data, isShort);
+  if (apdu.length > 15) {
+    cf1.frameType = false;
+  }
   const tpdu = new TPDU(tpci, apdu, data);
   return new CEMI.DataLinkLayerCEMI["L_Data.req"](null, cf1, cf2, sourceAddress, "0/0/0", tpdu);
 }
@@ -401,7 +414,7 @@ export function decodeFunctionPropertyResponseData(payload: Buffer): DecodedFunc
 
 // --- Extended Property & Function Property Services (03_03_07 §3.4.3.2, §3.4.5, §3.4.8) ---
 
-function encodeExtObjectHeader(objectType: number, objectInstance: number, propertyId: number): Buffer {
+export function encodeExtObjectHeader(objectType: number, objectInstance: number, propertyId: number): Buffer {
   const buf = Buffer.alloc(5);
   buf.writeUInt16BE(objectType & 0xffff, 0);
   buf.writeUInt8((objectInstance >> 4) & 0xff, 2);
@@ -410,7 +423,7 @@ function encodeExtObjectHeader(objectType: number, objectInstance: number, prope
   return buf;
 }
 
-function decodeExtObjectHeader(payload: Buffer): {
+export function decodeExtObjectHeader(payload: Buffer): {
   objectType: number;
   objectInstance: number;
   propertyId: number;

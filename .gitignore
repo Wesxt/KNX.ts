@@ -27,3 +27,7 @@ logs/
 Ignore
 testKey/
 KNX.ts.code-workspace
+
+api-server
+
+maxinbox_1_1_1.json

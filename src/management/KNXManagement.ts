@@ -89,7 +89,8 @@ import {
   SyncSequenceNumberOptions,
   SyncSequenceNumberResult,
 } from "../security/KnxDataSecure";
-import { decodeSeqNr48 } from "../security/KnxDataSecureCcm";
+import { decodeSeqNr48, encodeSeqNr48 } from "../security/KnxDataSecureCcm";
+import { parseKey16 } from "../security/KnxSecureKeys";
 
 /**
  * Standard KNX Interface Object Types (03_05_01 §4 & §6).
@@ -292,6 +293,12 @@ export interface DecodedSecurityIndividualAddressEntry {
 export interface DecodedGroupKeyTableEntry {
   gaIndex: number;
   key: Buffer;
+}
+
+export interface DecodedP2PKeyTableEntry {
+  iaIndex: number;
+  key: Buffer;
+  roles: number;
 }
 
 export interface DecodedSecurityFailuresCounters {
@@ -1692,6 +1699,332 @@ export class KNXManagementSession {
       });
     }
     return entries;
+  }
+
+  /**
+   * Reads `PID_LOAD_STATE_CONTROL` (PID 5) on the Security Interface Object (Type 17, 03_05_01 §6.3.4).
+   */
+  public async readSecurityLoadState(objectInstance: number = 1): Promise<LoadState> {
+    const res = await this.readPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_LOAD_STATE_CONTROL,
+      count: 1,
+      startIndex: 1,
+    });
+    if (res.count === 0 || res.data.length < 1) {
+      throw new Error(`Unable to read Security Object PID_LOAD_STATE_CONTROL from ${this.destinationAddress}`);
+    }
+    return res.data.readUInt8(0) as LoadState;
+  }
+
+  /**
+   * Writes a 10-octet Load Event (`UNLOAD`, `START_LOADING`, `LOAD_COMPLETED`, `ADDITIONAL_LOAD_CONTROLS`)
+   * to `PID_LOAD_STATE_CONTROL` (PID 5) on the Security Interface Object (Type 17, 03_05_01 §6.3.4)
+   * and returns the resulting `LoadState`.
+   */
+  public async writeSecurityLoadState(
+    event: LoadEvent,
+    additionalPayload?: Buffer,
+    objectInstance: number = 1,
+  ): Promise<LoadState> {
+    const controlBlock = Buffer.alloc(10, 0x00);
+    controlBlock.writeUInt8(event & 0xff, 0);
+    if (additionalPayload && additionalPayload.length > 0) {
+      additionalPayload.copy(controlBlock, 1, 0, Math.min(additionalPayload.length, 9));
+    }
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_LOAD_STATE_CONTROL,
+      count: 1,
+      startIndex: 1,
+      data: controlBlock,
+    });
+    return this.readSecurityLoadState(objectInstance);
+  }
+
+  /**
+   * Writes the 16-octet `PID_TOOL_KEY` (PID 56) on the Security Interface Object (Type 17, 03_05_01 §6.3.10).
+   * Must be sent over a Data Secure session with Tool Access + A+C (using FDSK initially, or current Tool Key).
+   */
+  public async writeToolKey(toolKey: Buffer | string, objectInstance: number = 1): Promise<void> {
+    const keyBuf = parseKey16(toolKey, "PID_TOOL_KEY");
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_TOOL_KEY,
+      count: 1,
+      startIndex: 1,
+      data: keyBuf,
+    });
+  }
+
+  /**
+   * Writes the 6-octet `PID_SEQUENCE_NUMBER_SENDING` (PID 59) on the Security Interface Object (03_05_01 §6.3.13).
+   */
+  public async writeSequenceNumberSending(seqNr: bigint | number, objectInstance: number = 1): Promise<void> {
+    const seqBig = typeof seqNr === "bigint" ? seqNr : BigInt(Math.trunc(seqNr));
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SEQUENCE_NUMBER_SENDING,
+      count: 1,
+      startIndex: 1,
+      data: encodeSeqNr48(seqBig),
+    });
+  }
+
+  /**
+   * Writes `PID_GRP_KEY_TABLE` (PID 53, `PDT_GENERIC_18[]`, 03_05_01 §6.3.7 Fig. 74) on Security Object Type 17.
+   * Entries are automatically sorted ascending by `gaIndex` (1-based `TSAP`).
+   * The Security Object should be in `LoadState.LOADING`.
+   */
+  public async writeGroupKeyTable(
+    entries: { gaIndex: number; key: Buffer | string }[],
+    options: { objectInstance?: number; maxChunkEntries?: number } = {},
+  ): Promise<void> {
+    const objectInstance = options.objectInstance ?? 1;
+    const maxChunk = Math.max(1, Math.min(options.maxChunkEntries ?? 8, 12));
+
+    // Clear existing table first via element index 0 = 0x0000
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_GRP_KEY_TABLE,
+      count: 1,
+      startIndex: 0,
+      data: Buffer.from([0x00, 0x00]),
+    });
+
+    if (entries.length === 0) return;
+
+    const sorted = [...entries].sort((a, b) => a.gaIndex - b.gaIndex);
+    for (let i = 0; i < sorted.length; i += maxChunk) {
+      const slice = sorted.slice(i, i + maxChunk);
+      const payload = Buffer.alloc(slice.length * 18);
+      for (let j = 0; j < slice.length; j++) {
+        const keyBuf = parseKey16(slice[j].key, `PID_GRP_KEY_TABLE[${slice[j].gaIndex}]`);
+        payload.writeUInt16BE(slice[j].gaIndex & 0xffff, j * 18);
+        keyBuf.copy(payload, j * 18 + 2);
+      }
+      await this.writePropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_GRP_KEY_TABLE,
+        count: slice.length,
+        startIndex: i + 1,
+        data: payload,
+      });
+    }
+  }
+
+  /**
+   * Reads `PID_GO_SECURITY_FLAGS` (PID 61, `PDT_GENERIC_01[]`, 03_05_01 §6.3.15 Fig. 81) on Security Object Type 17.
+   */
+  public async readGoSecurityFlags(options: { objectInstance?: number; maxChunkBytes?: number } = {}): Promise<Buffer> {
+    const objectInstance = options.objectInstance ?? 1;
+    const maxChunk = Math.max(1, Math.min(options.maxChunkBytes ?? 160, 200));
+    const countResp = await this.readPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_GO_SECURITY_FLAGS,
+      count: 1,
+      startIndex: 0,
+    });
+    if (countResp.count === 0 || countResp.data.length < 2) {
+      return Buffer.alloc(0);
+    }
+    const total = countResp.data.readUInt16BE(0);
+    if (total === 0) return Buffer.alloc(0);
+
+    const chunks: Buffer[] = [];
+    let startIndex = 1;
+    while (startIndex <= total) {
+      const count = Math.min(maxChunk, total - startIndex + 1);
+      const resp = await this.readPropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_GO_SECURITY_FLAGS,
+        count,
+        startIndex,
+      });
+      if (resp.count === 0 || resp.data.length === 0) break;
+      chunks.push(resp.data.subarray(0, resp.count));
+      startIndex += resp.count;
+    }
+    return Buffer.concat(chunks);
+  }
+
+  /**
+   * Writes `PID_GO_SECURITY_FLAGS` (PID 61, `PDT_GENERIC_01[]`, 03_05_01 §6.3.15 Fig. 81) on Security Object Type 17.
+   * Each byte corresponds to one Group Object (`bit 0 = auth`, `bit 1 = conf`, bits 7..2 forced to `0`).
+   */
+  public async writeGoSecurityFlags(
+    flags: Buffer,
+    options: { objectInstance?: number; maxChunkBytes?: number } = {},
+  ): Promise<void> {
+    const objectInstance = options.objectInstance ?? 1;
+    const maxChunk = Math.max(1, Math.min(options.maxChunkBytes ?? 160, 200));
+
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_GO_SECURITY_FLAGS,
+      count: 1,
+      startIndex: 0,
+      data: Buffer.from([0x00, 0x00]),
+    });
+
+    if (flags.length === 0) return;
+
+    // Mask reserved bits 7..2 to 0 per 03_05_01 §6.3.15.2
+    const sanitized = Buffer.alloc(flags.length);
+    for (let i = 0; i < flags.length; i++) {
+      sanitized[i] = flags[i] & 0x03;
+    }
+
+    for (let i = 0; i < sanitized.length; i += maxChunk) {
+      const chunk = sanitized.subarray(i, Math.min(i + maxChunk, sanitized.length));
+      await this.writePropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_GO_SECURITY_FLAGS,
+        count: chunk.length,
+        startIndex: i + 1,
+        data: chunk,
+      });
+    }
+  }
+
+  /**
+   * Writes `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE` (PID 54, `PDT_GENERIC_08[]`, 03_05_01 §6.3.8 Fig. 75).
+   * Entries are automatically sorted ascending by 16-bit Individual Address.
+   */
+  public async writeSecurityIndividualAddressTable(
+    entries: { individualAddress: string; lastValidSeqNr?: bigint | number }[],
+    options: { objectInstance?: number; maxChunkEntries?: number } = {},
+  ): Promise<void> {
+    const objectInstance = options.objectInstance ?? 1;
+    const maxChunk = Math.max(1, Math.min(options.maxChunkEntries ?? 20, 25));
+
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE,
+      count: 1,
+      startIndex: 0,
+      data: Buffer.from([0x00, 0x00]),
+    });
+
+    if (entries.length === 0) return;
+
+    const normalized = entries
+      .map((e) => {
+        const iaBuf = KNXHelper.GetAddress(e.individualAddress, ".");
+        const seqBig =
+          e.lastValidSeqNr === undefined
+            ? 0n
+            : typeof e.lastValidSeqNr === "bigint"
+              ? e.lastValidSeqNr
+              : BigInt(Math.trunc(e.lastValidSeqNr));
+        return { iaInt: iaBuf.readUInt16BE(0), iaBuf, seq6: encodeSeqNr48(seqBig) };
+      })
+      .sort((a, b) => a.iaInt - b.iaInt);
+
+    for (let i = 0; i < normalized.length; i += maxChunk) {
+      const slice = normalized.slice(i, i + maxChunk);
+      const payload = Buffer.alloc(slice.length * 8);
+      for (let j = 0; j < slice.length; j++) {
+        slice[j].iaBuf.copy(payload, j * 8);
+        slice[j].seq6.copy(payload, j * 8 + 2);
+      }
+      await this.writePropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE,
+        count: slice.length,
+        startIndex: i + 1,
+        data: payload,
+      });
+    }
+  }
+
+  /**
+   * Reads `PID_P2P_KEY_TABLE` (PID 52, `PDT_GENERIC_20[]`, 03_05_01 §6.3.6 Fig. 72) on Security Object Type 17.
+   */
+  public async readP2PKeyTable(objectInstance: number = 1): Promise<DecodedP2PKeyTableEntry[]> {
+    const countResp = await this.readPropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_P2P_KEY_TABLE,
+      count: 1,
+      startIndex: 0,
+    });
+    if (countResp.count === 0 || countResp.data.length < 2) {
+      return [];
+    }
+    const total = countResp.data.readUInt16BE(0);
+    const entries: DecodedP2PKeyTableEntry[] = [];
+    for (let idx = 1; idx <= total; idx++) {
+      const elem = await this.readPropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_P2P_KEY_TABLE,
+        count: 1,
+        startIndex: idx,
+      });
+      if (elem.count === 0 || elem.data.length < 20) break;
+      entries.push({
+        iaIndex: elem.data.readUInt16BE(0),
+        key: Buffer.from(elem.data.subarray(2, 18)),
+        roles: elem.data.readUInt16BE(18),
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * Writes `PID_P2P_KEY_TABLE` (PID 52, `PDT_GENERIC_20[]`, 03_05_01 §6.3.6 Fig. 72) on Security Object Type 17.
+   * Entries are automatically sorted ascending by 1-based `iaIndex`.
+   */
+  public async writeP2PKeyTable(
+    entries: { iaIndex: number; key: Buffer | string; roles?: number }[],
+    options: { objectInstance?: number; maxChunkEntries?: number } = {},
+  ): Promise<void> {
+    const objectInstance = options.objectInstance ?? 1;
+    const maxChunk = Math.max(1, Math.min(options.maxChunkEntries ?? 8, 10));
+
+    await this.writePropertyExtended({
+      objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+      objectInstance,
+      propertyId: KNXSecurityPropertyId.PID_P2P_KEY_TABLE,
+      count: 1,
+      startIndex: 0,
+      data: Buffer.from([0x00, 0x00]),
+    });
+
+    if (entries.length === 0) return;
+
+    const sorted = [...entries].sort((a, b) => a.iaIndex - b.iaIndex);
+    for (let i = 0; i < sorted.length; i += maxChunk) {
+      const slice = sorted.slice(i, i + maxChunk);
+      const payload = Buffer.alloc(slice.length * 20);
+      for (let j = 0; j < slice.length; j++) {
+        const keyBuf = parseKey16(slice[j].key, `PID_P2P_KEY_TABLE[${slice[j].iaIndex}]`);
+        payload.writeUInt16BE(slice[j].iaIndex & 0xffff, j * 20);
+        keyBuf.copy(payload, j * 20 + 2);
+        payload.writeUInt16BE((slice[j].roles ?? 0) & 0xffff, j * 20 + 18);
+      }
+      await this.writePropertyExtended({
+        objectType: KNXInterfaceObjectType.SECURITY_OBJECT,
+        objectInstance,
+        propertyId: KNXSecurityPropertyId.PID_P2P_KEY_TABLE,
+        count: slice.length,
+        startIndex: i + 1,
+        data: payload,
+      });
+    }
   }
 }
 

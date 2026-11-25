@@ -580,6 +580,133 @@ export class KnxDataSecure extends EventEmitter {
     return Array.from(this.groupKeys.keys()).map((intVal) => KNXHelper.GetAddress(intVal, "/"));
   }
 
+  /**
+   * Returns a snapshot of all configured Group Keys indexed by canonical 3-level Group Address (`"1/0/1"`).
+   */
+  public getGroupKeys(): Map<string, Buffer> {
+    const out = new Map<string, Buffer>();
+    for (const [intVal, key] of this.groupKeys.entries()) {
+      out.set(KNXHelper.GetAddress(intVal, "/"), Buffer.from(key));
+    }
+    return out;
+  }
+
+  /**
+   * Returns a snapshot of all configured Device Tool Keys indexed by Individual Address (`"1.1.1"`).
+   */
+  public getDeviceToolKeys(): Map<string, Buffer> {
+    const out = new Map<string, Buffer>();
+    for (const [ia, key] of this.deviceToolKeys.entries()) {
+      out.set(ia, Buffer.from(key));
+    }
+    return out;
+  }
+
+  /**
+   * Returns a snapshot of all tracked 48-bit Last Valid Sequence Numbers indexed by sender Individual Address.
+   */
+  public getLastValidSequenceNumbers(): Map<string, bigint> {
+    return new Map(this.lastValidSeqByIA);
+  }
+
+  /**
+   * Returns a snapshot of all configured 6-byte device Serial Numbers indexed by Individual Address.
+   */
+  public getDeviceSerialNumbers(): Map<string, Buffer> {
+    const out = new Map<string, Buffer>();
+    for (const [ia, sn] of this.deviceSerialNumbers.entries()) {
+      out.set(ia, Buffer.from(sn));
+    }
+    return out;
+  }
+
+  /**
+   * Synchronizes Group Keys, Device Tool Keys, Serial Numbers, and live 48-bit Sequence Numbers
+   * from this runtime `KnxDataSecure` manager into a {@link KnxKeyring} instance (ready for `.knxkeys` export).
+   *
+   * Note: Per KNX Standard `03_03_07` §5.3.2, `Device/@SequenceNumber` in `.knxkeys` represents the next
+   * sending sequence number (`LastValidSeqNr + 1` for remote devices; `sequenceNumberSending` for `sourceAddress`).
+   */
+  public syncToKeyring(
+    keyring: KnxKeyring,
+    options: {
+      includeGroupKeys?: boolean;
+      includeToolKeys?: boolean;
+      includeSequenceNumbers?: boolean;
+      includeSerialNumbers?: boolean;
+      deviceAddresses?: string[];
+    } = {},
+  ): KnxKeyring {
+    const includeGroupKeys = options.includeGroupKeys ?? true;
+    const includeToolKeys = options.includeToolKeys ?? true;
+    const includeSequenceNumbers = options.includeSequenceNumbers ?? true;
+    const includeSerialNumbers = options.includeSerialNumbers ?? true;
+    const filter = options.deviceAddresses ? new Set(options.deviceAddresses.map((ia) => ia.trim())) : undefined;
+
+    if (includeGroupKeys) {
+      for (const [intVal, key] of this.groupKeys.entries()) {
+        keyring.setGroupKey(intVal, key);
+      }
+    }
+
+    const deviceIas = new Set<string>();
+    if (includeToolKeys) {
+      for (const ia of this.deviceToolKeys.keys()) deviceIas.add(ia);
+    }
+    if (includeSequenceNumbers) {
+      for (const ia of this.lastValidSeqByIA.keys()) deviceIas.add(ia);
+      if (this._sourceAddress) deviceIas.add(this._sourceAddress);
+    }
+    if (includeSerialNumbers) {
+      for (const ia of this.deviceSerialNumbers.keys()) deviceIas.add(ia);
+    }
+
+    for (const ia of deviceIas) {
+      if (filter && !filter.has(ia)) continue;
+      if (!KNXHelper.isValidIndividualAddress(ia)) continue;
+
+      const patch: Parameters<KnxKeyring["setDevice"]>[0] = { individualAddress: ia, merge: true };
+      let hasData = false;
+
+      if (includeToolKeys) {
+        const tk =
+          this.deviceToolKeys.get(ia) ?? (ia === this._sourceAddress ? (this.ownToolKey ?? undefined) : undefined);
+        if (tk) {
+          patch.toolKey = tk;
+          hasData = true;
+        }
+      }
+      if (includeSequenceNumbers) {
+        if (ia === this._sourceAddress) {
+          patch.sequenceNumber = this._sequenceNumberSending;
+          hasData = true;
+        } else {
+          const lastValid = this.lastValidSeqByIA.get(ia);
+          if (lastValid !== undefined && lastValid > 0n) {
+            const nextSeq = lastValid < MAX_SEQ_NR_48 ? lastValid + 1n : MAX_SEQ_NR_48;
+            patch.sequenceNumber = nextSeq;
+            hasData = true;
+          }
+        }
+      }
+      if (includeSerialNumbers) {
+        const sn =
+          this.deviceSerialNumbers.get(ia) ??
+          (ia === this._sourceAddress ? (this.ownSerialNumber ?? undefined) : undefined);
+        if (sn) {
+          patch.serialNumber = sn;
+          hasData = true;
+        }
+      }
+
+      if (hasData) {
+        keyring.setDevice(patch);
+      }
+    }
+
+    return keyring;
+  }
+
   public setGroupSecurityMode(groupAddress: string | number, mode: DataSecureMode): void {
     const { intValue } = normalizeKeyringGroupAddress(groupAddress);
     this.groupModes.set(intValue, mode);

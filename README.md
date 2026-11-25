@@ -13,11 +13,12 @@ This project focuses on protocol strictness, reading and sending any kind of **E
 - **KNXnet/IP Secure (`03_08_09`)**:
   - **Secure Tunneling Client & Server (TCP Unicast)**: Full X25519 ECDH key exchange, PBKDF2-HMAC-SHA256 user and device authentication (`SESSION_REQUEST`, `SESSION_RESPONSE`, `SESSION_AUTHENTICATE`, `SESSION_STATUS`), and AES-128-CCM frame wrapping (`SECURE_WRAPPER`) in both `KNXTunneling` and `KNXnetIPServer` (`ServerSecureSession`).
   - **Secure Routing Multicast**: Multicast `SECURE_WRAPPER` encryption/authentication and the 48-bit `TIMER_NOTIFY` synchronization state machine (`SecureRoutingTimer`) in `KNXnetIPServer`.
-  - **Zero-Dependency ETS `.knxkeys` Reader (`KnxKeyring`)**: Loads, verifies the canonical ETS signature, and decrypts `.knxkeys` files using built-in Node.js `crypto` and `zlib` (including ETS5 integer and ETS6 3-level group address normalization).
+  - **Zero-Dependency ETS `.knxkeys` Reader, Builder & Exporter (`KnxKeyring`)**: Loads, verifies the canonical ETS signature, decrypts, edits, and **exports signed/encrypted `.knxkeys` files** (XML with UTF-8 BOM or ZIP, ETS5 integer or ETS6 3-level group addresses, CSPRNG key generation, and 48-bit sequence number sync with `KnxDataSecure`) using built-in Node.js `crypto` and `zlib`.
 - **KNX Data Secure (`03_03_07` §5, `03_05_01` §6.3, `03_05_02` §4)**:
   - **Transparent Application-Layer Security (`KnxDataSecure`)**: End-to-end AES-128-CCM (`APCISec = 0x03F1`, `S-A_Data` with both *Authentication + Confidentiality* and *Authentication-only* modes, automatic *Extended Frame* `FT=0` switching for payloads > 15 bytes) attachable to any `KNXService` (`KNXTunneling`, `KNXnetIPServer`, `KNXUSBConnection`, `TPUARTConnection`).
   - **48-bit Sequence Number & `S-A_Sync` Engine**: Anti-replay validation per sender IA, optional JSON file persistence (`sequenceNumberFile`), `DM_SecureSync_RCl` (point-to-point / connected) and `DM_SecureSync_SBC` (broadcast / system broadcast) with `ToolKey` ↔ `FDSK` fallback.
-  - **Secure Device Management & Security Interface Object (Type 17)**: Secure `KNXManagement` sessions (`openSession(ia, { secure: true })` / `withSession`) with helpers for `PID_SECURITY_MODE`, `PID_GRP_KEY_TABLE`, `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`, `PID_SECURITY_FAILURES_LOG`, and `PID_SEQUENCE_NUMBER_SENDING`. *(Validated against official `03_03_07` Annex C vectors and a real physical Zennio MAXinBOX 66 v3.)*
+  - **Secure Device Management & Security Interface Object (Type 17)**: Secure `KNXManagement` sessions (`openSession(ia, { secure: true })` / `withSession`) with helpers for `PID_SECURITY_MODE`, `PID_LOAD_STATE_CONTROL`, `PID_P2P_KEY_TABLE`, `PID_GRP_KEY_TABLE`, `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`, `PID_TOOL_KEY`, `PID_GO_SECURITY_FLAGS`, `PID_SECURITY_FAILURES_LOG`, and `PID_SEQUENCE_NUMBER_SENDING`. *(Validated against official `03_03_07` Annex C vectors and a real physical Zennio MAXinBOX 66 v3.)*
+- **Direct `.knxprod` Device Programming, Web Parameterization API & Phase 2 Data Secure Commissioning (`KNXDeviceProgrammer`, `DeviceConfigSession`)**: Parse official ETS `.knxprod` archives (streaming XML, 60+ MB catalogs, localization), evaluate `<Dynamic>` / `<Assign>` / `<ModuleDef>` / `<Repeat>` / JS `<ParameterCalculation>` rules, expose a **100% JSON-serializable UI & mutation API (`DeviceConfigSession`)** for web apps, compile System B (`MV-07B0`) Objects 1–4 + Security Interface Object Type 17 (including `FDSK -> ToolKey` initial commissioning), and program real devices over IP Tunneling, KNX USB (`cEMI`), Routing, or TP-UART. See the full [Programming & Web API Guide](./docs/PROGRAMMING_GUIDE.md).
 - **Core v2 Extended Discovery (`KNXTunneling.discover` / `KNXnetIPServer.discover`)**: Discovers KNXnet/IP servers over UDP multicast/unicast or TCP unicast with Search Request Parameters (SRP: programming mode, MAC address, minimum service version, requested DIBs) and decodes enriched human-readable metadata (`KNXDiscoveredDevice`).
 - **Full KNX Network & Device Management (`KNXManagement` & `KNXManagementSession`)**: Complete implementation of the KNX Management stack (`03_05_02 Management Procedures`, `03_03_07 Application Layer`, `03_05_01 Resources`, and `03_08_03 / 03_06_03 Local cEMI Management`) over a point-to-point connection-oriented Transport Layer (`TransportConnection`, `03_03_04`) as well as broadcast, system broadcast, and connectionless modes:
   - **Individual & Domain Address Management (`NM_*`)**: Read devices in programming mode (with duplicate detection), program Individual Addresses by programming button (`writeIndividualAddress`) or by 6-byte KNX Serial Number (`writeIndividualAddressBySerial`), reset Individual Address to `15.15.255` (`resetIndividualAddress`), read/write Domain Addresses (`readDomainAddress`, `writeDomainAddress`, `readDomainAddressSelective`, `readDomainAddressBySerial`, `writeDomainAddressBySerial`), and read/write Network & System Network Parameters.
@@ -37,7 +38,7 @@ This project focuses on protocol strictness, reading and sending any kind of **E
 According to `TODO.md`, several features are verified through automated suites and ETS integration while others still await broader physical hardware validation:
 
 - **ETS5 Integration & Protocol Compliance**: Discovery (`SEARCH_REQUEST` / `SEARCH_REQUEST_EXTENDED` with SRPs), `DESCRIPTION_RESPONSE`, UDP/TCP Tunneling, Tunnelling v2 Features, Secure Unicast Session handshake, and ETS Busmonitor / Group Monitor are implemented and verified against automated tests and live ETS5 sessions.
-- **KNX IP Secure Routing, KNX Data Secure & `KNXManagement` (Hardware Validated)**: Implemented according to the KNX Standard v3.0.0 and verified against official Annex A (`03_08_09`) & Annex C (`03_03_07`) cryptographic test vectors, real ETS `.knxkeys` files, real ETS XML captures, and **live physical hardware**: KNX IP Secure Routing (`SECURE_WRAPPER` + `TIMER_NOTIFY`) with LogicMachine, and end-to-end KNX Data Secure group communication + `ToolKey` `S-A_Sync` / Security Interface Object 17 management with a Zennio MAXinBOX 66 v3 over **KNXnet/IP (Tunneling & Secure Routing)** and **KNX USB (`cEMI` + hardware IA programming)**. TP-UART Extended Frame (`FT=0`, `U_L_DataOffset`) and multi-frame USB HID transfers (`09_03`) are verified via unit tests. Full memory/download procedures remain to be validated on additional physical bus devices.
+- **KNX IP Secure Routing, KNX Data Secure, `KNXManagement` & `.knxprod` Programming (Hardware Validated)**: Implemented according to the KNX Standard v3.0.0 and verified against official Annex A (`03_08_09`) & Annex C (`03_03_07`) cryptographic test vectors, real ETS `.knxkeys` files, real ETS XML captures, and **live physical hardware**: KNX IP Secure Routing (`SECURE_WRAPPER` + `TIMER_NOTIFY`) with LogicMachine, end-to-end KNX Data Secure group communication + `ToolKey` `S-A_Sync` / Security Interface Object 17 management over **KNXnet/IP (Tunneling & Secure Routing)** and **KNX USB (`cEMI` + hardware IA programming)**, and **full end-to-end `.knxprod` application download + Phase 2 Object Type 17 Data Secure commissioning (124 KB, 727 encrypted frames) verified live on a physical Zennio MAXinBOX 66 v3** (with confirmed encrypted A+C relay control and status feedback). TP-UART Extended Frame (`FT=0`, `U_L_DataOffset`) and multi-frame USB HID transfers (`09_03`) are verified via unit tests.
 - **Source Filtering**: Filtering based on source addresses and selective routing is on the roadmap.
 - **Use of NPDU, TPDU, and APDU layers**: EMI still needs to use them for correct deserialization.
 
@@ -78,7 +79,8 @@ These classes form the core of your interaction with the network. All of them in
 - `KNXnetIPServer`: Creates a KNXnet/IP server (Gateway) supporting UDP & TCP listeners (`tcp`, `tcpPort`, `tcpHost`, `allowPlainTcp`), KNX IP Secure unicast sessions (`secure.users`, `secure.deviceAuthenticationPassword`), optional Secure multicast routing (`secure.backboneKey` / `keyringFile`), Core v2 Extended Search (SRP evaluation), Tunnelling v2 Interface Features, and ETS Group/Busmonitor (`L_Busmon.ind`).
 - `KNXTunneling`: Connects as a client to an existing KNXnet/IP gateway over UDP (`useRouteBack`), plain TCP (`transport: "TCP"`), or **KNX IP Secure over TCP** (`secure: { ... }`), with Extended CRI (`individualAddress`, `knxLayer`), Tunnelling v2 Interface Features (`getFeature`, `setFeature`), and static Extended Discovery (`KNXTunneling.discover`).
 - `KNXManagement`, `KNXManagementSession` & `TransportConnection`: Full KNX Network and Device Management stack (`03_05_02`, `03_03_07`, `03_08_03`) for reading and writing Individual/Domain Addresses, Interface Object Properties, Function Properties, Device/User/Extended Memory, Authorization Keys, Load/Run State Machines, Group Object Links, and Device Restarts/Master Resets without depending on ETS.
-- `KnxKeyring`: Zero-dependency loader and decryptor for ETS `.knxkeys` files.
+- `KnxProdParser`, `DeviceConfigSession`, `DynamicEvaluator`, `SystemBCompiler`, `LoadProcedureEngine` & `KNXDeviceProgrammer`: End-to-end ETS `.knxprod` parser, JSON-serializable external/web parameterization session API (with localized UI trees, live `<Dynamic>` diffs, search, validation, and `toJSON`/`fromJSON`), System B (`MV-07B0`) binary compiler (Objects 1–4 + Object 17 Data Secure), and hardware downloader with pre-flight safety checks and `FDSK -> ToolKey` commissioning. See [docs/PROGRAMMING_GUIDE.md](./docs/PROGRAMMING_GUIDE.md).
+- `KnxKeyring`: Zero-dependency reader, builder, and exporter for standards-compliant ETS `.knxkeys` keyring files (compatible with ETS 5/6, Home Assistant / `xknx`, and `knx.ts`).
 - `KnxDataSecure` & `KnxDataSecureCcm`: Full KNX Data Security Application Layer (`S-AL`, `03_03_07` §5) supporting `S-A_Data` (A+C and A-only), `S-A_Sync`, 48-bit sequence number persistence, transparent `KNXService` encryption/decryption, and secure `KNXManagement` sessions with `ToolKey` / `P2PKey`.
 - `KNXUSBConnection`: Connects directly to local KNX USB interfaces (ABB, MDT, Weinzierl, Zennio, etc.) with **cEMI priority** (required for Extended Frames & KNX Data Secure), **multi-frame USB HID fragmentation/reassembly** (`09_03` §3.4.1.2, up to 5 reports), automatic **hardware Individual Address discovery** (`PID_SUBNET_ADDR` / `PID_DEVICE_ADDR`), and Local Device Management IA programming (`setHardwareIndividualAddress()` / `programHardwareAddress: true`).
 - `TPUARTConnection`: Connects directly to KNX TP1 through TPUART / TP-UART2 / NCN5120 serial hardware with full **TP1 Standard (`FT=1`) & Extended Frame (`FT=0`)** encoding/decoding (`CEMIAdapter.cemiToTp1` / `tp1ToCemi`), **`U_L_DataOffset`** for frames > 64 bytes, real-time address-phase hardware ACK, System Broadcast (`SB=0`), and transparent KNX Data Secure support.
@@ -417,6 +419,13 @@ const secureTunnelFromKeyring = new KNXTunneling({
 const keyring = KnxKeyring.fromSource("./project.knxkeys", "myKeyringPassword");
 console.log("Backbone Key:", keyring.getBackbone()?.decryptedKey?.toString("hex"));
 console.log("Interfaces:", Array.from(keyring.getInterfaces().values()));
+
+// Creating or editing a keyring and exporting a signed .knxkeys (no ETS required):
+const newKeyring = KnxKeyring.create({ project: "MyBuilding" });
+newKeyring.ensureGroupKey("1/0/1"); // CSPRNG 16-byte AES-128 Group Key
+newKeyring.setDevice({ individualAddress: "1.1.1", toolKey: "generate", sequenceNumber: 1n });
+newKeyring.addInterfaceGroupSender("1.1.200", "1/0/1", "1.1.1");
+newKeyring.saveFile("./MyBuilding.knxkeys", "exportPassword"); // or newKeyring.toBuffer("exportPassword")
 ```
 
 #### 3. KNX IP Secure Multicast Routing in `KNXnetIPServer`
@@ -736,6 +745,50 @@ await mgmt.writeLocalProperty({
 });
 
 await mgmt.resetLocalDevice();
+```
+
+### Direct Device Programming from `.knxprod` & Web Configurator API (`DeviceConfigSession`, `KNXDeviceProgrammer`)
+
+> **Full Guide**: See [docs/PROGRAMMING_GUIDE.md](./docs/PROGRAMMING_GUIDE.md) ([versión en español](./docs/PROGRAMMING_GUIDE_ES.md)) for the complete REST/WebSocket web app integration guide, widget mapping, Phase 2 KNX Data Secure Object 17 commissioning (`FDSK -> ToolKey` & `.knxkeys`), CLI usage, and troubleshooting.
+
+`DeviceConfigSession` turns any ETS `.knxprod` into a **100% JSON-serializable configurator** (`getUiState()` for your frontend, `toJSON()` / `fromJSON()` for your database) and compiles/downloads directly to real System B (`MV-07B0`) hardware:
+
+```typescript
+import {
+  DeviceConfigSession,
+  KNXDeviceProgrammer,
+  KnxKeyring,
+  KnxProdParser,
+} from "knx.ts";
+
+// 1. Parse .knxprod catalog with translations (streaming, handles 60+ MB XML)
+const parsed = await KnxProdParser.parseFile("./product.knxprod", { language: "en-US" });
+
+// 2. Open interactive parameterization session (send session.getUiState() directly to your Web UI!)
+const session = new DeviceConfigSession(parsed);
+const uiState = session.getUiState(); // Channels -> Blocks -> typed Parameters/Separators + active ComObjects
+
+// 3. Apply user edits from the web UI (re-evaluates <Dynamic> & JS calcs and returns added/removed diffs)
+const diff = session.setParameters({ bOutput: 1, "outputCh[0].type": 1, "indOutput[0].bEnabled": 1 });
+session.linkGroupObject(765, { sending: "1/0/1", security: "auth_conf" });
+session.linkGroupObject(766, { sending: "1/1/1", security: "auth_conf" });
+
+// 4. Optional Phase 2 KNX Data Secure (Object Type 17) commissioning from ETS .knxkeys
+const keyring = KnxKeyring.fromSource("./project.knxkeys", "keyringPassword");
+session.setSecurityConfig({ enabled: true, keyring, authorizedSenders: ["1.1.200"] });
+
+// 5. Validate, persist portable JSON, and program device (over Tunneling, USB, Routing, or TP-UART)
+const validation = session.validate();
+if (validation.valid) {
+  const savedDraft = session.toJSON({ includeSecrets: false }); // Safe snapshot for DB / UI
+  const programmer = new KNXDeviceProgrammer(tunnel, { sourceAddress: "1.1.200", dataSecure });
+  await session.download(programmer, "1.1.1", {
+    mode: "ap1",
+    dryRun: false, // Set true to run live pre-flight checks without writing flash
+    sessionOptions: { secure: true },
+    onProgress: (ev) => console.log(`[${ev.percent}%] (${ev.phase}) ${ev.message}`),
+  });
+}
 ```
 
 ### Link Router
@@ -1233,6 +1286,7 @@ npm run test:server-stability
 npm run manualTest:routing
 npm run manualTest:tunneling
 npm run manualTest:management
+npm run manualTest:program
 npm run manualTest:secureTcp
 npm run manualTest:router
 npm run manualTest:usb
