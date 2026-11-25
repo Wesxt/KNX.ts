@@ -63,6 +63,7 @@ jest.mock("node-hid", () => ({
   devices: jest.fn(() => [{ vendorId: 0x28c2, productId: 0x0001, path: "/dev/mock-knx-usb", product: "Mock KNX USB" }]),
 }));
 
+import * as hid from "node-hid";
 import { CEMI } from "../src/core/CEMI";
 import { ControlField } from "../src/core/ControlField";
 import { ExtendedControlField } from "../src/core/ControlFieldExtended";
@@ -74,6 +75,14 @@ import { TPDU } from "../src/core/layers/data/TPDU";
 import { APCI } from "../src/core/layers/interfaces/APCI";
 import { TPCI, TPCIType } from "../src/core/layers/interfaces/TPCI";
 import { KnxDataDecode } from "../src/core/data/KNXDataDecode";
+import {
+  KNX_USB_INTERFACES,
+  KNX_USB_INTERFACES_VERSION,
+  findKnxUsbInterface,
+  getKnxUsbInterfaceDisplayName,
+  getKnxUsbInterfaceManufacturerName,
+  isKnownKnxUsbDevice,
+} from "../src/core/resources/KNXUsbInterfaces";
 import { TPUARTConnection } from "../src/connection/TPUART";
 import { KNXUSBConnection } from "../src/connection/KNXUSBConnection";
 import { CEMIAdapter } from "../src/utils/CEMIAdapter";
@@ -661,6 +670,79 @@ describe("KNX Data Secure over TP-UART and KNX USB", () => {
 
       await expect(lockedUsb.setHardwareIndividualAddress("1.1.200")).rejects.toThrow(/0x0b.*Access denied/i);
       lockedUsb.disconnect();
+    });
+
+    test("ETS6 KNX_USB_INTERFACES catalog, KNXUSBConnection.discover(), strict VID/PID selection & false-positive prevention", async () => {
+      expect(KNX_USB_INTERFACES_VERSION).toBe(68);
+      expect(KNX_USB_INTERFACES.length).toBe(78);
+
+      // Verify exact catalog lookups, flags, timing & localized display names
+      const zennio = findKnxUsbInterface(0x28c2, 0x0002)!;
+      expect(zennio).toBeDefined();
+      expect(zennio.defaultDisplayText).toBe("Zennio KNX USB Interface");
+      expect(getKnxUsbInterfaceManufacturerName(zennio)).toMatch(/Zennio/i);
+
+      const oci700 = findKnxUsbInterface(0x0681, 0x0014)!;
+      expect(oci700.persistsIndividualAddress).toBe(false);
+      expect(getKnxUsbInterfaceDisplayName(oci700, "de-DE")).toBe("Siemens Schnittstelle OCI700 USB");
+
+      const weinzierlTp = findKnxUsbInterface(0x0e77, 0x0104)!;
+      expect(weinzierlTp.requiresKnxUsbFix).toBe(true);
+      expect(getKnxUsbInterfaceDisplayName(weinzierlTp, "es")).toBe("KNX-USB Interfaz (TP)");
+
+      const siemensUp = findKnxUsbInterface(0x0e77, 0x0111)!;
+      expect(siemensUp.timing).toEqual([1000, 100]);
+
+      // Prevent false positives on shared non-KNX USB Vendor IDs (FTDI 0x0403, MCS 0x16D0)
+      expect(isKnownKnxUsbDevice({ vendorId: 0x0403, productId: 0x6001, product: "FT232R USB UART" })).toBe(false);
+      expect(isKnownKnxUsbDevice({ vendorId: 0x16d0, productId: 0x9999, product: "Generic OpenHW Board" })).toBe(false);
+      expect(isKnownKnxUsbDevice({ vendorId: 0x0403, productId: 0x6898 })).toBe(true);
+      expect(isKnownKnxUsbDevice({ vendorId: 0x16d0, productId: 0x0491 })).toBe(true); // MDT KNX_USB_Interface
+      expect(isKnownKnxUsbDevice({ vendorId: 0x16de, productId: 0x008e })).toBe(true); // Schneider SpaceLogic
+
+      // Test KNXUSBConnection.discover() and strict vendorId/productId filtering with multiple attached HID devices
+      const mockedDevices = hid.devices as jest.Mock;
+      const origImpl = mockedDevices.getMockImplementation();
+      try {
+        mockedDevices.mockReturnValue([
+          { vendorId: 0x0403, productId: 0x6001, path: "/dev/ftdi-serial", product: "FT232R USB UART" },
+          { vendorId: 0x16d0, productId: 0x0491, path: "/dev/knx-mdt", product: "MDT USB" },
+          { vendorId: 0x28c2, productId: 0x0002, path: "/dev/knx-zennio", product: "Zennio USB" },
+          { vendorId: 0x135e, productId: 0x0323, path: "/dev/knx-jung", product: "Jung USB" },
+        ]);
+
+        const discovered = KNXUSBConnection.discover({ language: "es-ES" });
+        expect(discovered.map((d) => d.path)).toEqual(["/dev/knx-mdt", "/dev/knx-zennio", "/dev/knx-jung"]);
+        expect(discovered[0].displayName).toBe("MDT KNX_USB_Interface");
+        expect(discovered[1].vendorIdHex).toBe("28C2");
+        expect(discovered[1].productIdHex).toBe("0002");
+        expect(discovered[1].knxManufacturerName).toMatch(/Zennio/i);
+        expect(discovered[2].displayName).toBe("Módulo comunicación USB");
+
+        // Explicitly request Zennio (28C2:0002) even though MDT appears first -> must open /dev/knx-zennio!
+        const usb = new KNXUSBConnection({
+          vendorId: 0x28c2,
+          productId: 0x0002,
+          logOptions: { enabled: false },
+        });
+        const connPromise = usb.connect();
+        const hidDev = MockHID.lastInstance!;
+        expect(hidDev.path).toBe("/dev/knx-zennio");
+        setupMockUsbHandshake(hidDev, 0x04, 0x11, 0xc8);
+        wrapCemiInUsbHidReports(Buffer.from([0x01, 0x00, 0x04]), 0x0f, 0x02).forEach((r) => hidDev.emit("data", r));
+        await connPromise;
+
+        expect(usb.interfaceInfo?.displayName).toBe("Zennio KNX USB Interface");
+        expect(usb.interfaceInfo?.matchedCatalog).toBe(true);
+        expect(usb.interfaceInfo?.persistsIndividualAddress).toBe(true);
+        usb.disconnect();
+      } finally {
+        if (origImpl) mockedDevices.mockImplementation(origImpl);
+        else
+          mockedDevices.mockReturnValue([
+            { vendorId: 0x28c2, productId: 0x0001, path: "/dev/mock-knx-usb", product: "Mock KNX USB" },
+          ]);
+      }
     });
   });
 });

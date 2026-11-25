@@ -40,6 +40,7 @@ export * from "./management/KNXManagement";
 export * from "./programming";
 export * from "./core/resources/DeviceDescriptorType";
 export * from "./core/resources/KNXManufacturers";
+export * from "./core/resources/KNXUsbInterfaces";
 export type { CEMIInstance } from "./core/CEMI";
 export type { EMIInstance } from "./core/EMI";
 export type { ServiceMessage } from "./@types/interfaces/ServiceMessage";

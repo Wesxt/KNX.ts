@@ -80,7 +80,7 @@ Estas clases forman el núcleo de tu interacción con la red. Todas ellas hereda
 - `KnxProdParser`, `DeviceConfigSession`, `DynamicEvaluator`, `SystemBCompiler`, `LoadProcedureEngine` y `KNXDeviceProgrammer`: Parser de `.knxprod` de ETS, API de parametrización serializable a JSON para apps web/externas (árbol UI traducido, diffs `<Dynamic>` en vivo, buscador, validación y `toJSON`/`fromJSON`), compilador binario System B (`MV-07B0`, Objetos 1–4 + Object 17 Data Secure) y programador de dispositivos con verificaciones pre-flight y comisionamiento `FDSK -> ToolKey`. Ver [docs/PROGRAMMING_GUIDE_ES.md](./docs/PROGRAMMING_GUIDE_ES.md).
 - `KnxKeyring`: Lector, constructor y exportador sin dependencias externas para archivos `.knxkeys` estándar (compatible con ETS 5/6, Home Assistant / `xknx` y `knx.ts`).
 - `KnxDataSecure` y `KnxDataSecureCcm`: Implementación completa de la capa de aplicación segura KNX Data Security (`S-AL`, `03_03_07` §5) con soporte para `S-A_Data` (A+C y Solo Autenticación), `S-A_Sync`, persistencia de números de secuencia de 48 bits, cifrado/descifrado transparente en `KNXService` y sesiones seguras en `KNXManagement` con `ToolKey` / `P2PKey`.
-- `KNXUSBConnection`: Se conecta directamente a interfaces USB KNX locales (ABB, MDT, Weinzierl, Zennio, etc.) con **prioridad `cEMI`** (requerida para tramas extendidas y KNX Data Secure), **fragmentación y reensamblado USB HID multi-trama** (`09_03` §3.4.1.2, hasta 5 reportes), **detección automática de la Dirección Individual de hardware** (`PID_SUBNET_ADDR` / `PID_DEVICE_ADDR`) y programación local de IA (`setHardwareIndividualAddress()` / `programHardwareAddress: true`).
+- `KNXUSBConnection`: Se conecta directamente a interfaces USB KNX locales usando el **catálogo oficial de ETS6 `KNX_USB_INTERFACES` integrado (78 interfaces de todos los fabricantes KNX)** con descubrimiento exacto `VendorID:ProductID` (`KNXUSBConnection.discover()`), metadatos de la interfaz conectada (`usb.interfaceInfo`), **prioridad `cEMI`** (requerida para tramas extendidas y KNX Data Secure), **fragmentación y reensamblado USB HID multi-trama** (`09_03` §3.4.1.2, hasta 5 reportes), **detección automática de la Dirección Individual de hardware** (`PID_SUBNET_ADDR` / `PID_DEVICE_ADDR`) y programación local de IA (`setHardwareIndividualAddress()` / `programHardwareAddress: true`).
 - `TPUARTConnection`: Se conecta directamente al bus KNX TP1 mediante hardware serie TPUART / TP-UART2 / NCN5120 con soporte completo para **tramas TP1 Estándar (`FT=1`) y Extendidas (`FT=0`)** (`CEMIAdapter.cemiToTp1` / `tp1ToCemi`), **`U_L_DataOffset`** para tramas > 64 bytes, ACK hardware en fase de dirección, System Broadcast (`SB=0`) y KNX Data Secure transparente.
 - `Router`: Un potente Puente que intercomunica las distintas conexiones de hardware o clientes tunneling (**KNXUSBConnection**). Puedes adjuntar múltiples instancias de `KNXService` a él (ej., una conexión USB y 5 túneles), y enrutará automáticamente los telegramas entre ellos, gestionando el aprendizaje de Direcciones Individuales y la prevención de bucles.
 
@@ -150,12 +150,16 @@ server.on("1/1/1", (cemi: CEMIInstance) => {
 ```typescript
 import { KNXUSBConnection } from "knx.ts";
 
+// Opcional: listar todas las interfaces KNX-USB conectadas (catálogo oficial ETS6 de 78 interfaces)
+const found = KNXUSBConnection.discover({ language: "es-ES" });
+console.log(found.map((i) => `${i.displayName} [${i.knxManufacturerName ?? "Desconocido"}] (${i.vendorIdHex}:${i.productIdHex})`));
+
 const usb = new KNXUSBConnection({
-  // Omitir path/vendorId descubrirá automáticamente la primera interfaz USB KNX conocida
+  // Omitir path/vendorId/productId selecciona automáticamente la primera interfaz USB KNX detectada
 });
 
 usb.connect().then(() => {
-  console.log("Conectado directamente a la interfaz USB KNX");
+  console.log("Conectado directamente a:", usb.interfaceInfo?.displayName);
 });
 
 usb.on("indication", (cemi) => {

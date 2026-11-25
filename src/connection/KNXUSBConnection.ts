@@ -5,8 +5,97 @@ import { CEMI, CEMIInstance } from "../core/CEMI";
 import { KNXUSBOptions } from "../@types/interfaces/connection";
 import { EMIInstance } from "../core/EMI";
 import { GroupAddressCache } from "../core/cache/GroupAddressCache";
+import {
+  findKnxUsbInterface,
+  getKnxUsbInterfaceDisplayName,
+  getKnxUsbInterfaceManufacturerName,
+  isKnownKnxUsbDevice,
+  KnxUsbInterfaceDescriptor,
+} from "../core/resources/KNXUsbInterfaces";
 import { KNXHelper } from "../utils/KNXHelper";
 import { FSM } from "./FSM";
+
+/**
+ * Enriched metadata for a discovered or connected KNX-USB HID interface.
+ */
+export interface KNXDiscoveredUsbInterface {
+  /** OS HID device path used to open the interface with `KNXUSBConnection({ path })`. */
+  path: string;
+  /** 16-bit USB Vendor ID. */
+  vendorId: number;
+  /** 16-bit USB Product ID. */
+  productId: number;
+  /** Formatted 4-digit uppercase hex Vendor ID (e.g. `"28C2"`). */
+  vendorIdHex: string;
+  /** Formatted 4-digit uppercase hex Product ID (e.g. `"0002"`). */
+  productIdHex: string;
+  /** USB serial number reported by HID (if available). */
+  serialNumber?: string;
+  /** HID manufacturer string reported by the OS (if available). */
+  manufacturer?: string;
+  /** HID product string reported by the OS (if available). */
+  product?: string;
+  /** HID release number (if available). */
+  release?: number;
+  /** USB HID interface number (if available). */
+  interface?: number;
+  /** Localized human-readable display name from ETS6 `KNX_USB_INTERFACES` (or HID product string fallback). */
+  displayName: string;
+  /** 16-bit KNX Association Manufacturer ID (when matched in ETS6 `KNX_USB_INTERFACES`). */
+  knxManufacturerId?: number;
+  /** KNX Association Manufacturer name resolved via `KNX_MANUFACTURERS` (when matched). */
+  knxManufacturerName?: string;
+  /** Whether the interface persists its programmed Individual Address across power cycles (false e.g. for Siemens OCI700). */
+  persistsIndividualAddress: boolean;
+  /** Whether ETS flags this interface with `RequiresKnxUsbFix="true"`. */
+  requiresKnxUsbFix: boolean;
+  /** Optional vendor-specific timing `[initWaitMs, stepWaitMs]` from ETS6 `knx_interfaces.xml`. */
+  timing?: readonly [number, number];
+  /** True when the `(vendorId, productId)` matched an official ETS6 `KNX_USB_INTERFACES` entry. */
+  matchedCatalog: boolean;
+  /** Raw catalog descriptor when `matchedCatalog` is true. */
+  catalogEntry?: KnxUsbInterfaceDescriptor;
+}
+
+export interface KNXUsbDiscoverOptions {
+  /** Optional BCP-47 language tag (e.g. `"es-ES"`, `"de-DE"`, `"en-US"`) for localized `displayName`. */
+  language?: string;
+  /**
+   * Include fallback matches (dedicated KNX VIDs or HID product names containing `"knx"`/`"eib"`)
+   * in addition to exact `(vendorId, productId)` entries from `KNX_USB_INTERFACES`. Defaults to `true`.
+   */
+  includeFallbackMatches?: boolean;
+}
+
+function buildUsbInterfaceInfo(device: hid.Device, language?: string): KNXDiscoveredUsbInterface {
+  const desc = findKnxUsbInterface(device.vendorId, device.productId);
+  const vendorIdHex = (device.vendorId & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+  const productIdHex = (device.productId & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+  const knxManufacturerName = desc ? getKnxUsbInterfaceManufacturerName(desc) : undefined;
+
+  return {
+    path: device.path ?? "",
+    vendorId: device.vendorId,
+    productId: device.productId,
+    vendorIdHex,
+    productIdHex,
+    serialNumber: device.serialNumber,
+    manufacturer: device.manufacturer,
+    product: device.product,
+    release: device.release,
+    interface: device.interface,
+    displayName: desc
+      ? getKnxUsbInterfaceDisplayName(desc, language)
+      : device.product || `KNX USB Interface (${vendorIdHex}:${productIdHex})`,
+    knxManufacturerId: desc?.knxManufacturerId,
+    knxManufacturerName,
+    persistsIndividualAddress: desc ? desc.persistsIndividualAddress : true,
+    requiresKnxUsbFix: desc ? desc.requiresKnxUsbFix : false,
+    timing: desc?.timing,
+    matchedCatalog: Boolean(desc),
+    catalogEntry: desc,
+  };
+}
 
 /**
  * States for the KNXUSBConnection Finite State Machine.
@@ -45,6 +134,35 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
    * (`Device Object 0`, `PID_SUBNET_ADDR` / `PID_DEVICE_ADDR`, per `AN203` Table 1) in cEMI mode.
    */
   public hardwareIndividualAddress: string | null = null;
+
+  /**
+   * Enriched descriptor of the currently connected KNX-USB interface (matched against ETS6 `KNX_USB_INTERFACES`).
+   */
+  public interfaceInfo: KNXDiscoveredUsbInterface | null = null;
+
+  /**
+   * Discovers all locally attached KNX-USB HID interfaces using the official ETS6 `KNX_USB_INTERFACES`
+   * catalog (exact `VendorID:ProductID` matching first, avoiding false positives on shared VIDs like FTDI/Siemens).
+   */
+  public static discover(options: KNXUsbDiscoverOptions = {}): KNXDiscoveredUsbInterface[] {
+    const includeFallback = options.includeFallbackMatches ?? true;
+    const devices = hid.devices();
+    const seenPaths = new Set<string>();
+    const results: KNXDiscoveredUsbInterface[] = [];
+
+    for (const d of devices) {
+      if (!d.path || seenPaths.has(d.path)) continue;
+      const exact = findKnxUsbInterface(d.vendorId, d.productId);
+      if (!exact && (!includeFallback || !isKnownKnxUsbDevice(d))) continue;
+
+      seenPaths.add(d.path);
+      results.push(buildUsbInterfaceInfo(d, options.language));
+    }
+
+    // Prioritize official ETS6 catalog matches before fallback heuristic matches
+    results.sort((a, b) => Number(b.matchedCatalog) - Number(a.matchedCatalog));
+    return results;
+  }
 
   constructor(options: KNXUSBOptions = {}) {
     super(options);
@@ -123,32 +241,59 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     try {
       const options = this.options;
       let devicePath = options.path;
+      let matchedHidDevice: hid.Device | undefined;
+      const devices = hid.devices();
 
-      if (!devicePath) {
-        const devices = hid.devices();
-        const knxDevice = devices.find(
+      if (devicePath) {
+        matchedHidDevice = devices.find((d) => d.path === devicePath);
+      } else if (options.vendorId !== undefined || options.productId !== undefined) {
+        // Strict filter when caller explicitly requests vendorId and/or productId
+        matchedHidDevice = devices.find(
           (d) =>
-            (options.vendorId &&
-              d.vendorId === options.vendorId &&
-              options.productId &&
-              d.productId === options.productId) ||
-            d.vendorId === 0x28c2 || // Zennio
-            d.vendorId === 0x145c || // ABB/Busch-Jaeger
-            d.vendorId === 0x10a6 || // MDT
-            d.vendorId === 0x135e || // Siemens
-            d.vendorId === 0x0e77 || // Weinzierl/Siemens
-            d.vendorId === 0x147b || // Weinzierl
-            d.vendorId === 0x16d0 || // MCS
-            (d.product && d.product.toLowerCase().includes("knx")),
+            Boolean(d.path) &&
+            (options.vendorId === undefined || d.vendorId === options.vendorId) &&
+            (options.productId === undefined || d.productId === options.productId),
         );
+        if (!matchedHidDevice || !matchedHidDevice.path) {
+          const vidStr = options.vendorId !== undefined ? `0x${options.vendorId.toString(16).padStart(4, "0")}` : "*";
+          const pidStr = options.productId !== undefined ? `0x${options.productId.toString(16).padStart(4, "0")}` : "*";
+          throw new Error(`No KNX USB device found matching ${vidStr}:${pidStr}`);
+        }
+        devicePath = matchedHidDevice.path;
+      } else {
+        // Auto-discover: prefer exact (vendorId, productId) matches in official ETS6 KNX_USB_INTERFACES first,
+        // then fall back to dedicated KNX VIDs or product names mentioning "knx"/"eib".
+        matchedHidDevice =
+          devices.find((d) => Boolean(d.path) && Boolean(findKnxUsbInterface(d.vendorId, d.productId))) ??
+          devices.find((d) => Boolean(d.path) && isKnownKnxUsbDevice(d));
 
-        if (!knxDevice || !knxDevice.path) {
+        if (!matchedHidDevice || !matchedHidDevice.path) {
           throw new Error("No KNX USB device found");
         }
-        devicePath = knxDevice.path;
+        devicePath = matchedHidDevice.path;
       }
 
-      this.logger.info(`Opening KNX USB device at ${devicePath}`);
+      this.interfaceInfo = matchedHidDevice ? buildUsbInterfaceInfo(matchedHidDevice) : null;
+
+      if (this.interfaceInfo) {
+        const mfrTag = this.interfaceInfo.knxManufacturerName ? ` [${this.interfaceInfo.knxManufacturerName}]` : "";
+        this.logger.info(
+          `Opening KNX USB device: ${this.interfaceInfo.displayName}${mfrTag} (${this.interfaceInfo.vendorIdHex}:${this.interfaceInfo.productIdHex}) at ${devicePath}`,
+        );
+        if (this.interfaceInfo.requiresKnxUsbFix) {
+          if (process.platform === "win32") {
+            this.logger.warn(
+              `KNX USB interface "${this.interfaceInfo.displayName}" (${this.interfaceInfo.vendorIdHex}:${this.interfaceInfo.productIdHex}) is flagged RequiresKnxUsbFix=true. On Windows (especially USB 3.0 xHCI ports), apply the official ETS KNX USB Fix, disable USB Selective Suspend, or use a USB 2.0 port if you experience timeouts or disconnects.`,
+            );
+          } else {
+            this.logger.debug(
+              `KNX USB interface ${this.interfaceInfo.vendorIdHex}:${this.interfaceInfo.productIdHex} is flagged RequiresKnxUsbFix=true in ETS6 catalog`,
+            );
+          }
+        }
+      } else {
+        this.logger.info(`Opening KNX USB device at ${devicePath}`);
+      }
       this.device = new hid.HID(devicePath);
 
       this.device.on("data", (data: Buffer) => {
@@ -161,6 +306,11 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
       await this.initializeDevice();
       this.fsm.transition(KNXUSBEvent.CONNECTED);
     } catch (err: any) {
+      if (process.platform === "win32" && this.interfaceInfo?.requiresKnxUsbFix) {
+        this.logger.warn(
+          `Connection failed on Windows for legacy KNX USB interface ${this.interfaceInfo.vendorIdHex}:${this.interfaceInfo.productIdHex} (RequiresKnxUsbFix=true). Install the official ETS KNX USB Fix, disable USB Selective Suspend, or try a USB 2.0 port.`,
+        );
+      }
       this.logger.error("Failed to connect to KNX USB: " + err);
       this.fsm.transition(KNXUSBEvent.ERROR);
       throw err;
@@ -180,6 +330,7 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
       }
       this.device = null;
     }
+    this.interfaceInfo = null;
     this.busConnected = false;
     this.rxFragments = [];
     this.rxExpectedSeq = 0;
@@ -365,6 +516,11 @@ export class KNXUSBConnection extends KNXService<KNXUSBOptions> {
     }
     if (!KNXHelper.isValidIndividualAddress(individualAddress)) {
       throw new Error(`Invalid KNX Individual Address: "${individualAddress}"`);
+    }
+    if (this.interfaceInfo && !this.interfaceInfo.persistsIndividualAddress) {
+      this.logger.warn(
+        `KNX USB interface "${this.interfaceInfo.displayName}" (${this.interfaceInfo.vendorIdHex}:${this.interfaceInfo.productIdHex}) does not persist its Individual Address across power cycles (PersistsIndividualAddress=false).`,
+      );
     }
 
     const addrBuf = KNXHelper.GetAddress_(individualAddress);
