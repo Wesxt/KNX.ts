@@ -185,6 +185,48 @@ export enum KNXPropertyId {
 }
 
 /**
+ * Property Identifiers of the KNXnet/IP Parameter Object (Object Type 11, 03_08_03 §2.5 Table 2).
+ */
+export enum KNXIPParameterPropertyId {
+  PID_OBJECT_TYPE = 1,
+  PID_PROJECT_INSTALLATION_ID = 51,
+  PID_KNX_INDIVIDUAL_ADDRESS = 52,
+  PID_ADDITIONAL_INDIVIDUAL_ADDRESSES = 53,
+  PID_CURRENT_IP_ASSIGNMENT_METHOD = 54,
+  PID_IP_ASSIGNMENT_METHOD = 55,
+  PID_IP_CAPABILITIES = 56,
+  PID_CURRENT_IP_ADDRESS = 57,
+  PID_CURRENT_SUBNET_MASK = 58,
+  PID_CURRENT_DEFAULT_GATEWAY = 59,
+  PID_IP_ADDRESS = 60,
+  PID_SUBNET_MASK = 61,
+  PID_DEFAULT_GATEWAY = 62,
+  PID_DHCP_BOOTP_SERVER = 63,
+  PID_MAC_ADDRESS = 64,
+  PID_SYSTEM_SETUP_MULTICAST_ADDRESS = 65,
+  PID_ROUTING_MULTICAST_ADDRESS = 66,
+  PID_TTL = 67,
+  PID_KNXNETIP_DEVICE_CAPABILITIES = 68,
+  PID_KNXNETIP_DEVICE_STATE = 69,
+  PID_KNXNETIP_ROUTING_CAPABILITIES = 70,
+  PID_PRIORITY_FIFO_ENABLED = 71,
+  PID_QUEUE_OVERFLOW_TO_IP = 72,
+  PID_QUEUE_OVERFLOW_TO_KNX = 73,
+  PID_MSG_TRANSMIT_TO_IP = 74,
+  PID_MSG_TRANSMIT_TO_KNX = 75,
+  PID_FRIENDLY_NAME = 76,
+  PID_ROUTING_BUSY_WAIT_TIME = 78,
+  PID_TUNNELLING_ADDRESSES = 79,
+  PID_BACKBONE_KEY = 91,
+  PID_DEVICE_AUTHENTICATION_CODE = 92,
+  PID_PASSWORD_HASHES = 93,
+  PID_SECURED_SERVICE_FAMILIES = 94,
+  PID_MULTICAST_LATENCY_TOLERANCE = 95,
+  PID_SYNC_LATENCY_FRACTION = 96,
+  PID_TUNNELLING_USERS = 97,
+}
+
+/**
  * Property Identifiers of the Security Interface Object (Object Type 17, 03_05_01 §6.3 Table 99).
  */
 export enum KNXSecurityPropertyId {
@@ -306,6 +348,72 @@ export interface DecodedSecurityFailuresCounters {
   seqNrErrors: number;
   cryptoErrors: number;
   accessRoleErrors: number;
+}
+
+export interface KnxIpAssignmentMethodFlags {
+  raw: number;
+  manual: boolean;
+  bootp: boolean;
+  dhcp: boolean;
+  autoIp: boolean;
+}
+
+/**
+ * Decoded KNXnet/IP Parameter Object (Object Type 11, 03_08_03 §2.5) configuration.
+ * 100% JSON-serializable for web UIs, diagnostics, and REST backends.
+ */
+export interface KnxIpInterfaceConfig {
+  objectIndex: number;
+  projectInstallationId?: number;
+  individualAddress?: string;
+  additionalIndividualAddresses: string[];
+  currentIpAssignmentMethod?: KnxIpAssignmentMethodFlags;
+  ipAssignmentMethod?: KnxIpAssignmentMethodFlags;
+  ipCapabilities?: number;
+  currentIpAddress?: string;
+  currentSubnetMask?: string;
+  currentDefaultGateway?: string;
+  ipAddress?: string;
+  subnetMask?: string;
+  defaultGateway?: string;
+  dhcpBootpServer?: string;
+  macAddress?: string;
+  systemSetupMulticastAddress?: string;
+  routingMulticastAddress?: string;
+  ttl?: number;
+  deviceCapabilities?: number;
+  deviceState?: number;
+  friendlyName?: string;
+}
+
+/**
+ * Writable properties of the KNXnet/IP Parameter Object (Object Type 11, 03_08_03 §2.5).
+ */
+export interface KnxIpInterfaceWriteConfig {
+  projectInstallationId?: number;
+  /**
+   * IP Assignment Method (`PID_IP_ASSIGNMENT_METHOD`, bitmask: `0x01` Manual, `0x02` BOOTP, `0x04` DHCP, `0x08` AutoIP).
+   * Accepts raw bitmask number, ETS/human shorthand (`"Fixed"`, `"Manual"`, `"Auto"`, `"DHCP"`, `"BOOTP"`, `"AutoIP"`),
+   * or explicit boolean flags.
+   */
+  ipAssignmentMethod?:
+    | number
+    | "Fixed"
+    | "Manual"
+    | "Auto"
+    | "DHCP"
+    | "BOOTP"
+    | "AutoIP"
+    | Partial<Omit<KnxIpAssignmentMethodFlags, "raw">>;
+  ipAddress?: string;
+  subnetMask?: string;
+  defaultGateway?: string;
+  routingMulticastAddress?: string;
+  ttl?: number;
+  friendlyName?: string;
+  additionalIndividualAddresses?: string[];
+  /** Verify written property values against returned `A_PropertyValue_Response` bytes (default: `false`). */
+  verify?: boolean;
 }
 
 export interface ProgrammingModeReadResult {
@@ -432,6 +540,77 @@ export interface LocalFunctionPropertyParams {
 }
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function parseIpv4Buffer(ip: string, label: string): Buffer {
+  const parts = ip.trim().split(".");
+  if (parts.length !== 4) {
+    throw new Error(`Invalid IPv4 address for ${label}: "${ip}"`);
+  }
+  const bytes = Buffer.alloc(4);
+  for (let i = 0; i < 4; i++) {
+    if (!/^\d+$/.test(parts[i])) {
+      throw new Error(`Invalid IPv4 octet in ${label}: "${ip}"`);
+    }
+    const n = parseInt(parts[i], 10);
+    if (n < 0 || n > 255) {
+      throw new Error(`Out-of-range IPv4 octet in ${label}: "${ip}"`);
+    }
+    bytes[i] = n;
+  }
+  return bytes;
+}
+
+function formatIpv4Buffer(buf: Buffer): string | undefined {
+  if (buf.length < 4) return undefined;
+  return `${buf[0]}.${buf[1]}.${buf[2]}.${buf[3]}`;
+}
+
+function formatMacBuffer(buf: Buffer): string | undefined {
+  if (buf.length < 6) return undefined;
+  return Array.from(buf.subarray(0, 6))
+    .map((b) => b.toString(16).toUpperCase().padStart(2, "0"))
+    .join(":");
+}
+
+function decodeIpAssignmentMethod(raw: number): KnxIpAssignmentMethodFlags {
+  const v = raw & 0x0f;
+  return {
+    raw: v,
+    manual: (v & 0x01) !== 0,
+    bootp: (v & 0x02) !== 0,
+    dhcp: (v & 0x04) !== 0,
+    autoIp: (v & 0x08) !== 0,
+  };
+}
+
+function encodeIpAssignmentMethod(value: NonNullable<KnxIpInterfaceWriteConfig["ipAssignmentMethod"]>): number {
+  if (typeof value === "number") {
+    return value & 0x0f;
+  }
+  if (typeof value === "string") {
+    switch (value.toLowerCase()) {
+      case "fixed":
+      case "manual":
+        return 0x01;
+      case "bootp":
+        return 0x02;
+      case "dhcp":
+        return 0x04;
+      case "autoip":
+        return 0x08;
+      case "auto":
+        return 0x04 | 0x08;
+      default:
+        throw new Error(`Unknown IP assignment method: "${value}"`);
+    }
+  }
+  let bits = 0;
+  if (value.manual) bits |= 0x01;
+  if (value.bootp) bits |= 0x02;
+  if (value.dhcp) bits |= 0x04;
+  if (value.autoIp) bits |= 0x08;
+  return bits;
+}
 
 /**
  * Compute even parity on bits 0..6 and place the parity bit in bit 7 (used by BCU1 `0x0060` programming mode byte).
@@ -2025,6 +2204,275 @@ export class KNXManagementSession {
         data: payload,
       });
     }
+  }
+
+  // ============================================================================
+  // KNXnet/IP Parameter Object (Object Type 11, 03_08_03 §2.5) Helpers
+  // ============================================================================
+
+  /**
+   * Reads the KNXnet/IP Parameter Object (Object Type 11, 03_08_03 §2.5) at `objectIndex`
+   * (IP address, subnet mask, gateway, DHCP/Manual assignment, multicast, TTL, MAC, friendly name, additional tunneling IAs).
+   */
+  public async readIpParameterConfig(objectIndex: number): Promise<KnxIpInterfaceConfig> {
+    const tryRead = async (propertyId: number, count: number = 1, startIndex: number = 1): Promise<Buffer | null> => {
+      try {
+        const resp = await this.readProperty({ objectIndex, propertyId, count, startIndex });
+        return resp.count > 0 && resp.data.length > 0 ? resp.data : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const projInstBuf = await tryRead(KNXIPParameterPropertyId.PID_PROJECT_INSTALLATION_ID);
+    const knxIaBuf = await tryRead(KNXIPParameterPropertyId.PID_KNX_INDIVIDUAL_ADDRESS);
+    const curMethodBuf = await tryRead(KNXIPParameterPropertyId.PID_CURRENT_IP_ASSIGNMENT_METHOD);
+    const cfgMethodBuf = await tryRead(KNXIPParameterPropertyId.PID_IP_ASSIGNMENT_METHOD);
+    const capsBuf = await tryRead(KNXIPParameterPropertyId.PID_IP_CAPABILITIES);
+    const curIpBuf = await tryRead(KNXIPParameterPropertyId.PID_CURRENT_IP_ADDRESS);
+    const curMaskBuf = await tryRead(KNXIPParameterPropertyId.PID_CURRENT_SUBNET_MASK);
+    const curGwBuf = await tryRead(KNXIPParameterPropertyId.PID_CURRENT_DEFAULT_GATEWAY);
+    const cfgIpBuf = await tryRead(KNXIPParameterPropertyId.PID_IP_ADDRESS);
+    const cfgMaskBuf = await tryRead(KNXIPParameterPropertyId.PID_SUBNET_MASK);
+    const cfgGwBuf = await tryRead(KNXIPParameterPropertyId.PID_DEFAULT_GATEWAY);
+    const dhcpSrvBuf = await tryRead(KNXIPParameterPropertyId.PID_DHCP_BOOTP_SERVER);
+    const macBuf = await tryRead(KNXIPParameterPropertyId.PID_MAC_ADDRESS);
+    const sysMcastBuf = await tryRead(KNXIPParameterPropertyId.PID_SYSTEM_SETUP_MULTICAST_ADDRESS);
+    const routMcastBuf = await tryRead(KNXIPParameterPropertyId.PID_ROUTING_MULTICAST_ADDRESS);
+    const ttlBuf = await tryRead(KNXIPParameterPropertyId.PID_TTL);
+    const devCapsBuf = await tryRead(KNXIPParameterPropertyId.PID_KNXNETIP_DEVICE_CAPABILITIES);
+    const devStateBuf = await tryRead(KNXIPParameterPropertyId.PID_KNXNETIP_DEVICE_STATE);
+
+    // Read PID_ADDITIONAL_INDIVIDUAL_ADDRESSES (array of 2-byte IAs)
+    const additionalIndividualAddresses: string[] = [];
+    const addCountBuf = await tryRead(KNXIPParameterPropertyId.PID_ADDITIONAL_INDIVIDUAL_ADDRESSES, 1, 0);
+    if (addCountBuf && addCountBuf.length >= 2) {
+      const total = Math.min(255, addCountBuf.readUInt16BE(0));
+      let idx = 1;
+      while (idx <= total) {
+        const batch = Math.min(4, total - idx + 1);
+        const elemBuf = await tryRead(KNXIPParameterPropertyId.PID_ADDITIONAL_INDIVIDUAL_ADDRESSES, batch, idx);
+        if (!elemBuf || elemBuf.length < 2) break;
+        const readCount = Math.floor(elemBuf.length / 2);
+        for (let i = 0; i < readCount; i++) {
+          additionalIndividualAddresses.push(KNXHelper.GetAddress(elemBuf.subarray(i * 2, i * 2 + 2), "."));
+        }
+        idx += readCount;
+      }
+    }
+
+    // Read PID_FRIENDLY_NAME (30-byte ISO-8859-1 null-terminated char array, read in 10-byte chunks for 15B APDU compatibility)
+    let friendlyName: string | undefined;
+    const nameChunks: Buffer[] = [];
+    for (let start = 1; start <= 21; start += 10) {
+      const chunk = await tryRead(KNXIPParameterPropertyId.PID_FRIENDLY_NAME, 10, start);
+      if (!chunk) break;
+      nameChunks.push(chunk);
+    }
+    if (nameChunks.length > 0) {
+      const combined = Buffer.concat(nameChunks);
+      const nulIdx = combined.indexOf(0x00);
+      const slice = nulIdx !== -1 ? combined.subarray(0, nulIdx) : combined;
+      friendlyName = slice.toString("latin1");
+    }
+
+    return {
+      objectIndex,
+      projectInstallationId: projInstBuf && projInstBuf.length >= 2 ? projInstBuf.readUInt16BE(0) : undefined,
+      individualAddress:
+        knxIaBuf && knxIaBuf.length >= 2 ? KNXHelper.GetAddress(knxIaBuf.subarray(0, 2), ".") : undefined,
+      additionalIndividualAddresses,
+      currentIpAssignmentMethod:
+        curMethodBuf && curMethodBuf.length >= 1 ? decodeIpAssignmentMethod(curMethodBuf[0]) : undefined,
+      ipAssignmentMethod:
+        cfgMethodBuf && cfgMethodBuf.length >= 1 ? decodeIpAssignmentMethod(cfgMethodBuf[0]) : undefined,
+      ipCapabilities: capsBuf && capsBuf.length >= 1 ? capsBuf[0] : undefined,
+      currentIpAddress: curIpBuf ? formatIpv4Buffer(curIpBuf) : undefined,
+      currentSubnetMask: curMaskBuf ? formatIpv4Buffer(curMaskBuf) : undefined,
+      currentDefaultGateway: curGwBuf ? formatIpv4Buffer(curGwBuf) : undefined,
+      ipAddress: cfgIpBuf ? formatIpv4Buffer(cfgIpBuf) : undefined,
+      subnetMask: cfgMaskBuf ? formatIpv4Buffer(cfgMaskBuf) : undefined,
+      defaultGateway: cfgGwBuf ? formatIpv4Buffer(cfgGwBuf) : undefined,
+      dhcpBootpServer: dhcpSrvBuf ? formatIpv4Buffer(dhcpSrvBuf) : undefined,
+      macAddress: macBuf ? formatMacBuffer(macBuf) : undefined,
+      systemSetupMulticastAddress: sysMcastBuf ? formatIpv4Buffer(sysMcastBuf) : undefined,
+      routingMulticastAddress: routMcastBuf ? formatIpv4Buffer(routMcastBuf) : undefined,
+      ttl: ttlBuf && ttlBuf.length >= 1 ? ttlBuf[0] : undefined,
+      deviceCapabilities: devCapsBuf && devCapsBuf.length >= 2 ? devCapsBuf.readUInt16BE(0) : undefined,
+      deviceState: devStateBuf && devStateBuf.length >= 1 ? devStateBuf[0] : undefined,
+      friendlyName,
+    };
+  }
+
+  /**
+   * Writes configured KNXnet/IP Parameter Object (Object Type 11, 03_08_03 §2.5) properties at `objectIndex`.
+   * Returns the list of written property names.
+   */
+  public async writeIpParameterConfig(
+    config: KnxIpInterfaceWriteConfig,
+    objectIndex: number,
+  ): Promise<{ writtenProperties: string[] }> {
+    const verify = config.verify ?? false;
+    const writtenProperties: string[] = [];
+
+    if (config.projectInstallationId !== undefined) {
+      const buf = Buffer.alloc(2);
+      buf.writeUInt16BE(config.projectInstallationId & 0xffff, 0);
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_PROJECT_INSTALLATION_ID,
+          count: 1,
+          startIndex: 1,
+          data: buf,
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_PROJECT_INSTALLATION_ID");
+    }
+
+    if (config.ipAssignmentMethod !== undefined) {
+      const bitmask = encodeIpAssignmentMethod(config.ipAssignmentMethod);
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_IP_ASSIGNMENT_METHOD,
+          count: 1,
+          startIndex: 1,
+          data: Buffer.from([bitmask]),
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_IP_ASSIGNMENT_METHOD");
+    }
+
+    if (config.ipAddress !== undefined) {
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_IP_ADDRESS,
+          count: 1,
+          startIndex: 1,
+          data: parseIpv4Buffer(config.ipAddress, "ipAddress"),
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_IP_ADDRESS");
+    }
+
+    if (config.subnetMask !== undefined) {
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_SUBNET_MASK,
+          count: 1,
+          startIndex: 1,
+          data: parseIpv4Buffer(config.subnetMask, "subnetMask"),
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_SUBNET_MASK");
+    }
+
+    if (config.defaultGateway !== undefined) {
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_DEFAULT_GATEWAY,
+          count: 1,
+          startIndex: 1,
+          data: parseIpv4Buffer(config.defaultGateway, "defaultGateway"),
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_DEFAULT_GATEWAY");
+    }
+
+    if (config.routingMulticastAddress !== undefined) {
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_ROUTING_MULTICAST_ADDRESS,
+          count: 1,
+          startIndex: 1,
+          data: parseIpv4Buffer(config.routingMulticastAddress, "routingMulticastAddress"),
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_ROUTING_MULTICAST_ADDRESS");
+    }
+
+    if (config.ttl !== undefined) {
+      const ttl = Math.max(0, Math.min(255, Math.trunc(config.ttl)));
+      await this.writeProperty(
+        {
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_TTL,
+          count: 1,
+          startIndex: 1,
+          data: Buffer.from([ttl]),
+        },
+        { verify },
+      );
+      writtenProperties.push("PID_TTL");
+    }
+
+    if (config.friendlyName !== undefined) {
+      const padded = Buffer.alloc(30, 0x00);
+      const rawName = Buffer.from(config.friendlyName, "latin1");
+      rawName.copy(padded, 0, 0, Math.min(rawName.length, 29));
+      // Write in 3x10-byte chunks so standard 15-byte APDU devices accept it cleanly
+      for (let offset = 0; offset < 30; offset += 10) {
+        await this.writeProperty(
+          {
+            objectIndex,
+            propertyId: KNXIPParameterPropertyId.PID_FRIENDLY_NAME,
+            count: 10,
+            startIndex: offset + 1,
+            data: padded.subarray(offset, offset + 10),
+          },
+          { verify },
+        );
+      }
+      writtenProperties.push("PID_FRIENDLY_NAME");
+    }
+
+    if (config.additionalIndividualAddresses !== undefined) {
+      for (const ia of config.additionalIndividualAddresses) {
+        if (!KNXHelper.isValidIndividualAddress(ia)) {
+          throw new Error(`Invalid KNX Individual Address in additionalIndividualAddresses: "${ia}"`);
+        }
+      }
+      // Best-effort clear of element 0 (some fixed-slot IP interfaces ignore/reject clearing element 0)
+      try {
+        await this.writeProperty({
+          objectIndex,
+          propertyId: KNXIPParameterPropertyId.PID_ADDITIONAL_INDIVIDUAL_ADDRESSES,
+          count: 1,
+          startIndex: 0,
+          data: Buffer.from([0x00, 0x00]),
+        });
+      } catch {
+        // Proceed with direct overwrite of elements 1..N
+      }
+      for (let i = 0; i < config.additionalIndividualAddresses.length; i += 4) {
+        const slice = config.additionalIndividualAddresses.slice(i, i + 4);
+        const data = Buffer.concat(slice.map((ia) => KNXHelper.GetAddress(ia, ".")));
+        await this.writeProperty(
+          {
+            objectIndex,
+            propertyId: KNXIPParameterPropertyId.PID_ADDITIONAL_INDIVIDUAL_ADDRESSES,
+            count: slice.length,
+            startIndex: i + 1,
+            data,
+          },
+          { verify },
+        );
+      }
+      writtenProperties.push("PID_ADDITIONAL_INDIVIDUAL_ADDRESSES");
+    }
+
+    return { writtenProperties };
   }
 }
 

@@ -2,7 +2,7 @@
 
 > English version: see [PROGRAMMING_GUIDE.md](./PROGRAMMING_GUIDE.md)
 
-`knx.ts` incluye un stack completo y sin dependencias externas para **leer catálogos oficiales `.knxprod` de ETS**, **parametrizar dispositivos dinámicamente desde aplicaciones externas/web**, **compilar imágenes binarias KNX System B (`MV-07B0`)**, **comisionar seguridad KNX Data Secure (Security Interface Object Type 17)** y **descargar la aplicación directamente a dispositivos físicos KNX** por Tunneling IP, KNX USB (`cEMI`), Routing o TP-UART.
+`knx.ts` incluye un stack completo y sin dependencias externas para **leer catálogos oficiales `.knxprod` de ETS**, **parametrizar dispositivos dinámicamente desde aplicaciones externas/web**, **compilar imágenes binarias multi-arquitectura (System B, System 7 BIM M112, System 2 BCU2, System 1 BCU1, Acopladores y System 300)**, **comisionar seguridad KNX Data Secure (Security Interface Object Type 17)** y **descargar la aplicación directamente a dispositivos físicos KNX** por Tunneling IP, KNX USB (`cEMI`), Routing o TP-UART.
 
 ---
 
@@ -22,10 +22,11 @@
     │   • toJSON()/fromJSON() -> guarda y restaura borradores compactos en BD
          │
          ▼
-  DynamicEvaluator ──► SystemBCompiler (Objetos 1..4 + Object 17 Data Secure)
+  DynamicEvaluator ──► SystemBCompiler / KNXApplicationCompiler
+                       (System B + System 7/2/1 + Couplers + System 300 + Object 17)
          │
          ▼
-  LoadProcedureEngine (fusiona knx_master.xml + MergeId 1..7 + ProgramSecurityObject)
+  LoadProcedureEngine (fusiona knx_master.xml / ProductProcedure + LdCtrl* + ProgramSecurityObject)
          │
          ▼
   KNXDeviceProgrammer (Pre-flight, verificación HW, fragmentación APDU, descarga, Restart)
@@ -37,10 +38,11 @@
 ### Capacidades soportadas
 
 | Componente | Detalles técnicos conforme al Estándar KNX v3.0.0 |
-|---|---|
-| **Parser `.knxprod`** (`ZipReader`, `KnxProdParser`) | Lector ZIP/ZIP64 nativo (`node:zlib`) y parser XML en streaming. Extrae `knx_master.xml` (`HawkConfigurationData` / `MaskVersions`), `Hardware.xml` y `ApplicationProgram`, detecta todos los idiomas disponibles (`availableLanguages`) y carga traducciones (`<Languages>`) y `<ParameterSeparator>` bajo demanda. |
-| **Evaluador `<Dynamic>`** (`DynamicEvaluator`) | Punto fijo sobre `<choose>`/`<when>` (`!=`, `<`, `<=`, `>`, `>=`, rangos `a..b`, OR por espacios), `<Assign>`, `<ModuleDef>`/`<Module>`/`<Repeat>`/`<Allocator>`, placeholders `{{0:texto}}` y `<ParameterCalculation>` + `<Script>` en sandbox `node:vm`. |
-| **Compilador System B** (`SystemBCompiler`) | Compila **Obj 1 (`GrAT`)** ordenado ascendente, **Obj 2 (`GrOAT`)** Format 0 (`PDT_GENERIC_02`) y Format 1 (`PDT_GENERIC_04`) con GA emisora primera, **Obj 3 (`GrOT`)** bit-exacto (flags `U/T/I/W/R/C/Prio` + Tabla 88), **Obj 4 (`RelativeSegment`)** con `LittleEndian`/`BigEndian`, `Union`, empaquetado sub-byte MSB, `DPT 9`, `IEEE-754`, `TypeText`, exclusión de huecos `Mask == 0` y `CRC16-CCITT` (`03_05_01` §4.2.27). |
+| --- | --- |
+| **Parser `.knxprod`** (`ZipReader`, `KnxProdParser`) | Lector ZIP/ZIP64 nativo (`node:zlib`) y parser XML en streaming. Extrae `knx_master.xml` (`HawkConfigurationData`, `MaskVersions` y `DownwardCompatibleMasks`), `Hardware.xml`, `Baggages.xml` (extracción binaria perezosa con tipo MIME para `TypePicture`, iconos y PDFs) y `ApplicationProgram` (incluyendo tablas estáticas `<AddressTable>`/`<AssociationTable>`/`<ComObjectTable>`, `<AbsoluteSegment>`/`<RelativeSegment>` y detección automática de plugins/DCA en `<Extension>`), descubre idiomas (`availableLanguages`) y carga traducciones (`<Languages>`) bajo demanda. |
+| **Evaluador `<Dynamic>`** (`DynamicEvaluator`) | Punto fijo sobre `<choose>`/`<when>` (`!=`, `<`, `<=`, `>`, `>=`, rangos `a..b`, OR por espacios), `<Assign>`, `<ModuleDef>`/`<Module>`/`<Repeat>`/`<Allocator>`, placeholders `{{0:texto}}`, ComObjects 1-based (System B) y 0-based (BCU1/BCU2/BIM M112) y `<ParameterCalculation>` + `<Script>` en sandbox `node:vm`. |
+| **Compilador Multi-Arquitectura** (`SystemBCompiler` / `KNXApplicationCompiler`) | Compila **System B** (`MV-07B0`/`17B0`/`27B0`/`2920`/`57B0`: Obj 1 `GrAT`, Obj 2 `GrOAT` Format 0/1, Obj 3 `GrOT` Type 7, Obj 4 `RelativeSegment` con `CRC16-CCITT`), **System 7 BIM M112** (`MV-0700`/`0701`/`0705`: `AbsoluteSegment` + Type 2 preservando punteros RAM de 2 B), **System 2 BCU2 / System 1 BCU1** (`MV-0021`/`0012`: `AbsoluteSegment` + Type 1 con punteros de 1 B y `UserMemory`), **Acopladores** (`MV-091A`/`2920`: bitmask 8 KB `compileCouplerFilterTable`), **System 300** (`MV-0300`: `propertyWrites`) y **spans diferenciales delta** (`encodeKnxTsLoadedImage` / `decodeKnxTsLoadedImage`). |
+| **Configuración IP y Diagnóstico** (`KNXDeviceProgrammer`, `KNXManagementSession`) | Auto-descubre y lee/escribe el **KNXnet/IP Parameter Object (Object Type 11)** (`readIpInterfaceConfig` / `configureIpInterface`: IP, máscara, puerta de enlace, bitmask DHCP/Manual, multicast, TTL, nombre amigable e IAs adicionales de túnel) y ejecuta diagnóstico en vivo solo-lectura tipo **Device Info de ETS** (`readDeviceDiagnostics`). |
 | **Fase 2 — Data Secure** (`compileSecurityObjectImage`, `KNXDeviceProgrammer`) | Compila y programa **Security Interface Object (Type 17)**: `PID_LOAD_STATE_CONTROL` (5), `PID_P2P_KEY_TABLE` (52), `PID_GRP_KEY_TABLE` (53), `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE` (54), `PID_TOOL_KEY` (56), `PID_SEQUENCE_NUMBER_SENDING` (59), `PID_GO_SECURITY_FLAGS` (61) y `PID_SECURITY_MODE` (51). Incluye comisionamiento inicial de fábrica **`FDSK → ToolKey`** (`commissionSecureDevice`). |
 | **Keyring `.knxkeys`** (`KnxKeyring`) | Lector, constructor/editor y **exportador sin dependencias** compatible con ETS 5, ETS 6, Home Assistant (`xknx`) y `KNX.ts`: cifrado AES-128-CBC con PBKDF2-HMAC-SHA256, firma canónica `Signature` SHA-256, generación CSPRNG de claves, exportación XML (UTF-8 BOM) o ZIP, direcciones 3-niveles (`1/0/1`) o enteras ETS5 (`2049`), y sincronización de contadores de 48 bits con `KnxDataSecure`. |
 | **API Web / Externa** (`DeviceConfigSession`) | Sesión con estado, 100% serializable a JSON, con árbol UI jerárquico, diffs en vivo al editar parámetros, buscador de parámetros/ComObjects, validación estructurada, generación automática de claves (`ensureSecurityKeys`), exportación a keyring (`exportToKeyring`) y serialización portable (`schemaVersion: 1`). |
@@ -54,7 +56,7 @@ El error más común al diseñar una interfaz web sobre KNX es intentar que el f
 Existen **dos estructuras JSON con propósitos distintos**:
 
 | JSON | Método que lo produce | Quién lo usa | Para qué sirve |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **`DeviceUiState`** | `session.getUiState()` | **Frontend Web** (React, Vue, Angular, móvil) | Árbol completo y traducido de la pantalla de configuración actual (`channels -> blocks -> items` + `comObjects` + `security` + `stats`). El frontend solo pinta estos widgets genéricos. |
 | **`SerializedDeviceConfig`** | `session.toJSON()` | **Backend / Base de datos** | Foto compacta de los cambios del usuario (`schemaVersion: 1`, `parameters`, `groupLinks`, `security`). Se guarda en BD y luego se rehidrata con `DeviceConfigSession.fromJSON(parsed, json)`. |
 
@@ -152,7 +154,7 @@ Existen **dos estructuras JSON con propósitos distintos**:
 Cada elemento de `block.items` tiene `kind: "parameter"` o `kind: "separator"`:
 
 | `item.kind` / `item.widget` | Cómo renderizarlo en la UI Web | Propiedades útiles |
-|---|---|---|
+| --- | --- | --- |
 | `kind: "separator"` | Banner informativo, subtítulo o línea divisoria según `item.uiHint` (`"Information"`, `"Headline"`, `"HorizontalRuler"`, `"Error"`). | `text`, `uiHint` |
 | `widget: "checkbox"` | Interruptor / Checkbox (`"1"` = activo, `"0"` = inactivo). | `label`, `value`, `readOnly` |
 | `widget: "select"` | Desplegable (`<select>`) o grupo de radios con `item.options`. | `options: [{ value, label }]`, `value` |
@@ -328,10 +330,10 @@ Cuando el usuario cambia un parámetro, el frontend llama a `PATCH /api/sessions
 ## 4. Referencia completa de `DeviceConfigSession`
 
 | Método | Descripción |
-|---|---|
+| --- | --- |
 | `new DeviceConfigSession(source, initialConfig?)` | Crea una sesión a partir de `ParsedKnxProd` o `KnxApplicationProgram`, con configuración inicial opcional (`DeviceApplicationConfig` o `SerializedDeviceConfig`). |
 | `DeviceConfigSession.fromJSON(source, json, runtimeSecurity?)` | Restaura una sesión desde un objeto o string JSON generado por `toJSON()`. |
-| `getCatalogSummary()` | Metadatos estáticos del catálogo: IDs, MaskVersion, idiomas disponibles, idioma cargado, límites de tablas, hardware/productos y capacidades Data Secure. |
+| `getCatalogSummary()` | Metadatos estáticos del catálogo: IDs, `MaskVersion`, `managementModel`, detección de plugins/DCA (`requiresDca`, `extension`), idiomas disponibles/cargados, límites de tablas, hardware/productos y capacidades Data Secure. |
 | `getUiState({ includeAccessNone? })` | Devuelve el estado completo de UI (`DeviceUiState`), 100% serializable a JSON. Por defecto oculta parámetros internos `Access="None"`. |
 | `getParameter(key)` / `getComObject(target)` | Obtiene un parámetro (por `paramRefId`, `paramId` o `name`) o un ComObject activo (por `number`, `name`, `comObjectId` o `comObjectRefId`). |
 | `findParameters(query, { onlyVisible?, limit? })` | Búsqueda por texto traducido, nombre o ID (ideal para barras de búsqueda en catálogos de 15.000+ parámetros). |
@@ -344,7 +346,7 @@ Cuando el usuario cambia un parámetro, el frontend llama a `PATCH /api/sessions
 | `setSecurityConfig(patch)` / `setKeyring(keyring)` | Configura `enabled`, `keyring`, `groupKeys`, `defaultGroupSecurityMode`, `authorizedSenders`, `p2pKeys`, `toolKey`, `enableSecurityMode`, `initialSequenceNumberSending`. |
 | `ensureSecurityKeys(options?)` | Genera automáticamente claves AES-128 aleatorias (16 B) para todos los ComObjects seguros activos sin clave (y opcionalmente un `ToolKey`), almacenándolas en `options.keyring` (y adjuntándolo a la sesión) o en `session.security.groupKeys`. Ignora los ComObjects en modo `"plain"`. |
 | `exportToKeyring(options)` | Vuelca las claves de grupo activas, `ToolKey`, `SequenceNumber`, `SerialNumber` y enlaces de emisores de `<Interface>` de este dispositivo en un `KnxKeyring` (nuevo o existente multi-dispositivo) listo para exportar a `.knxkeys`. |
-| `validate(runtimeSecurity?)` | Retorna `{ valid, errors, warnings }` con códigos estructurados (`VALUE_BELOW_MIN`, `VALUE_ABOVE_MAX`, `INVALID_ENUM_VALUE`, `TEXT_TOO_LONG`, `INVALID_GROUP_ADDRESS`, `MISSING_GROUP_KEY`, `INVALID_INDIVIDUAL_ADDRESS`, `SECURITY_TABLE_OVERFLOW`, `NO_AUTHORIZED_SENDERS`, etc.). |
+| `validate(runtimeSecurity?)` | Retorna `{ valid, errors, warnings }` con códigos estructurados (`REQUIRES_ETS_DCA`, `HAS_ETS_UI_PLUGIN`, `VALUE_BELOW_MIN`, `VALUE_ABOVE_MAX`, `INVALID_ENUM_VALUE`, `TEXT_TOO_LONG`, `INVALID_GROUP_ADDRESS`, `MISSING_GROUP_KEY`, `INVALID_INDIVIDUAL_ADDRESS`, `SECURITY_TABLE_OVERFLOW`, `NO_AUTHORIZED_SENDERS`, etc.). |
 | `toJSON({ includeSecrets? })` | Serializa la configuración a `SerializedDeviceConfig` (`schemaVersion: 1`). Con `includeSecrets: false` omite claves AES. |
 | `compile(runtimeSecurity?)` | Compila a `CompiledSystemBImage` (Objetos 1–4 + `securityImage` Object 17 si aplica). |
 | `planDownload(options?, runtimeSecurity?)` | Genera el plan completo de pasos (`DownloadPlan`) y bytes estimados sin tocar el bus. |
@@ -424,7 +426,7 @@ try {
 En KNX Data Secure, cada Objeto de Comunicación (Group Object) tiene 1 byte en la tabla **`PID_GO_SECURITY_FLAGS`** del Security Interface Object (Type 17) que controla cómo emite y valida telegramas en sus Direcciones de Grupo:
 
 | Modo en `knx.ts` | Byte `PID_GO_SECURITY_FLAGS` | Cifra payload (DPT) | MAC 4 B + SeqNr 48 bits | Cuándo usarlo |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **`"auth_conf"` (A+C)** | `0x03` (`SAI = 1`) | **Sí** (AES-128-CCM) | **Sí** | **Recomendado y por defecto.** Evita lectura/espionaje del valor en el bus, manipulación de telegramas y ataques de repetición (*replay*). |
 | **`"auth_only"` (Solo A)** | `0x01` (`SAI = 0`) | **No** (en claro) | **Sí** | El valor viaja legible para diagnósticos/monitores pasivos, pero el receptor rechaza cualquier telegrama falsificado o repetido. |
 | **`"plain"` (Sin cifrar)** | `0x00` | **No** | **No** | Telegrama KNX clásico. Permite **instalaciones mixtas** en un mismo dispositivo (algunas salidas cifradas y otras en plano para convivir con equipos antiguos). |
@@ -513,6 +515,8 @@ try {
 }
 ```
 
+> **Nota sobre rotación de `ToolKey`:** Al rotar `toolKey` durante una descarga, `KNXDeviceProgrammer` escribe `PID_TOOL_KEY`, envía `A_Restart` cifrado con la clave anterior todavía activa y rota el gestor local `KnxDataSecure` inmediatamente después del reinicio.
+
 ### Regla crítica: `authorizedSenders` (`PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`)
 
 En KNX Data Secure, cada dispositivo guarda una lista blanca de **Direcciones Individuales emisoras autorizadas** (PID 54). Si tu app/interfaz (`1.1.200`) o un pulsador (`1.1.5`) envía un `GroupValue_Write` cifrado a `1/0/1`, el actuador (`1.1.1`) **descartará el telegrama** salvo que `1.1.200` y `1.1.5` estén registrados en su `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`.
@@ -545,7 +549,7 @@ En KNX Data Secure, cada dispositivo guarda una lista blanca de **Direcciones In
 ### Referencia completa de `KnxKeyring`
 
 | Método | Descripción |
-|---|---|
+| --- | --- |
 | `KnxKeyring.create({ project?, createdBy?, created? })` | Crea un keyring vacío listo para poblar y exportar. |
 | `KnxKeyring.fromSource(source, password, { validateSignature? })` | Carga, valida la firma y descifra un `.knxkeys` desde ruta de archivo, XML, Base64 o `Buffer` (XML o ZIP). |
 | `KnxKeyring.generateKey()` | Genera una clave AES-128 aleatoria de 16 bytes usando `crypto.randomBytes(16)`. |
@@ -706,34 +710,108 @@ keyring.saveFile("./PRUEBA-V2.knxkeys", "NuevaClaveSegura", {
 
 ---
 
-## 8. Modos de descarga, seguridad Pre-Flight y Transportes
+## 8. Modos de descarga, Arquitecturas (`MaskVersion`), Pre-Flight y Transportes
 
 ### Modos (`options.mode`)
 
 | Modo | Qué reprograma | Cuándo usarlo |
-|---|---|---|
-| `"ap1"` *(defecto)* | Aplicación completa (Obj 4) + `GrOT` (Obj 3) + `GrOAT` (Obj 2) + `GrAT` (Obj 1) + **Object 17** (si seguridad activa) + `Restart` | Primera descarga o cambio completo de programa en dispositivos System B (`MV-07B0`). |
+| --- | --- | --- |
+| `"ap1"` *(defecto)* | Aplicación completa (Obj 4 en System B, o procedimiento completo `"all"` / `ProductProcedure` en BCU1/BCU2/BIM M112/Acopladores/System 300) + tablas + **Object 17** (si seguridad activa) + `Restart` | Primera descarga o cambio completo de programa. |
 | `"full"` | Igual que `"ap1"`, incluyendo Objeto 5 (PEI Application 2) si existe en el `.knxprod`. | Dispositivos con aplicación PEI secundaria. |
-| `"grp"` | Solo `GrAT` (Obj 1) + `GrOAT` (Obj 2) + `GrOT` (Obj 3) + **Object 17** + `Restart`. | Cambios rápidos de direcciones de grupo o claves/flags de seguridad (sin reescribir los ~123 KB de aplicación). |
+| `"grp"` | Solo tablas de grupos (`GrAT`/`GrOAT`/`GrOT`, o tabla de filtro en acopladores `MV-091A`/`2920`) + **Object 17** + `Restart`. | Cambios rápidos de direcciones de grupo, tabla de filtro o claves/flags de seguridad. |
 | `"par,grp"` | Parámetros (Obj 4 con `Mode=0`) + tablas de grupos (Obj 1–3) + **Object 17** + `Restart`. | Actualización parcial de parámetros y enlaces de grupo. |
-| `"par"` | Solo parámetros (Obj 4). No reprograma Object 17 salvo `programSecurityObject: true`. | Ajuste rápido de parámetros cuando ya está cargada la misma aplicación. |
-| `"unload"` | Descarga (`UNLOAD`) los objetos cargables 1..5 del dispositivo. | Limpiar la aplicación cargada en el dispositivo. |
+| `"par"` | Solo parámetros. No reprograma Object 17 salvo `programSecurityObject: true`. | Ajuste rápido de parámetros cuando ya está cargada la misma aplicación. |
+| `"unload"` | Descarga (`UNLOAD` / `MasterReset` en `MV-2920` / limpieza EEPROM en BCU1) la aplicación cargada. | Limpiar la aplicación cargada en el dispositivo. |
+
+### Arquitecturas (`MaskVersion`) soportadas y detección de DCA / Plugins
+
+| Familia / `ManagementModel` | `MaskVersion` (`DD0`) | Soporte en `knx.ts` | Detalles técnicos clave |
+| --- | --- | --- | --- |
+| **System B** (`SystemB`) | `MV-07B0`, `17B0`, `27B0`, `57B0` | **Completo** | `RelativeSegment`, tablas Realisation Type 7 (`GrAT`/`GrOAT` Format 0–1/`GrOT`), Extended Memory, KNX Data Secure (Obj 17). |
+| **Acopladores System B** (`SystemB`) | `MV-2920` | **Completo** | Descubrimiento dinámico `PID_IO_LIST` (`ObjType=6`), `LdCtrlClearLCFilterTable`, tabla de filtro 8 KB, `PID_HOP_COUNT` automático (`0004` Área / `0005` Línea), `LdCtrlMasterReset`. |
+| **System 7 / BIM M112** (`BimM112`) | `MV-0700`, `0701`, `0705`, `1900`, `2705`, `5705` | **Completo** | `ProductProcedure`, `AbsoluteSegment`, `LdCtrlAbsSegment`, `LdCtrlTaskSegment`/`TaskCtrl1`/`TaskCtrl2`, `CompareProp` con `Mask`, tablas Realisation Type 2 (preserva punteros RAM de 2 B y ComObjects 0-based). |
+| **System 2 / BCU2** (`Bcu2`) | `MV-0020`, `0021`, `0025` | **Completo** | `AbsoluteSegment`, `UserMemory`, `LdCtrlAbsSegment`/`TaskPtr`/`TaskCtrl2`/`Delay`/`CompareMem`, tablas Realisation Type 1 (punteros de 1 B), compatibilidad descendente (`DownwardCompatibleMasks`). |
+| **System 1 / BCU1 y Acopladores** (`Bcu1`) | `MV-0010`–`0013`, `1011`–`1013`, `091A`, `0912` | **Completo** | BCU1 puro por EEPROM (`0x0100–0x01FF`, `A_Memory_Write` sin Interface Objects); acopladores `MV-091A`/`0912` con `ObjType=6`, `ClearLCFilterTable` y memoria `LcFilter` de 8 KB. |
+| **System 300** (`PropertyBased`) | `MV-0300` | **Completo** | Compila parámetros mapeados a `<Property>` en `propertyWrites` y los escribe mediante `A_PropertyValue_Write`. |
+| **Plugins binarios / DCA de ETS** | Cualquier `MaskVersion` con `EtsDownloadPlugin` / `EtsDataHandler` / `RequiresExternalSoftware` / `DownloadInfoIncomplete` | **Detección y bloqueo seguro (requiere ETS)** | Las DLLs propietarias `.NET`/Windows de ETS no se ejecutan fuera de ETS. `DeviceConfigSession.validate()` reporta `REQUIRES_ETS_DCA` y `KNXDeviceProgrammer.download()` aborta antes de escribir (salvo `allowDcaOverride: true`). |
+
+> **Recomendación en hardware heredado (`MV-0012`, `MV-0021`, `MV-0701`, `MV-0705`, `MV-091A`):** ejecuta siempre primero con `dryRun: true` para verificar `MaskVersion`, fabricante y plan de acciones antes de escribir en EEPROM/flash.
 
 ### Protecciones automáticas antes de escribir (`verifyDeviceBeforeWrite: true`)
 
 Antes de enviar cualquier comando `UNLOAD` o escritura en memoria, `KNXDeviceProgrammer` verifica:
-1. **`MaskVersion` (`DD0`)**: aborta si no coincide con el `.knxprod` (y avisa si recibe `0xFFFF` por falta de sesión Data Secure).
-2. **`ManufacturerId` (`PID_MANUFACTURER_ID`)**: aborta si el fabricante del dispositivo difiere del catálogo.
+
+1. **`MaskVersion` (`DD0`)**: aborta si no coincide con el `.knxprod` ni es compatible hacia abajo vía `<DownwardCompatibleMasks>` (ej. un equipo físico `MV-0021` acepta aplicaciones `MV-0020`/`MV-0012`), y avisa si recibe `0xFFFF` por falta de sesión Data Secure.
+2. **`ManufacturerId`**: verifica `PID_MANUFACTURER_ID` (o EEPROM `0x0104` en BCU1 puro sin Interface Objects) y aborta si el fabricante difiere del catálogo.
 3. **`PID_HARDWARE_TYPE` (`strictHardwareTypeCheck: true`)**: verifica la huella exacta de hardware (ej. `0071000049B0` en MAXinBOX 66 v3) para impedir flashear el firmware de un modelo en otro.
-4. **Auto-detección de `PID_MAX_APDULENGTH` y `GrOAT`**: ajusta automáticamente los chunks de escritura (descontando los 13 bytes de `S-A_Data` en sesiones seguras) y recompila `GrOAT` a Format 0 o Format 1 según reporte el dispositivo en vivo.
+4. **Auto-detección de `PID_MAX_APDULENGTH`, `PID_IO_LIST` y `GrOAT`**: ajusta automáticamente los chunks de escritura (descontando los 13 bytes de `S-A_Data` en sesiones seguras), resuelve índices de objetos por `ObjType`/`Occurrence` (ej. `ObjType=6` en acopladores) y recompila `GrOAT` a Format 0 o Format 1 en System B según reporte el dispositivo en vivo.
 
 ### Transportes compatibles
 
 `KNXDeviceProgrammer` funciona de manera idéntica sobre cualquier `KNXService`:
+
 - **KNXnet/IP Tunneling** (`KNXTunneling`, UDP, TCP plano o KNX IP Secure TCP)
 - **KNX USB** (`KNXUSBConnection` en modo `cEMI`, con fragmentación HID multi-trama hasta 305 B)
 - **KNXnet/IP Routing** (`KNXnetIPServer`, multicast plano o IP Secure Routing)
 - **TP-UART / TP-UART2 / NCN5120** (`TPUARTConnection`, tramas extendidas TP1 `FT=0` + `U_L_DataOffset`)
+
+### Descargas Diferenciales Delta (`LoadedImage`)
+
+Al actualizar parámetros en un dispositivo ya programado (`mode: "par"` o `mode: "par,grp"`), puedes guardar la imagen compilada anterior con `encodeKnxTsLoadedImage()` y pasar sus segmentos en la siguiente descarga. `LoadProcedureEngine` fuerza automáticamente la asignación sin borrado (`Mode=0`, protegida por `CompareProp` sobre `PID_TABLE_REFERENCE`) y escribe **únicamente los bloques de bytes modificados**:
+
+```ts
+import { encodeKnxTsLoadedImage, decodeKnxTsLoadedImage } from "knx.ts";
+
+// Tras una descarga completa inicial, guarda el snapshot compacto zlib+Base64:
+const snapshotStr = encodeKnxTsLoadedImage(fullResult.image);
+
+// Después, tras editar parámetros, ejecuta una descarga delta rápida a nivel de byte:
+const prev = decodeKnxTsLoadedImage(snapshotStr);
+const deltaResult = await session.download(programmer, "1.1.1", {
+  mode: "par",
+  previousSegments: prev?.segments,
+  previousAbsoluteSegments: prev?.absoluteSegments,
+});
+console.log("Bytes delta escritos:", deltaResult.bytesWritten);
+```
+
+### Comisionamiento de KNXnet/IP Parameter Object (Object Type 11)
+
+`KNXDeviceProgrammer` auto-descubre el Object Type 11 vía `PID_IO_LIST` y lee/escribe parámetros de red (`03_08_03` §2.5) en cualquier Interfaz o Router KNXnet/IP:
+
+```ts
+const ipCfg = await programmer.readIpInterfaceConfig("1.1.0");
+console.log(ipCfg.ipAddress, ipCfg.macAddress, ipCfg.friendlyName, ipCfg.additionalIndividualAddresses);
+
+await programmer.configureIpInterface("1.1.0", {
+  ipAssignmentMethod: "Fixed", // o "Auto" | "DHCP" | { manual: true }
+  ipAddress: "192.168.1.50",
+  subnetMask: "255.255.255.0",
+  defaultGateway: "192.168.1.1",
+  routingMulticastAddress: "224.0.23.12",
+  ttl: 16,
+  friendlyName: "Router KNX Principal",
+  additionalIndividualAddresses: ["1.1.240", "1.1.241"],
+});
+```
+
+### Diagnóstico en Vivo ("Device Info") y Baggages de Catálogo
+
+```ts
+// 1. Leer diagnóstico completo serializable a JSON tipo "Device Info" de ETS desde el bus
+const diag = await programmer.readDeviceDiagnostics("1.1.1", {
+  // sessionOptions: { secure: true }, // si el dispositivo tiene Data Secure activo
+});
+console.log(diag.maskVersionHex, diag.serialNumber, diag.applicationIdInfo, diag.loadStates, diag.groupAddressTable);
+
+// 2. Extraer imágenes TypePicture / iconos / PDFs embebidos desde .knxprod o DeviceConfigSession
+const ui = session.getUiState();
+const picField = ui.parameters.find((p) => p.widget === "picture");
+if (picField?.baggageRefId) {
+  const asset = session.readBaggage(picField.baggageRefId);
+  console.log(asset?.filename, asset?.mimeType, asset?.size); // Buffer listo para respuesta HTTP
+}
+```
 
 ---
 
@@ -744,7 +822,7 @@ El formato `SerializedDeviceConfig` es el JSON compacto que genera **`session.to
 ### Campos soportados
 
 | Campo | Obligatorio | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `schemaVersion` | **Sí** | Siempre `1`. |
 | `applicationId` | **Sí** | ID de la `ApplicationProgram` del `.knxprod` (ej. `"M-0071_A-49B1-21-F03B"`). Si no coincide con el `.knxprod` cargado, `fromJSON` avisa o falla según compatibilidad. |
 | `language` | No | Idioma usado al crear el borrador (ej. `"es-ES"`, `"en-US"`). Informativo. |
@@ -817,7 +895,7 @@ El script [program_device_manual.ts](../manual-tests/program_device_manual.ts) t
 ### Variables de entorno
 
 | Variable | Default | Descripción |
-|---|---|---|
+| --- | --- | --- |
 | `KNXPROD` | `Ignore/[Cert.]_MAXinBOX_66_v3_2.1_EIFAItRUk.knxprod` | Ruta al archivo `.knxprod`. |
 | `CONFIG_JSON` | *(vacío — valores de fábrica)* | Ruta a un archivo JSON `SerializedDeviceConfig` (ver [Sección 9](#9-formato-del-archivo-json-de-configuración-serializeddeviceconfig--config_json)). |
 | `KNX_LANG` | *(vacío)* | Idioma de traducciones (ej. `es-ES`, `en-US`, `de-DE`). |
@@ -893,9 +971,10 @@ npm run manualTest:program
 ## 11. Solución de problemas (Troubleshooting)
 
 | Síntoma / Error | Causa | Solución |
-|---|---|---|
+| --- | --- | --- |
 | `MaskVersion mismatch: device reports 0xffff` | El dispositivo tiene KNX Data Secure activo y se intentó acceder en plano. | Carga el `.knxkeys` en `KnxDataSecure` y pasa `sessionOptions: { secure: true }`. |
 | El actuador ignora `GroupValue_Write` cifrados tras descargar | La Dirección Individual emisora (ej. `1.1.200` o un pulsador) no se incluyó en `PID_SECURITY_INDIVIDUAL_ADDRESS_TABLE`. | Añade esa IA en `security.authorizedSenders` y reprograma con `MODE=grp` (o `MODE=ap1`). |
 | `Hardware verification failed (Obj 0 PID 78)` | El `.knxprod` seleccionado no corresponde al modelo físico del dispositivo objetivo. | Verifica `TARGET_DEVICE` y usa el `.knxprod` exacto de ese modelo/versión de hardware. |
 | `MISSING_GROUP_KEY` al ejecutar `session.validate()` | Un ComObject enlazado está en modo `auth_conf`/`auth_only` pero su Dirección de Grupo no tiene clave AES de 16 bytes. | Añade la clave en `security.groupKeys`, adjunta un `KnxKeyring` que contenga esa GA, o cambia el objeto a `security: "plain"`. |
 | Timeout o rechazo en `S-A_Sync` / errores de secuencia | Desincronización de contador de 48 bits o `ToolKey` distinto al del dispositivo. | Persiste `sequenceNumberFile` entre ejecuciones, verifica la contraseña/versión del `.knxkeys` y que el `KNX_LOCAL_IA` coincida con `dataSecure.sourceAddress`. |
+| Error `REQUIRES_ETS_DCA` / `proprietary ETS Download Plugin` | El `.knxprod` declara un plugin binario propietario de ETS (`EtsDownloadPlugin`, `EtsDataHandler`, `RequiresExternalSoftware` o `DownloadInfoIncomplete`). | Usa ETS para descargar ese dispositivo concreto (o pasa `allowDcaOverride: true` solo si verificaste que sus segmentos XML estándar bastan). |

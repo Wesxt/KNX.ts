@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./ZipReader";
+export * from "./ZipWriter";
 export * from "./KnxProdParser";
 export * from "./DynamicEvaluator";
 export * from "./SystemBCompiler";

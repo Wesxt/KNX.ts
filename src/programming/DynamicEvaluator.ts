@@ -3,6 +3,7 @@ import { KNXHelper } from "../utils/KNXHelper";
 import {
   DeviceApplicationConfig,
   EvaluatedApplicationState,
+  EvaluatedModuleInstanceInfo,
   FlagSetting,
   GroupObjectLinkSpec,
   GroupObjectPriority,
@@ -274,13 +275,16 @@ export class DynamicEvaluator {
     // Helper to apply user overrides against currently known parameters/refs
     const rawOverrides = config.parameters ?? {};
     const matchedOverrideKeys = new Set<string>();
+    const etsIdToInternalId = new Map<string, string>();
+    const internalIdToEtsId = new Map<string, string>();
 
     const applyUserOverrides = () => {
       for (const [key, rawVal] of Object.entries(rawOverrides)) {
         const strVal = normalizeUserParamValue(rawVal);
+        const mappedKey = etsIdToInternalId.get(key) ?? key;
 
-        // Match ParameterRef ID
-        const directRef = allParameterRefs.get(key);
+        // Match ParameterRef ID (direct or via ETS module-instance alias)
+        const directRef = allParameterRefs.get(mappedKey);
         if (directRef) {
           parameterRefValues.set(directRef.id, strVal);
           parameterValues.set(directRef.refId, strVal);
@@ -292,7 +296,7 @@ export class DynamicEvaluator {
         }
 
         // Match Parameter ID
-        const directParam = allParameters.get(key);
+        const directParam = allParameters.get(mappedKey);
         if (directParam) {
           parameterValues.set(directParam.id, strVal);
           userOverriddenParamIds.add(directParam.id);
@@ -324,12 +328,16 @@ export class DynamicEvaluator {
 
     applyUserOverrides();
 
-    // 2. Module instantiation cache (for apps with <ModuleDef>, e.g. Zennio CX 1.2)
+    // 2. Module instantiation cache (for apps with <ModuleDef>, e.g. Zennio CX 1.2, Flat, DALI)
     const allocatorCursors = new Map<string, number>();
     for (const [allocId, alloc] of app.allocators.entries()) {
       allocatorCursors.set(allocId, alloc.start);
     }
     const expandedModules = new Map<string, KnxDynamicNode[]>();
+    const instantiatedModules: EvaluatedModuleInstanceInfo[] = [];
+    const moduleSeqByModId = new Map<string, number>();
+    const appIdPrefix = `${app.id}_`;
+    const stripAppPrefix = (id: string) => (id.startsWith(appIdPrefix) ? id.slice(appIdPrefix.length) : id);
 
     const remapId = (instancePrefix: string, localId: string, modDef: KnxModuleDef): string => {
       if (
@@ -415,6 +423,7 @@ export class DynamicEvaluator {
     const expandModule = (
       modNode: Extract<KnxDynamicNode, { type: "Module" }>,
       repeatSuffix: string,
+      etsRepeatIndex?: string,
     ): KnxDynamicNode[] => {
       const instanceKey = repeatSuffix ? `${modNode.id}_${repeatSuffix}` : modNode.id;
       const existing = expandedModules.get(instanceKey);
@@ -427,28 +436,56 @@ export class DynamicEvaluator {
         return [];
       }
 
+      const miSeq = (moduleSeqByModId.get(modNode.id) ?? 0) + 1;
+      moduleSeqByModId.set(modNode.id, miSeq);
+      const etsRefId = stripAppPrefix(modNode.id);
+      const etsInstanceId = `${etsRefId}_MI-${miSeq}`;
+      const modDefPrefix = `${modDef.id}_`;
+      const makeEtsLocalSuffix = (templateId: string) =>
+        templateId.startsWith(modDefPrefix) ? templateId.slice(modDefPrefix.length) : stripAppPrefix(templateId);
+
       const argValuesById = new Map<string, number>();
       const argValuesByName = new Map<string, number>();
+      const etsArgs: EvaluatedModuleInstanceInfo["arguments"] = [];
 
       for (const argDef of modDef.arguments) {
         const provided = modNode.numericArgs.find((na) => na.refId === argDef.id);
         let resolvedVal = argDef.baseValue ?? 0;
+        let etsArgVal = String(resolvedVal);
         if (provided) {
           if (provided.value !== undefined) {
             resolvedVal = provided.value;
+            etsArgVal = String(resolvedVal);
           } else if (provided.allocatorRefId) {
             const cur = allocatorCursors.get(provided.allocatorRefId) ?? 0;
             resolvedVal = cur;
             allocatorCursors.set(provided.allocatorRefId, cur + (argDef.allocates ?? 1));
+            etsArgVal = stripAppPrefix(provided.allocatorRefId);
           }
         }
         argValuesById.set(argDef.id, resolvedVal);
         if (argDef.name) argValuesByName.set(argDef.name, resolvedVal);
+        etsArgs.push({ refId: stripAppPrefix(argDef.id), value: etsArgVal, resolvedNumber: resolvedVal });
       }
+
+      instantiatedModules.push({
+        instanceKey,
+        etsInstanceId,
+        etsRefId,
+        moduleDefId: modDef.id,
+        repeatIndex: etsRepeatIndex || undefined,
+        arguments: etsArgs,
+      });
 
       // Instantiate Parameters
       for (const p of modDef.parameters.values()) {
         const newId = `${instanceKey}_${p.id}`;
+        const etsShort = `${etsInstanceId}_${makeEtsLocalSuffix(p.id)}`;
+        const etsFull = `${appIdPrefix}${etsShort}`;
+        etsIdToInternalId.set(etsFull, newId);
+        etsIdToInternalId.set(etsShort, newId);
+        internalIdToEtsId.set(newId, etsFull);
+
         const baseOff = p.memory?.baseOffset ? (argValuesById.get(p.memory.baseOffset) ?? 0) : 0;
         const cloned: KnxParameterDef = {
           ...p,
@@ -472,6 +509,12 @@ export class DynamicEvaluator {
       // Instantiate ParameterRefs
       for (const r of modDef.parameterRefs.values()) {
         const newId = `${instanceKey}_${r.id}`;
+        const etsShort = `${etsInstanceId}_${makeEtsLocalSuffix(r.id)}`;
+        const etsFull = `${appIdPrefix}${etsShort}`;
+        etsIdToInternalId.set(etsFull, newId);
+        etsIdToInternalId.set(etsShort, newId);
+        internalIdToEtsId.set(newId, etsFull);
+
         const newRefId = remapId(instanceKey, r.refId, modDef);
         const cloned: KnxParameterRefDef = {
           ...r,
@@ -489,6 +532,12 @@ export class DynamicEvaluator {
       // Instantiate ComObjects
       for (const co of modDef.comObjects.values()) {
         const newId = `${instanceKey}_${co.id}`;
+        const etsShort = `${etsInstanceId}_${makeEtsLocalSuffix(co.id)}`;
+        const etsFull = `${appIdPrefix}${etsShort}`;
+        etsIdToInternalId.set(etsFull, newId);
+        etsIdToInternalId.set(etsShort, newId);
+        internalIdToEtsId.set(newId, etsShort);
+
         const baseNum = co.baseNumber ? (argValuesById.get(co.baseNumber) ?? 0) : 0;
         const cloned: KnxComObjectDef = {
           ...co,
@@ -505,6 +554,12 @@ export class DynamicEvaluator {
       // Instantiate ComObjectRefs
       for (const cor of modDef.comObjectRefs.values()) {
         const newId = `${instanceKey}_${cor.id}`;
+        const etsShort = `${etsInstanceId}_${makeEtsLocalSuffix(cor.id)}`;
+        const etsFull = `${appIdPrefix}${etsShort}`;
+        etsIdToInternalId.set(etsFull, newId);
+        etsIdToInternalId.set(etsShort, newId);
+        internalIdToEtsId.set(newId, etsShort);
+
         const newRefId = remapId(instanceKey, cor.refId, modDef);
         const cloned: KnxComObjectRefDef = {
           ...cor,
@@ -565,11 +620,11 @@ export class DynamicEvaluator {
       activeComObjectRefIds = [];
       let stateChanged = false;
 
-      const walk = (nodes: KnxDynamicNode[], repeatPrefix: string): void => {
+      const walk = (nodes: KnxDynamicNode[], repeatPrefix: string, etsRepeatTrail: string): void => {
         for (const node of nodes) {
           switch (node.type) {
             case "Container":
-              walk(node.children, repeatPrefix);
+              walk(node.children, repeatPrefix, etsRepeatTrail);
               break;
             case "ParameterRefRef": {
               activeParameterRefIds.add(node.refId);
@@ -615,13 +670,13 @@ export class DynamicEvaluator {
               for (const w of node.whens) {
                 if (!w.isDefault && matchesWhenTest(testVal, w.test)) {
                   matchedAny = true;
-                  walk(w.children, repeatPrefix);
+                  walk(w.children, repeatPrefix, etsRepeatTrail);
                 }
               }
               if (!matchedAny) {
                 for (const w of node.whens) {
                   if (w.isDefault) {
-                    walk(w.children, repeatPrefix);
+                    walk(w.children, repeatPrefix, etsRepeatTrail);
                   }
                 }
               }
@@ -633,15 +688,19 @@ export class DynamicEvaluator {
                 const n = tryParseNumeric(getRefValue(node.parameterRefId));
                 count = n !== null ? Math.max(0, Math.floor(n)) : 0;
               }
+              const repNumMatch = /(\d+)$/.exec(node.id);
+              const repIdNum = repNumMatch ? repNumMatch[1] : node.id;
               for (let idx = 0; idx < count; idx++) {
                 const nextPrefix = repeatPrefix ? `${repeatPrefix}_r${idx}` : `r${idx}`;
-                walk(node.children, nextPrefix);
+                const seg = `${repIdNum}x${idx + 1}`;
+                const nextEtsTrail = etsRepeatTrail ? `${etsRepeatTrail} ${seg}` : seg;
+                walk(node.children, nextPrefix, nextEtsTrail);
               }
               break;
             }
             case "Module": {
-              const expanded = expandModule(node, repeatPrefix);
-              walk(expanded, repeatPrefix);
+              const expanded = expandModule(node, repeatPrefix, etsRepeatTrail);
+              walk(expanded, repeatPrefix, etsRepeatTrail);
               break;
             }
             case "Separator":
@@ -650,7 +709,7 @@ export class DynamicEvaluator {
         }
       };
 
-      walk(app.dynamic, "");
+      walk(app.dynamic, "", "");
 
       // Run ParameterCalculations (JS transforms)
       if (config.runParameterCalculations !== false && allCalculations.length > 0) {
@@ -682,7 +741,9 @@ export class DynamicEvaluator {
 
     // 4. Resolve active ComObjects & Group Links
     let maxComObjectNumber = 0;
+    let hasZeroBasedComObject = false;
     for (const co of allComObjects.values()) {
+      if (co.number === 0) hasZeroBasedComObject = true;
       if (co.number > maxComObjectNumber) maxComObjectNumber = co.number;
     }
 
@@ -691,7 +752,7 @@ export class DynamicEvaluator {
       const cor = allComObjectRefs.get(corId);
       if (!cor) continue;
       const co = allComObjects.get(cor.refId);
-      if (!co || co.number <= 0) continue;
+      if (!co || co.number < 0) continue;
 
       const objectSize = cor.objectSize ?? co.objectSize;
       let text = cor.text ?? co.text;
@@ -736,10 +797,11 @@ export class DynamicEvaluator {
       if (co.number > maxComObjectNumber) maxComObjectNumber = co.number;
     }
 
-    // Apply user groupLinks
+    // Apply user groupLinks (resolving ETS module-instance ComObjectRef aliases automatically)
     const groupLinks = config.groupLinks ?? {};
     for (const [key, spec] of Object.entries(groupLinks)) {
-      const target = this.findComObjectForLink(key, activeComObjects, allComObjects, allComObjectRefs, warnings);
+      const mappedKey = etsIdToInternalId.get(key) ?? key;
+      const target = this.findComObjectForLink(mappedKey, activeComObjects, allComObjects, allComObjectRefs, warnings);
       if (!target) continue;
       this.applyGroupLink(target, spec);
     }
@@ -756,7 +818,11 @@ export class DynamicEvaluator {
       allComObjects,
       allComObjectRefs,
       expandedModules,
+      instantiatedModules,
+      etsIdToInternalId,
+      internalIdToEtsId,
       activeComObjects,
+      comObjectNumberBase: hasZeroBasedComObject ? 0 : 1,
       maxComObjectNumber,
       warnings,
     };

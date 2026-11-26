@@ -1,9 +1,12 @@
+import zlib from "node:zlib";
 import { normalizeKeyringGroupAddress } from "../security/KnxKeyring";
 import { parseKey16 } from "../security/KnxSecureKeys";
 import { KNXHelper } from "../utils/KNXHelper";
 import { DynamicEvaluator } from "./DynamicEvaluator";
+import { isCouplerMaskVersion, resolveManagementModel } from "./KnxProdParser";
 import {
   CompiledMemorySegment,
+  CompiledPropertyWrite,
   CompiledSystemBImage,
   DeviceApplicationConfig,
   EvaluatedApplicationState,
@@ -11,6 +14,7 @@ import {
   GroupObjectSecurityMode,
   KnxApplicationOptions,
   KnxApplicationProgram,
+  KnxManagementModel,
   KnxParameterDef,
   KnxParameterType,
   MemoryWriteSpan,
@@ -486,6 +490,287 @@ export function compileGroupObjectTable(
 }
 
 /**
+ * Returns the RAM value byte size for a KNX Group Object `ValueFieldType` code (03_05_01 §4.18 Table 88).
+ */
+export function valueTypeCodeToByteSize(valueTypeCode: number): number {
+  if (valueTypeCode <= 7) return 1; // 1..7 bit or 1 byte -> 1 byte in RAM
+  if (valueTypeCode === 8) return 2;
+  if (valueTypeCode === 9) return 3;
+  if (valueTypeCode === 10) return 4;
+  if (valueTypeCode === 11) return 6;
+  if (valueTypeCode === 12) return 8;
+  if (valueTypeCode === 13) return 10;
+  if (valueTypeCode === 14) return 14;
+  if (valueTypeCode === 15) return 5;
+  if (valueTypeCode === 16) return 7;
+  if (valueTypeCode === 17) return 9;
+  if (valueTypeCode === 18) return 11;
+  if (valueTypeCode === 19) return 12;
+  if (valueTypeCode === 20) return 13;
+  if (valueTypeCode >= 21 && valueTypeCode <= 254) return valueTypeCode - 6;
+  return 1;
+}
+
+/**
+ * Compiles a legacy BCU1 / BCU2 / BIM M112 Group Address Table (`GrAT`, Realisation Type 1 / 2,
+ * `03_05_01` §4.16.2–4.16.3):
+ * - Byte `0`: `count = 1 + groupAddresses.length` (includes own Individual Address at slot 0)
+ * - Bytes `1..2`: `uint16BE(individualAddress)` (preserved from `existingTable` or `0xFFFF` if omitted)
+ * - Bytes `3..`: sorted unique 16-bit Group Addresses (`TSAP = 1..N`)
+ */
+export function compileLegacyGroupAddressTable(
+  groupAddresses: string[],
+  individualAddress?: string,
+  existingTable?: Buffer,
+): {
+  buffer: Buffer;
+  sortedAddresses: string[];
+  tsapByAddress: Map<string, number>;
+} {
+  const uniqueByInt = new Map<number, string>();
+  for (const ga of groupAddresses) {
+    const buf = KNXHelper.GetAddress(ga, "/");
+    const intVal = buf.readUInt16BE(0);
+    if (!uniqueByInt.has(intVal)) {
+      uniqueByInt.set(intVal, KNXHelper.GetAddress(buf, "/") as string);
+    }
+  }
+
+  const sortedInts = Array.from(uniqueByInt.keys()).sort((a, b) => a - b);
+  if (sortedInts.length > 254) {
+    throw new Error(
+      `Legacy Realisation Type 1/2 Address Table supports at most 254 Group Addresses (got ${sortedInts.length})`,
+    );
+  }
+
+  const sortedAddresses: string[] = [];
+  const tsapByAddress = new Map<string, number>();
+
+  const count = 1 + sortedInts.length;
+  const out = Buffer.alloc(1 + count * 2, 0x00);
+  out.writeUInt8(count & 0xff, 0);
+
+  if (individualAddress && KNXHelper.isValidIndividualAddress(individualAddress.trim())) {
+    const iaBuf = KNXHelper.GetAddress(individualAddress.trim(), ".");
+    iaBuf.copy(out, 1, 0, 2);
+  } else if (existingTable && existingTable.length >= 3) {
+    existingTable.copy(out, 1, 1, 3);
+  } else {
+    out.writeUInt16BE(0xffff, 1);
+  }
+
+  for (let i = 0; i < sortedInts.length; i++) {
+    const intVal = sortedInts[i];
+    const formatted = uniqueByInt.get(intVal)!;
+    out.writeUInt16BE(intVal, 3 + i * 2);
+    sortedAddresses.push(formatted);
+    tsapByAddress.set(formatted, i + 1); // TSAP is 1-based (index 0 is own IA)
+  }
+
+  return { buffer: out, sortedAddresses, tsapByAddress };
+}
+
+/**
+ * Compiles a legacy BCU1 / BCU2 / BIM M112 Group Object Association Table (`GrOAT`, Realisation Type 1 / 2,
+ * `03_05_01` §4.17.2–4.17.3):
+ * - Byte `0`: `count` (1 byte, max 255)
+ * - Bytes `1..`: pairs `[1B TSAP (1-based), 1B ASAP (0-based ComObject number)]` with sending GA first per ASAP.
+ */
+export function compileLegacyAssociationTable(
+  activeComObjects: Map<number, ResolvedComObject>,
+  tsapByAddress: Map<string, number>,
+): { buffer: Buffer; count: number } {
+  const sendingPairs: { tsap: number; asap: number }[] = [];
+  const listeningPairs: { tsap: number; asap: number }[] = [];
+
+  const sortedComObjNums = Array.from(activeComObjects.keys()).sort((a, b) => a - b);
+
+  for (const asap of sortedComObjNums) {
+    const co = activeComObjects.get(asap)!;
+    if (co.groupAddresses.length === 0) continue;
+
+    const sendingGa = co.sendingGroupAddress ?? co.groupAddresses[0];
+    const sendingTsap = tsapByAddress.get(sendingGa);
+    if (sendingTsap !== undefined) {
+      sendingPairs.push({ tsap: sendingTsap, asap });
+    }
+
+    for (const ga of co.groupAddresses) {
+      if (ga === sendingGa) continue;
+      const tsap = tsapByAddress.get(ga);
+      if (tsap !== undefined) {
+        listeningPairs.push({ tsap, asap });
+      }
+    }
+  }
+
+  sendingPairs.sort((a, b) => a.tsap - b.tsap || a.asap - b.asap);
+  listeningPairs.sort((a, b) => a.tsap - b.tsap || a.asap - b.asap);
+  const allPairs = [...sendingPairs, ...listeningPairs];
+
+  if (allPairs.length > 255) {
+    throw new Error(
+      `Legacy Realisation Type 1/2 Association Table supports at most 255 associations (got ${allPairs.length})`,
+    );
+  }
+
+  const out = Buffer.alloc(1 + allPairs.length * 2, 0x00);
+  out.writeUInt8(allPairs.length & 0xff, 0);
+
+  for (let i = 0; i < allPairs.length; i++) {
+    const { tsap, asap } = allPairs[i];
+    if (tsap > 255 || asap > 255 || asap < 0) {
+      throw new Error(`Legacy Association (TSAP=${tsap}, ASAP=${asap}) exceeds 8-bit Realisation Type 1/2 range`);
+    }
+    out.writeUInt8(tsap & 0xff, 1 + i * 2);
+    out.writeUInt8(asap & 0xff, 1 + i * 2 + 1);
+  }
+
+  return { buffer: out, count: allPairs.length };
+}
+
+/**
+ * Compiles or patches a legacy BCU1 / BCU2 (Realisation Type 1, `pointerSize = 1`) or
+ * BIM M112 / System 7 (Realisation Type 2, `pointerSize = 2`) Group Object Table (`GrOT`, `03_05_01` §4.18.2–4.18.3).
+ *
+ * When `existingTable` contains manufacturer pre-populated RAM pointers (standard for BIM M112 & BCU1 `.knxprod`
+ * `<AbsoluteSegment><Data>`), the existing `ramFlagsPtr` and per-object `dataPtr` bytes are preserved verbatim
+ * regardless of MCU endianness, updating only the Config Flags byte and ValueType byte.
+ */
+export function compileLegacyGroupObjectTable(
+  activeComObjects: Map<number, ResolvedComObject>,
+  tableSize: number,
+  options: {
+    pointerSize: 1 | 2;
+    clearCommunicationFlagWhenUnlinked?: boolean;
+    existingTable?: Buffer;
+    littleEndianPointers?: boolean;
+    baseRamAddress?: number;
+  },
+): Buffer {
+  const ptrSize = options.pointerSize;
+  const clearWhenUnlinked = options.clearCommunicationFlagWhenUnlinked ?? true;
+  const headerSize = 1 + ptrSize; // 1B count + 1B/2B ramFlagsPtr
+  const entrySize = ptrSize + 2; // 1B/2B dataPtr + 1B config + 1B valueType
+
+  const existing = options.existingTable;
+  const hasExistingTemplate =
+    existing !== undefined &&
+    existing.length >= headerSize + entrySize &&
+    existing[0] > 0 &&
+    headerSize + existing[0] * entrySize <= existing.length;
+
+  const count = hasExistingTemplate ? existing[0] : Math.max(0, Math.min(255, tableSize));
+  const totalBytes = headerSize + count * entrySize;
+  const out = Buffer.alloc(totalBytes, 0x00);
+
+  if (hasExistingTemplate) {
+    existing.copy(out, 0, 0, totalBytes);
+  } else {
+    out.writeUInt8(count & 0xff, 0);
+    const ramFlagsBase = options.baseRamAddress ?? (ptrSize === 1 ? 0x00 : 0x0700);
+    if (ptrSize === 1) {
+      out.writeUInt8(ramFlagsBase & 0xff, 1);
+    } else if (options.littleEndianPointers) {
+      out.writeUInt16LE(ramFlagsBase & 0xffff, 1);
+    } else {
+      out.writeUInt16BE(ramFlagsBase & 0xffff, 1);
+    }
+
+    // Auto-assign sequential RAM value pointers right after RAM flags table (4 bits per object)
+    let dataCursor = ramFlagsBase + Math.ceil(count / 2);
+    for (let i = 0; i < count; i++) {
+      const entryOff = headerSize + i * entrySize;
+      const co = activeComObjects.get(i);
+      if (ptrSize === 1) {
+        out.writeUInt8(dataCursor & 0xff, entryOff);
+      } else if (options.littleEndianPointers) {
+        out.writeUInt16LE(dataCursor & 0xffff, entryOff);
+      } else {
+        out.writeUInt16BE(dataCursor & 0xffff, entryOff);
+      }
+      dataCursor += co ? valueTypeCodeToByteSize(co.valueTypeCode) : 1;
+    }
+  }
+
+  // Update Config Byte & ValueType for all slots (0-based ASAP index on BCU1/BCU2/BIM M112)
+  for (let i = 0; i < count; i++) {
+    const entryOff = headerSize + i * entrySize;
+    const cfgOff = entryOff + ptrSize;
+    const typeOff = entryOff + ptrSize + 1;
+    const co = activeComObjects.get(i);
+
+    if (!co) {
+      // Inactive ComObject: preserve pointer & type, clear Communication (C) bit
+      if (hasExistingTemplate) {
+        out[cfgOff] &= ~0x04;
+      }
+      continue;
+    }
+
+    const commEnabled = co.flags.communication && (!clearWhenUnlinked || co.groupAddresses.length > 0);
+    const prioBits = encodeGroupObjectPriority(co.priority) & 0x03;
+    // Preserve manufacturer Segment bit (bit 5: 0=RAM, 1=EEPROM) when patching existing Realisation Type 1/2 table
+    const segmentBit = hasExistingTemplate ? out[cfgOff] & 0x20 : 0x00;
+
+    const configByte =
+      ((co.flags.update ? 1 : 0) << 7) |
+      ((co.flags.transmit ? 1 : 0) << 6) |
+      segmentBit |
+      ((co.flags.write ? 1 : 0) << 4) |
+      ((co.flags.read ? 1 : 0) << 3) |
+      ((commEnabled ? 1 : 0) << 2) |
+      prioBits;
+
+    out.writeUInt8(configByte, cfgOff);
+    out.writeUInt8(co.valueTypeCode & 0xff, typeOff);
+  }
+
+  return out;
+}
+
+/**
+ * Compiles a KNX Line/Area Coupler Filter Table bitmask (`8192` bytes for standard 16-bit GA space
+ * `MV-091A`/`MV-2920`, or `3584` bytes for legacy `MV-0910`/`MV-0912` main groups `0..13`).
+ *
+ * Accepts a prebuilt `Buffer`, a hex string (e.g. from `KnxProject.computeFilterTables()`),
+ * or an array of Group Addresses (`"1/0/1"` or numeric `2049`).
+ */
+export function compileCouplerFilterTable(input?: Buffer | string | (string | number)[], size: number = 8192): Buffer {
+  const out = Buffer.alloc(size, 0x00);
+  if (!input) return out;
+
+  if (Buffer.isBuffer(input)) {
+    input.copy(out, 0, 0, Math.min(input.length, size));
+    return out;
+  }
+
+  if (typeof input === "string") {
+    const clean = input.replace(/[\s_-]+/g, "");
+    if (clean.length > 0) {
+      const raw = Buffer.from(clean, "hex");
+      raw.copy(out, 0, 0, Math.min(raw.length, size));
+    }
+    return out;
+  }
+
+  for (const ga of input) {
+    let addrInt: number;
+    if (typeof ga === "number") {
+      addrInt = ga & 0xffff;
+    } else {
+      const buf = KNXHelper.GetAddress(ga.trim(), "/");
+      addrInt = buf.readUInt16BE(0);
+    }
+    const byteIdx = addrInt >> 3;
+    if (byteIdx >= 0 && byteIdx < size) {
+      out[byteIdx] |= 1 << (addrInt & 7);
+    }
+  }
+  return out;
+}
+
+/**
  * Compiles Security Interface Object (Object Type 17, 03_05_01 §6.3) commissioning tables:
  * - `PID_GRP_KEY_TABLE` (PID 53, sorted ascending by 1-based `gaIndex` / `TSAP`)
  * - `PID_GO_SECURITY_FLAGS` (PID 61, 1 byte per Group Object slot)
@@ -712,7 +997,14 @@ export function compileSecurityObjectImage(
 }
 
 /**
- * Compiles a KNX `ApplicationProgram` + `DeviceApplicationConfig` into a complete System B (`0x07B0`) binary image.
+ * Multi-architecture KNX Application Program Binary Compiler.
+ *
+ * Supports:
+ * - **System B** (`MV-07B0`, `MV-17B0`, `MV-27B0`, `MV-2920`, `MV-57B0`): RelativeSegments + Realisation Type 7 tables + Object 17 Data Secure
+ * - **System 7 / BIM M112** (`MV-0700`, `MV-0701`, `MV-0705`, `MV-1900`, `MV-2705`, `MV-5705`): AbsoluteSegments + Realisation Type 2 tables (2B RAM ptrs)
+ * - **System 2 / BCU2** (`MV-0020`, `MV-0021`, `MV-0025`): AbsoluteSegments + Realisation Type 1 tables (1B RAM ptrs) + UserMemory
+ * - **System 1 / BCU1 & Couplers** (`MV-0010`–`MV-0013`, `MV-1011`–`MV-1013`, `MV-091A`, `MV-0912`): AbsoluteSegments + EEPROM tables + 8 KB Filter Table
+ * - **System 300 / PropertyBased** (`MV-0300`): Property-mapped parameter writes (`A_PropertyValue_Write`)
  */
 export class SystemBCompiler {
   public static compile(
@@ -722,16 +1014,33 @@ export class SystemBCompiler {
   ): CompiledSystemBImage {
     const evaluated = preEvaluated ?? DynamicEvaluator.evaluate(app, config);
     const warnings = [...evaluated.warnings];
+    const managementModel: KnxManagementModel = resolveManagementModel(app.maskVersion, config.maskVersionDef);
 
-    // 1. Initialize mutable memory segment copies
-    const segmentImages = new Map<string, { image: Buffer; mask: Buffer; lsm: number; patchedBytes: number }>();
+    // 1. Initialize mutable memory segment copies (both RelativeSegment and AbsoluteSegment)
+    const segmentImages = new Map<
+      string,
+      {
+        kind: "RelativeSegment" | "AbsoluteSegment";
+        image: Buffer;
+        mask: Buffer;
+        lsm: number;
+        address?: number;
+        userMemory?: boolean;
+        memoryType?: string;
+        patchedBytes: number;
+      }
+    >();
     for (const seg of app.codeSegments.values()) {
       const image = Buffer.from(seg.data);
       const mask = seg.mask ? Buffer.from(seg.mask) : Buffer.alloc(seg.size, 0xff);
       segmentImages.set(seg.id, {
+        kind: seg.kind,
         image,
         mask,
         lsm: seg.loadStateMachine ?? 4,
+        address: seg.address,
+        userMemory: seg.userMemory,
+        memoryType: seg.memoryType,
         patchedBytes: 0,
       });
     }
@@ -816,29 +1125,49 @@ export class SystemBCompiler {
       }
     }
 
-    // Build compiled segment map keyed by LoadStateMachine index (e.g. 4)
-    const segments = new Map<number, CompiledMemorySegment>();
-    for (const [segId, entry] of segmentImages.entries()) {
-      segments.set(entry.lsm, {
-        segmentId: segId,
-        loadStateMachine: entry.lsm,
-        size: entry.image.length,
-        image: entry.image,
-        mask: entry.mask,
-        crc16: crc16Ccitt(entry.image),
-        patchedByteCount: entry.patchedBytes,
-      });
-    }
-
-    // 2. Extract expected hardware properties (e.g., checkHW -> Object 0 PID_HARDWARE_TYPE = 78)
+    // 2. Extract hardware check properties (read-only) AND writable property-mapped parameters (System 300 / Couplers)
     const expectedProperties: CompiledSystemBImage["expectedProperties"] = [];
+    const propertyWrites: CompiledPropertyWrite[] = [];
+    const READ_ONLY_CHECK_PIDS = new Set([
+      12 /* PID_MANUFACTURER_ID */, 13 /* PID_PROGRAM_VERSION */, 78 /* PID_HARDWARE_TYPE */,
+    ]);
+
     for (const param of evaluated.allParameters.values()) {
       if (!param.property) continue;
       const pt = app.parameterTypes.get(param.parameterTypeId);
       if (!pt) continue;
       const val = evaluated.parameterValues.get(param.id) ?? param.defaultValue;
       const encoded = encodeParameterValue(val, pt, app.options);
-      if (encoded && encoded.buffer.length > 0 && param.property.objectIndex !== undefined) {
+      if (!encoded || encoded.buffer.length === 0) continue;
+
+      const isReadOnlyHardwareCheck =
+        param.property.objectIndex === 0 && READ_ONLY_CHECK_PIDS.has(param.property.propertyId);
+
+      if (isReadOnlyHardwareCheck) {
+        expectedProperties.push({
+          objectIndex: param.property.objectIndex!,
+          propertyId: param.property.propertyId,
+          expectedValue: encoded.buffer,
+          description: param.name,
+        });
+      } else if (
+        param.access !== "Read" &&
+        (evaluated.activeParameterIds.has(param.id) ||
+          evaluated.modifiedParameterIds.has(param.id) ||
+          managementModel === "PropertyBased")
+      ) {
+        propertyWrites.push({
+          objectIndex: param.property.objectIndex,
+          objectType: param.property.objectType,
+          occurrence: param.property.occurrence,
+          propertyId: param.property.propertyId,
+          offset: param.property.offset,
+          bitOffset: param.property.bitOffset,
+          data: encoded.buffer,
+          bitLength: encoded.bitLength,
+          parameterName: param.name,
+        });
+      } else if (param.property.objectIndex !== undefined && param.access === "Read") {
         expectedProperties.push({
           objectIndex: param.property.objectIndex,
           propertyId: param.property.propertyId,
@@ -848,7 +1177,7 @@ export class SystemBCompiler {
       }
     }
 
-    // 3. Compile System B Group Tables (Objects 1, 2, 3)
+    // 3. Compile Group Tables (System B Realisation Type 7 OR Legacy BCU1/BCU2/BIM M112 Realisation Type 1/2)
     const allGroupAddresses: string[] = [];
     for (const co of evaluated.activeComObjects.values()) {
       for (const ga of co.groupAddresses) {
@@ -856,70 +1185,283 @@ export class SystemBCompiler {
       }
     }
 
-    const grat = compileGroupAddressTable(allGroupAddresses);
-    if (grat.sortedAddresses.length > app.addressTableMaxEntries) {
-      warnings.push(
-        `Group Address count (${grat.sortedAddresses.length}) exceeds AddressTable MaxEntries (${app.addressTableMaxEntries})`,
+    const isLegacyMemoryModel =
+      managementModel === "Bcu1" || managementModel === "Bcu2" || managementModel === "BimM112";
+    const hasLegacyTableSegments =
+      isLegacyMemoryModel &&
+      Boolean(app.addressTable?.codeSegment || app.associationTable?.codeSegment || app.comObjectTable?.codeSegment);
+
+    let gratBuffer: Buffer;
+    let sortedAddresses: string[];
+    let tsapByAddress: Map<string, number>;
+    let groatBuffer: Buffer;
+    let inferredFormat: 0 | 1;
+    let associationCount: number;
+    let grotBuffer: Buffer;
+    let groupObjectCount: number;
+
+    if (hasLegacyTableSegments) {
+      // --- Legacy BCU1 / BCU2 / BIM M112 (Realisation Type 1 / 2) ---
+      const addrSeg = app.addressTable?.codeSegment ? segmentImages.get(app.addressTable.codeSegment) : undefined;
+      const addrOff = app.addressTable?.offset ?? 0;
+      const existingGrat = addrSeg ? addrSeg.image.subarray(addrOff) : undefined;
+
+      const legacyGrat = compileLegacyGroupAddressTable(allGroupAddresses, config.individualAddress, existingGrat);
+      gratBuffer = legacyGrat.buffer;
+      sortedAddresses = legacyGrat.sortedAddresses;
+      tsapByAddress = legacyGrat.tsapByAddress;
+
+      if (sortedAddresses.length > app.addressTableMaxEntries) {
+        warnings.push(
+          `Group Address count (${sortedAddresses.length}) exceeds AddressTable MaxEntries (${app.addressTableMaxEntries})`,
+        );
+      }
+
+      // Patch GrAT into its target AbsoluteSegment
+      if (addrSeg) {
+        const maxTableBytes = Math.min(addrSeg.image.length - addrOff, 1 + (1 + app.addressTableMaxEntries) * 2);
+        if (maxTableBytes > 0) {
+          // Clear unused trailing placeholder slots in AddressTable, then copy compiled GrAT
+          addrSeg.image.fill(0x00, addrOff, addrOff + maxTableBytes);
+          const copyLen = Math.min(gratBuffer.length, addrSeg.image.length - addrOff);
+          gratBuffer.copy(addrSeg.image, addrOff, 0, copyLen);
+          addrSeg.mask.fill(0xff, addrOff, addrOff + maxTableBytes);
+          addrSeg.patchedBytes += copyLen;
+        }
+      }
+
+      const legacyGroat = compileLegacyAssociationTable(evaluated.activeComObjects, tsapByAddress);
+      groatBuffer = legacyGroat.buffer;
+      inferredFormat = 0;
+      associationCount = legacyGroat.count;
+
+      if (associationCount > app.associationTableMaxEntries) {
+        warnings.push(
+          `Association count (${associationCount}) exceeds AssociationTable MaxEntries (${app.associationTableMaxEntries})`,
+        );
+      }
+
+      // Patch GrOAT into its target AbsoluteSegment
+      const assocSeg = app.associationTable?.codeSegment
+        ? segmentImages.get(app.associationTable.codeSegment)
+        : undefined;
+      const assocOff = app.associationTable?.offset ?? 0;
+      if (assocSeg) {
+        const maxAssocBytes = Math.min(assocSeg.image.length - assocOff, 1 + app.associationTableMaxEntries * 2);
+        if (maxAssocBytes > 0) {
+          assocSeg.image.fill(0x00, assocOff, assocOff + maxAssocBytes);
+          const copyLen = Math.min(groatBuffer.length, assocSeg.image.length - assocOff);
+          groatBuffer.copy(assocSeg.image, assocOff, 0, copyLen);
+          assocSeg.mask.fill(0xff, assocOff, assocOff + maxAssocBytes);
+          assocSeg.patchedBytes += copyLen;
+        }
+      }
+
+      // Patch GrOT into its target AbsoluteSegment (preserving pre-populated RAM pointers!)
+      const coSeg = app.comObjectTable?.codeSegment ? segmentImages.get(app.comObjectTable.codeSegment) : undefined;
+      const coOff = app.comObjectTable?.offset ?? 0;
+      const existingGrot = coSeg ? coSeg.image.subarray(coOff) : undefined;
+      const pointerSize: 1 | 2 = managementModel === "BimM112" ? 2 : 1;
+      const computedCoSlots =
+        evaluated.allComObjects.size === 0
+          ? 0
+          : evaluated.comObjectNumberBase === 0
+            ? evaluated.maxComObjectNumber + 1
+            : evaluated.maxComObjectNumber;
+      const requestedCoCount = config.groupObjectTableSize ?? computedCoSlots;
+
+      grotBuffer = compileLegacyGroupObjectTable(evaluated.activeComObjects, requestedCoCount, {
+        pointerSize,
+        clearCommunicationFlagWhenUnlinked: config.clearCommunicationFlagWhenUnlinked ?? true,
+        existingTable: existingGrot,
+        littleEndianPointers: app.options.parameterByteOrder === "LittleEndian",
+      });
+      groupObjectCount = grotBuffer.length > 0 ? grotBuffer[0] : 0;
+
+      if (coSeg && grotBuffer.length > 0) {
+        const copyLen = Math.min(grotBuffer.length, coSeg.image.length - coOff);
+        grotBuffer.copy(coSeg.image, coOff, 0, copyLen);
+        coSeg.mask.fill(0xff, coOff, coOff + copyLen);
+        coSeg.patchedBytes += copyLen;
+      }
+    } else {
+      // --- Standard System B (Realisation Type 7 / 6) ---
+      const grat = compileGroupAddressTable(allGroupAddresses);
+      gratBuffer = grat.buffer;
+      sortedAddresses = grat.sortedAddresses;
+      tsapByAddress = grat.tsapByAddress;
+
+      if (sortedAddresses.length > app.addressTableMaxEntries) {
+        warnings.push(
+          `Group Address count (${sortedAddresses.length}) exceeds AddressTable MaxEntries (${app.addressTableMaxEntries})`,
+        );
+      }
+
+      inferredFormat =
+        config.associationTableFormat ??
+        (app.addressTableMaxEntries > 255 || app.associationTableMaxEntries > 255 || evaluated.maxComObjectNumber > 255
+          ? 1
+          : 0);
+
+      const groat = compileAssociationTable(evaluated.activeComObjects, tsapByAddress, inferredFormat);
+      groatBuffer = groat.buffer;
+      associationCount = groat.count;
+
+      if (associationCount > app.associationTableMaxEntries) {
+        warnings.push(
+          `Association count (${associationCount}) exceeds AssociationTable MaxEntries (${app.associationTableMaxEntries})`,
+        );
+      }
+
+      groupObjectCount = config.groupObjectTableSize ?? evaluated.maxComObjectNumber;
+      grotBuffer = compileGroupObjectTable(
+        evaluated.activeComObjects,
+        groupObjectCount,
+        config.clearCommunicationFlagWhenUnlinked ?? true,
       );
     }
 
-    const inferredFormat: 0 | 1 =
-      config.associationTableFormat ??
-      (app.addressTableMaxEntries > 255 || app.associationTableMaxEntries > 255 || evaluated.maxComObjectNumber > 255
-        ? 1
-        : 0);
+    // Build compiled segment maps AFTER legacy table patching so AbsoluteSegments include GrAT/GrOAT/GrOT!
+    const segments = new Map<number, CompiledMemorySegment>();
+    const absoluteSegments: CompiledMemorySegment[] = [];
+    const segmentsById = new Map<string, CompiledMemorySegment>();
 
-    const groat = compileAssociationTable(evaluated.activeComObjects, grat.tsapByAddress, inferredFormat);
-    if (groat.count > app.associationTableMaxEntries) {
-      warnings.push(
-        `Association count (${groat.count}) exceeds AssociationTable MaxEntries (${app.associationTableMaxEntries})`,
-      );
+    for (const [segId, entry] of segmentImages.entries()) {
+      const compiledSeg: CompiledMemorySegment = {
+        segmentId: segId,
+        loadStateMachine: entry.lsm,
+        size: entry.image.length,
+        address: entry.address,
+        userMemory: entry.userMemory,
+        memoryType: entry.memoryType,
+        image: entry.image,
+        mask: entry.mask,
+        crc16: crc16Ccitt(entry.image),
+        patchedByteCount: entry.patchedBytes,
+      };
+      segmentsById.set(segId, compiledSeg);
+      if (entry.kind === "AbsoluteSegment") {
+        absoluteSegments.push(compiledSeg);
+      } else {
+        segments.set(entry.lsm, compiledSeg);
+      }
+    }
+    absoluteSegments.sort((a, b) => (a.address ?? 0) - (b.address ?? 0));
+
+    // 4. Optional Coupler Filter Table (`MV-091A`, `MV-0912`, `MV-2920`)
+    let filterTable: Buffer | undefined;
+    if (config.filterTable !== undefined) {
+      filterTable = compileCouplerFilterTable(config.filterTable, 8192);
+    } else if (config.filterTableGroupAddresses !== undefined) {
+      filterTable = compileCouplerFilterTable(config.filterTableGroupAddresses, 8192);
+    } else if (isCouplerMaskVersion(app.maskVersion)) {
+      filterTable = Buffer.alloc(8192, 0x00);
     }
 
-    const groupObjectCount = config.groupObjectTableSize ?? evaluated.maxComObjectNumber;
-    const grot = compileGroupObjectTable(
-      evaluated.activeComObjects,
-      groupObjectCount,
-      config.clearCommunicationFlagWhenUnlinked ?? true,
-    );
+    const isAreaCoupler =
+      config.isAreaCoupler !== undefined
+        ? config.isAreaCoupler
+        : config.individualAddress
+          ? /^[1-9]\d*\.0\.0$/.test(config.individualAddress.trim())
+          : undefined;
 
-    // 4. Build 5-byte PID_PROGRAM_VERSION (MfrId 2B + AppNr 2B + AppVer 1B)
+    // 5. Build 5-byte PID_PROGRAM_VERSION (MfrId 2B + AppNr 2B + AppVer 1B)
     const programVersion = Buffer.alloc(5);
     programVersion.writeUInt16BE(app.manufacturerId & 0xffff, 0);
     programVersion.writeUInt16BE(app.applicationNumber & 0xffff, 2);
     programVersion.writeUInt8(app.applicationVersion & 0xff, 4);
 
-    // 5. Optional Phase 2 KNX Data Secure Object 17 image
-    const securityImage = compileSecurityObjectImage(
-      app,
-      evaluated,
-      grat.tsapByAddress,
-      groupObjectCount,
-      config,
-      warnings,
-    );
+    // 6. Optional Phase 2 KNX Data Secure Object 17 image
+    const securityImage = compileSecurityObjectImage(app, evaluated, tsapByAddress, groupObjectCount, config, warnings);
 
     return {
       applicationId: app.id,
       applicationName: app.name,
       maskVersion: app.maskVersion,
+      managementModel,
       manufacturerId: app.manufacturerId,
       applicationNumber: app.applicationNumber,
       applicationVersion: app.applicationVersion,
       programVersion,
-      groupAddressTable: grat.buffer,
-      groupAddresses: grat.sortedAddresses,
-      associationTable: groat.buffer,
+      groupAddressTable: gratBuffer,
+      groupAddresses: sortedAddresses,
+      associationTable: groatBuffer,
       associationTableFormat: inferredFormat,
-      associationCount: groat.count,
-      groupObjectTable: grot,
+      associationCount,
+      groupObjectTable: grotBuffer,
       groupObjectCount,
       segments,
+      absoluteSegments,
+      segmentsById,
+      filterTable,
+      individualAddress: config.individualAddress,
+      isAreaCoupler,
+      propertyWrites,
       evaluated,
       warnings,
       expectedProperties,
       securityImage,
     };
+  }
+
+  /**
+   * Extracts writable byte spans covering absolute memory range `[address, address + size)` across
+   * all compiled `<AbsoluteSegment>` blocks (respecting each segment's `mask`, `userMemory` flag,
+   * and optional `previousAbsoluteSegments` for byte-level differential writes).
+   */
+  public static extractAbsoluteMemorySpans(
+    image: CompiledSystemBImage,
+    address: number,
+    size: number,
+    options: {
+      skipZeroMask?: boolean;
+      previousAbsoluteSegments?: Map<string, Buffer>;
+      coalesceGapBytes?: number;
+    } = {},
+  ): { address: number; data: Buffer; userMemory: boolean }[] {
+    if (size <= 0) return [];
+    const reqStart = address;
+    const reqEnd = address + size;
+    const skipZeroMask = options.skipZeroMask ?? true;
+    const results: { address: number; data: Buffer; userMemory: boolean }[] = [];
+
+    for (const seg of image.absoluteSegments) {
+      if (seg.address === undefined || seg.size <= 0) continue;
+      const segStart = seg.address;
+      const segEnd = segStart + seg.size;
+      const overlapStart = Math.max(reqStart, segStart);
+      const overlapEnd = Math.min(reqEnd, segEnd);
+      if (overlapEnd <= overlapStart) continue;
+
+      const localStart = overlapStart - segStart;
+      const localLen = overlapEnd - overlapStart;
+      const prevImg = options.previousAbsoluteSegments?.get(seg.segmentId);
+
+      if (!skipZeroMask && !prevImg) {
+        results.push({
+          address: overlapStart,
+          data: Buffer.from(seg.image.subarray(localStart, localStart + localLen)),
+          userMemory: Boolean(seg.userMemory),
+        });
+      } else {
+        const spans = this.extractWritableSpans(seg, {
+          offset: localStart,
+          size: localLen,
+          skipFillRuns: false,
+          previousImage: prevImg,
+          coalesceGapBytes: options.coalesceGapBytes,
+        });
+        for (const sp of spans) {
+          results.push({
+            address: segStart + sp.offset,
+            data: Buffer.from(sp.data),
+            userMemory: Boolean(seg.userMemory),
+          });
+        }
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -943,6 +1485,9 @@ export class SystemBCompiler {
   /**
    * Splits a `CompiledMemorySegment` into contiguous writable byte spans:
    * - Excludes bytes where `mask[i] === 0x00` (unowned/reserved firmware gaps like offsets 240..511 in Zennio).
+   * - When `previousImage` (same length) is provided, computes **byte-level differential delta spans**
+   *   writing only bytes that actually changed relative to `previousImage` (coalescing tiny unchanged gaps
+   *   `<= coalesceGapBytes` where `mask !== 0x00` to minimize APDU frame overhead).
    * - When `mode === 1` and `skipFillRuns` is true, also skips contiguous runs of `>= minFillRun` bytes
    *   already equal to `fill` (since the device pre-filled the segment during `LdCtrlRelSegment`).
    */
@@ -955,10 +1500,63 @@ export class SystemBCompiler {
       fill?: number;
       skipFillRuns?: boolean;
       minFillRun?: number;
+      previousImage?: Buffer;
+      coalesceGapBytes?: number;
     } = {},
   ): MemoryWriteSpan[] {
     const start = Math.max(0, options.offset ?? 0);
     const end = Math.min(segment.size, start + (options.size ?? segment.size));
+
+    // Differential delta mode: write ONLY bytes that changed vs `previousImage` (respecting `mask`)
+    if (options.previousImage && options.previousImage.length === segment.size) {
+      const prev = options.previousImage;
+      const maxGap = Math.max(0, options.coalesceGapBytes ?? 4);
+      const rawDiffs: MemoryWriteSpan[] = [];
+      let cursor = start;
+      while (cursor < end) {
+        while (cursor < end && (segment.mask[cursor] === 0x00 || segment.image[cursor] === prev[cursor])) {
+          cursor++;
+        }
+        if (cursor >= end) break;
+        let runEnd = cursor + 1;
+        while (runEnd < end && segment.mask[runEnd] !== 0x00 && segment.image[runEnd] !== prev[runEnd]) {
+          runEnd++;
+        }
+        rawDiffs.push({ offset: cursor, data: segment.image.subarray(cursor, runEnd) });
+        cursor = runEnd;
+      }
+
+      if (rawDiffs.length <= 1 || maxGap === 0) return rawDiffs;
+
+      // Coalesce adjacent changed spans separated by <= maxGap writable bytes (mask !== 0)
+      const merged: MemoryWriteSpan[] = [rawDiffs[0]];
+      for (let i = 1; i < rawDiffs.length; i++) {
+        const last = merged[merged.length - 1];
+        const cur = rawDiffs[i];
+        const lastEnd = last.offset + last.data.length;
+        const gap = cur.offset - lastEnd;
+        let gapWritable = gap <= maxGap;
+        if (gapWritable) {
+          for (let g = lastEnd; g < cur.offset; g++) {
+            if (segment.mask[g] === 0x00) {
+              gapWritable = false;
+              break;
+            }
+          }
+        }
+        if (gapWritable) {
+          const nextEnd = cur.offset + cur.data.length;
+          merged[merged.length - 1] = {
+            offset: last.offset,
+            data: segment.image.subarray(last.offset, nextEnd),
+          };
+        } else {
+          merged.push(cur);
+        }
+      }
+      return merged;
+    }
+
     const skipFill = (options.skipFillRuns ?? true) && options.mode === 1;
     const fillByte = (options.fill ?? 0) & 0xff;
     const minFillRun = options.minFillRun ?? 8;
@@ -1011,3 +1609,69 @@ export class SystemBCompiler {
     return spans;
   }
 }
+
+/**
+ * Encodes a compiled device image's memory segments into a compact zlib-compressed Base64 snapshot
+ * suitable for persisting in `DeviceInstance.loadedImage` (enabling fast byte-level differential downloads).
+ */
+export function encodeKnxTsLoadedImage(image: CompiledSystemBImage): string {
+  const rel: Record<string, string> = {};
+  for (const [lsm, seg] of image.segments.entries()) {
+    rel[String(lsm)] = seg.image.toString("base64");
+  }
+  const abs: Record<string, string> = {};
+  for (const seg of image.absoluteSegments) {
+    abs[seg.segmentId] = seg.image.toString("base64");
+  }
+  const payload = JSON.stringify({
+    format: "knx.ts-loaded-image-v1",
+    applicationId: image.applicationId,
+    maskVersion: image.maskVersion,
+    segments: rel,
+    absoluteSegments: abs,
+  });
+  return zlib.deflateSync(Buffer.from(payload, "utf8")).toString("base64");
+}
+
+/**
+ * Decodes a `knx.ts` Base64 `LoadedImage` snapshot back into `previousSegments` / `previousAbsoluteSegments`.
+ * Returns `undefined` gracefully if the string is an opaque native ETS `LoadedImage` binary blob.
+ */
+export function decodeKnxTsLoadedImage(loadedImageBase64?: string):
+  | {
+      applicationId: string;
+      maskVersion: number;
+      segments: Map<number, Buffer>;
+      absoluteSegments: Map<string, Buffer>;
+    }
+  | undefined {
+  if (!loadedImageBase64 || loadedImageBase64.trim() === "") return undefined;
+  try {
+    const raw = Buffer.from(loadedImageBase64.replace(/\s+/g, ""), "base64");
+    const inflated = zlib.inflateSync(raw).toString("utf8");
+    const parsed = JSON.parse(inflated);
+    if (!parsed || parsed.format !== "knx.ts-loaded-image-v1") return undefined;
+    const segments = new Map<number, Buffer>();
+    for (const [k, v] of Object.entries(parsed.segments ?? {})) {
+      if (typeof v === "string") segments.set(Number(k), Buffer.from(v, "base64"));
+    }
+    const absoluteSegments = new Map<string, Buffer>();
+    for (const [k, v] of Object.entries(parsed.absoluteSegments ?? {})) {
+      if (typeof v === "string") absoluteSegments.set(k, Buffer.from(v, "base64"));
+    }
+    return {
+      applicationId: String(parsed.applicationId ?? ""),
+      maskVersion: Number(parsed.maskVersion ?? 0),
+      segments,
+      absoluteSegments,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Multi-architecture alias for {@link SystemBCompiler} (supports System B, System 7 BIM M112,
+ * System 2 BCU2, System 1 BCU1, Couplers `MV-091A`/`MV-2920`, and System 300 PropertyBased).
+ */
+export const KNXApplicationCompiler = SystemBCompiler;

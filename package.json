@@ -1,7 +1,7 @@
 {
   "name": "knx.ts",
   "version": "2.3.1",
-  "description": "A high-performance KNXnet/IP server and client library in TypeScrip, focused on ETS stability.",
+  "description": "A high-performance KNXnet/IP server and client library in TypeScript, focused on ETS stability.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "repository": {
@@ -10,7 +10,9 @@
   },
   "files": [
     "dist",
+    "docs",
     "README.md",
+    "readme-es.md",
     "LICENSE"
   ],
   "scripts": {

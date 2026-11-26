@@ -5,6 +5,7 @@ import {
   FlagSetting,
   GroupObjectPriority,
   KnxAllocatorDef,
+  KnxApplicationExtensionInfo,
   KnxApplicationOptions,
   KnxApplicationProgram,
   KnxAppLoadProcedure,
@@ -17,6 +18,7 @@ import {
   KnxHardwareInfo,
   KnxHardwareProduct,
   KnxLdCtrlStep,
+  KnxManagementModel,
   KnxMaskResource,
   KnxMaskVersion,
   KnxMasterProcedure,
@@ -26,10 +28,12 @@ import {
   KnxParameterDef,
   KnxParameterRefDef,
   KnxParameterType,
+  KnxProdBaggageEntry,
   KnxProdParseOptions,
   KnxPropertyLocation,
   KnxWhenNode,
   ParsedKnxProd,
+  KnxExtractedBaggage,
 } from "./types";
 
 interface XmlCallbacks {
@@ -438,6 +442,88 @@ function parseMaskVersionNumber(maskVersionId: string): number {
   return m ? parseInt(m[1], 16) : 0;
 }
 
+/**
+ * Resolves the KNX Management Model (`SystemB`, `BimM112`, `Bcu2`, `Bcu1`, `PropertyBased`, `None`)
+ * from an optional `knx_master.xml` `<MaskVersion>` definition or from the 16-bit MaskVersion (`DD0`).
+ */
+export function resolveManagementModel(
+  maskVersion: number,
+  maskVersionDef?: Pick<KnxMaskVersion, "managementModel">,
+): KnxManagementModel {
+  const raw = maskVersionDef?.managementModel;
+  if (
+    raw === "SystemB" ||
+    raw === "BimM112" ||
+    raw === "Bcu2" ||
+    raw === "Bcu1" ||
+    raw === "PropertyBased" ||
+    raw === "None"
+  ) {
+    return raw;
+  }
+
+  const mv = maskVersion & 0xffff;
+  // System B (TP1 / PL110 / RF / Coupler 2920 / IP)
+  if (mv === 0x07b0 || mv === 0x17b0 || mv === 0x27b0 || mv === 0x2920 || mv === 0x57b0) {
+    return "SystemB";
+  }
+  // System 7 / BIM M112 (TP1 / PL / RF / IP)
+  if (mv === 0x0700 || mv === 0x0701 || mv === 0x0705 || mv === 0x1900 || mv === 0x2705 || mv === 0x5705) {
+    return "BimM112";
+  }
+  // System 2 / BCU2
+  if (mv === 0x0020 || mv === 0x0021 || mv === 0x0025) {
+    return "Bcu2";
+  }
+  // System 300 (PropertyBased)
+  if (mv === 0x0300) {
+    return "PropertyBased";
+  }
+  // Dummy / cEMI Server
+  if (mv === 0x0001 || mv === 0x0310 || mv === 0x1310) {
+    return "None";
+  }
+  // System 1 / BCU1 & BCU1 Couplers
+  if (
+    (mv >= 0x0010 && mv <= 0x0013) ||
+    (mv >= 0x1011 && mv <= 0x1013) ||
+    mv === 0x0900 ||
+    mv === 0x0910 ||
+    mv === 0x0911 ||
+    mv === 0x0912 ||
+    mv === 0x091a
+  ) {
+    return "Bcu1";
+  }
+
+  // Fallback by low-byte mask family convention (0x?7B0 -> SystemB, 0x?70? -> BimM112)
+  if ((mv & 0x0fff) === 0x07b0) return "SystemB";
+  if ((mv & 0x0ff0) === 0x0700) return "BimM112";
+  if ((mv & 0x0ff0) === 0x0020) return "Bcu2";
+  if ((mv & 0x0ff0) === 0x0010 || (mv & 0x0f00) === 0x0900) return "Bcu1";
+  return "SystemB";
+}
+
+/**
+ * Returns true if the given 16-bit MaskVersion represents a KNX Line/Area/Media Coupler or IP Router.
+ */
+export function isCouplerMaskVersion(maskVersion: number): boolean {
+  const mv = maskVersion & 0xffff;
+  return mv === 0x0900 || mv === 0x0910 || mv === 0x0911 || mv === 0x0912 || mv === 0x091a || mv === 0x2920;
+}
+
+/**
+ * Returns true for pure legacy BCU1 masks (`MV-0010`..`MV-0013`, `MV-1011`..`MV-1013`, `MV-0900`, `MV-0910`, `MV-0911`)
+ * that do not implement KNX Interface Objects (`A_PropertyValue_Read`).
+ * Note: `MV-091A` and `MV-0912` couplers DO expose Interface Objects (`Obj 0` & `ObjType 6`).
+ */
+export function isPureBcu1MemoryOnlyMask(maskVersion: number): boolean {
+  const mv = maskVersion & 0xffff;
+  return (
+    (mv >= 0x0010 && mv <= 0x0013) || (mv >= 0x1011 && mv <= 0x1013) || mv === 0x0900 || mv === 0x0910 || mv === 0x0911
+  );
+}
+
 function parseFlag(val: string | undefined, fallback: FlagSetting): FlagSetting {
   if (val === "Enabled" || val === "Disabled") return val;
   return fallback;
@@ -487,6 +573,7 @@ export function parseKnxMasterMaskVersions(masterXml: string): Map<string, KnxMa
           name: attrs.Name ?? "",
           managementModel: attrs.ManagementModel ?? "",
           mediumTypeRefId: attrs.MediumTypeRefId ?? "MT-0",
+          downwardCompatibleMasks: [],
           features: {},
           resources: new Map(),
           procedures: [],
@@ -497,6 +584,13 @@ export function parseKnxMasterMaskVersions(masterXml: string): Map<string, KnxMa
         return;
       }
       if (!currentMv) return;
+
+      if (tag === "DownwardCompatibleMask" && attrs.RefId) {
+        if (!currentMv.downwardCompatibleMasks.includes(attrs.RefId)) {
+          currentMv.downwardCompatibleMasks.push(attrs.RefId);
+        }
+        return;
+      }
 
       if (tag === "HawkConfigurationData") {
         ignoreLegacyHawk = attrs.LegacyVersion !== undefined;
@@ -550,6 +644,73 @@ export function parseKnxMasterMaskVersions(masterXml: string): Map<string, KnxMa
   });
 
   return maskVersions;
+}
+
+/**
+ * Infers a standard MIME type from a baggage or user filename (zero external dependencies).
+ */
+export function guessMimeTypeFromFilename(filename: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  switch (ext) {
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".svg":
+      return "image/svg+xml";
+    case ".webp":
+      return "image/webp";
+    case ".bmp":
+      return "image/bmp";
+    case ".ico":
+      return "image/x-icon";
+    case ".pdf":
+      return "application/pdf";
+    case ".zip":
+      return "application/zip";
+    case ".xml":
+      return "application/xml";
+    case ".json":
+      return "application/json";
+    case ".txt":
+    case ".csv":
+      return ext === ".csv" ? "text/csv" : "text/plain";
+    case ".html":
+    case ".htm":
+      return "text/html";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+/**
+ * Parses `M-xxxx/Baggages.xml` into indexed `KnxProdBaggageEntry` metadata.
+ */
+export function parseKnxProdBaggagesXml(baggagesXml: string, manufacturerId: string): KnxProdBaggageEntry[] {
+  const result: KnxProdBaggageEntry[] = [];
+  parseXmlStringSync(baggagesXml, {
+    onStartElement(tag, attrs) {
+      if (tag === "Baggage" && attrs.Id && attrs.Name) {
+        const targetPath = (attrs.TargetPath ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+        const name = attrs.Name;
+        const rel = targetPath ? `${targetPath}/${name}` : name;
+        const zipEntryPath = `${manufacturerId}/Baggages/${rel}`;
+        result.push({
+          id: attrs.Id,
+          manufacturerId,
+          targetPath,
+          name,
+          zipEntryPath,
+          mimeType: guessMimeTypeFromFilename(name),
+        });
+      }
+    },
+    onEndElement() {},
+  });
+  return result;
 }
 
 /**
@@ -648,6 +809,7 @@ export async function parseApplicationProgramStream(
   let calcTextChunks: string[] = [];
 
   let currentLoadProc: KnxAppLoadProcedure | null = null;
+  let inExtension = false;
   let inScript = false;
   let scriptChunks: string[] = [];
 
@@ -724,6 +886,7 @@ export async function parseApplicationProgramStream(
       if (tag === "ApplicationProgram" && attrs.Id) {
         const mfrId = parseManufacturerId(manufacturerRefId || attrs.Id);
         const maskVersionId = attrs.MaskVersion ?? "MV-07B0";
+        const downloadInfoIncomplete = parseBool(attrs.DownloadInfoIncomplete, false);
         const defaultOptions: KnxApplicationOptions = {
           parameterByteOrder: "BigEndian",
           textParameterEncoding: "us-ascii",
@@ -731,6 +894,15 @@ export async function parseApplicationProgramStream(
           preferPartialDownloadIfApplicationLoaded: false,
           supportsExtendedMemoryServices: false,
           supportsExtendedPropertyServices: false,
+        };
+        const initialExt: KnxApplicationExtensionInfo = {
+          requiresExternalSoftware: false,
+          downloadInfoIncomplete,
+          baggageRefIds: [],
+          pluginParameterTypeIds: [],
+          hasDownloadPlugin: downloadInfoIncomplete,
+          hasUiPlugin: false,
+          requiresDca: downloadInfoIncomplete,
         };
         app = {
           id: attrs.Id,
@@ -754,6 +926,7 @@ export async function parseApplicationProgramStream(
           maxSecurityP2PKeyTableEntries: parseIntOpt(attrs.MaxSecurityP2PKeyTableEntries),
           addressTableMaxEntries: 255,
           associationTableMaxEntries: 255,
+          extension: initialExt,
           options: defaultOptions,
           codeSegments: new Map(),
           parameterTypes: new Map(),
@@ -919,13 +1092,60 @@ export async function parseApplicationProgramStream(
         return;
       }
 
-      // ---- Static Tables & Options ----
-      if (tag === "AddressTable" && attrs.MaxEntries) {
-        app.addressTableMaxEntries = parseIntOpt(attrs.MaxEntries) ?? app.addressTableMaxEntries;
+      // ---- Static Tables, Extension (DCA/Plugins) & Options ----
+      if (tag === "AddressTable") {
+        const maxEntries = parseIntOpt(attrs.MaxEntries) ?? app.addressTableMaxEntries;
+        app.addressTableMaxEntries = maxEntries;
+        app.addressTable = {
+          codeSegment: attrs.CodeSegment || undefined,
+          offset: parseIntOpt(attrs.Offset) ?? 0,
+          maxEntries,
+        };
         return;
       }
-      if (tag === "AssociationTable" && attrs.MaxEntries) {
-        app.associationTableMaxEntries = parseIntOpt(attrs.MaxEntries) ?? app.associationTableMaxEntries;
+      if (tag === "AssociationTable") {
+        const maxEntries = parseIntOpt(attrs.MaxEntries) ?? app.associationTableMaxEntries;
+        app.associationTableMaxEntries = maxEntries;
+        app.associationTable = {
+          codeSegment: attrs.CodeSegment || undefined,
+          offset: parseIntOpt(attrs.Offset) ?? 0,
+          maxEntries,
+        };
+        return;
+      }
+      if (tag === "ComObjectTable") {
+        if (attrs.CodeSegment || attrs.Offset !== undefined) {
+          app.comObjectTable = {
+            codeSegment: attrs.CodeSegment || undefined,
+            offset: parseIntOpt(attrs.Offset) ?? 0,
+          };
+        }
+        return;
+      }
+      if (tag === "Extension") {
+        inExtension = !selfClosing;
+        const ext = app.extension!;
+        const reqExt = parseBool(attrs.RequiresExternalSoftware, false);
+        const dlPlugin = attrs.EtsDownloadPlugin?.trim() || undefined;
+        const uiPlugin = attrs.EtsUiPlugin?.trim() || undefined;
+        const dataHandler = attrs.EtsDataHandler?.trim() || undefined;
+        if (reqExt) ext.requiresExternalSoftware = true;
+        if (dlPlugin) ext.etsDownloadPlugin = dlPlugin;
+        if (uiPlugin) ext.etsUiPlugin = uiPlugin;
+        if (dataHandler) ext.etsDataHandler = dataHandler;
+        ext.hasDownloadPlugin = Boolean(
+          ext.etsDownloadPlugin || ext.etsDataHandler || ext.requiresExternalSoftware || ext.downloadInfoIncomplete,
+        );
+        ext.hasUiPlugin = Boolean(
+          ext.etsUiPlugin || ext.requiresExternalSoftware || ext.pluginParameterTypeIds.length > 0,
+        );
+        ext.requiresDca = ext.hasDownloadPlugin || ext.hasUiPlugin;
+        return;
+      }
+      if (inExtension && tag === "Baggage" && attrs.RefId) {
+        if (!app.extension!.baggageRefIds.includes(attrs.RefId)) {
+          app.extension!.baggageRefIds.push(attrs.RefId);
+        }
         return;
       }
       if (tag === "Options") {
@@ -939,6 +1159,16 @@ export async function parseApplicationProgramStream(
           supportsExtendedPropertyServices: parseBool(attrs.SupportsExtendedPropertyServices, false),
           comparable: attrs.Comparable !== undefined ? parseBool(attrs.Comparable, false) : undefined,
           reconstructable: attrs.Reconstructable !== undefined ? parseBool(attrs.Reconstructable, false) : undefined,
+          legacyPatchManufacturerIdInTaskSegment:
+            attrs.LegacyPatchManufacturerIdInTaskSegment !== undefined
+              ? parseBool(attrs.LegacyPatchManufacturerIdInTaskSegment, false)
+              : undefined,
+          setObjectTableLengthAlwaysToOne:
+            attrs.SetObjectTableLengthAlwaysToOne !== undefined
+              ? parseBool(attrs.SetObjectTableLengthAlwaysToOne, false)
+              : undefined,
+          legacyNoMemoryVerifyMode:
+            attrs.LegacyNoMemoryVerifyMode !== undefined ? parseBool(attrs.LegacyNoMemoryVerifyMode, false) : undefined,
         };
         return;
       }
@@ -957,6 +1187,14 @@ export async function parseApplicationProgramStream(
 
       // ---- ParameterTypes ----
       if (tag === "ParameterType" && attrs.Id) {
+        if (attrs.Plugin && attrs.Plugin.trim() !== "") {
+          const ext = app.extension!;
+          if (!ext.pluginParameterTypeIds.includes(attrs.Id)) {
+            ext.pluginParameterTypeIds.push(attrs.Id);
+          }
+          ext.hasUiPlugin = true;
+          ext.requiresDca = true;
+        }
         currentParamType = {
           id: attrs.Id,
           name: attrs.Name ?? attrs.Id,
@@ -1340,6 +1578,7 @@ export async function parseApplicationProgramStream(
           offset: parseIntOpt(a.Offset) ?? 0,
           address: parseIntOpt(a.Address),
           memoryType: a.MemoryType,
+          userMemory: a.UserMemory !== undefined ? parseBool(a.UserMemory, false) : undefined,
           data: dataBuf,
           mask: maskBuf,
         };
@@ -1348,6 +1587,10 @@ export async function parseApplicationProgramStream(
         }
         currentSegment = null;
         currentSegmentChild = null;
+        return;
+      }
+      if (tag === "Extension") {
+        inExtension = false;
         return;
       }
       if (tag === "ParameterType") {
@@ -1452,11 +1695,27 @@ export class KnxProdParser {
       maskVersions = parseKnxMasterMaskVersions(zip.readEntryText(masterEntry.fileName));
     }
 
-    // 2. Parse M-xxxx/Hardware.xml
+    // 2. Parse M-xxxx/Hardware.xml & M-xxxx/Baggages.xml
     const hardware: KnxHardwareInfo[] = [];
+    const baggages: KnxProdBaggageEntry[] = [];
+    const entrySizeByPathLower = new Map<string, { fileName: string; size: number }>();
+    for (const e of entries) {
+      entrySizeByPathLower.set(e.fileName.toLowerCase(), { fileName: e.fileName, size: e.uncompressedSize });
+    }
     for (const entry of entries) {
       if (/(^|\/)Hardware\.xml$/i.test(entry.fileName)) {
         hardware.push(...parseHardwareXml(zip.readEntryText(entry.fileName)));
+      } else if (/(^|\/)Baggages\.xml$/i.test(entry.fileName)) {
+        const mfrMatch = /(M-[0-9A-Fa-f]{4})\//i.exec(entry.fileName);
+        const mfr = mfrMatch ? mfrMatch[1].toUpperCase() : "M-0000";
+        for (const bg of parseKnxProdBaggagesXml(zip.readEntryText(entry.fileName), mfr)) {
+          const hit = entrySizeByPathLower.get(bg.zipEntryPath.toLowerCase());
+          if (hit) {
+            bg.zipEntryPath = hit.fileName;
+            bg.size = hit.size;
+          }
+          baggages.push(bg);
+        }
       }
     }
 
@@ -1477,6 +1736,46 @@ export class KnxProdParser {
       "M-0000";
     const manufacturerId = firstApp?.manufacturerId ?? parseManufacturerId(mfrRefId);
 
+    const readBaggage = (refIdOrName: string): KnxExtractedBaggage | undefined => {
+      const q = refIdOrName.trim();
+      const qLower = q.toLowerCase();
+      const meta =
+        baggages.find((b) => b.id === q) ??
+        baggages.find((b) => b.zipEntryPath.toLowerCase() === qLower) ??
+        baggages.find((b) => b.name.toLowerCase() === qLower);
+      if (meta) {
+        const hit = entrySizeByPathLower.get(meta.zipEntryPath.toLowerCase());
+        if (!hit) return undefined;
+        const buf = zip.readEntryBuffer(hit.fileName);
+        return {
+          ...meta,
+          filename: meta.name,
+          size: buf.length,
+          buffer: buf,
+        };
+      }
+      // Fallback: match raw ZIP path under Baggages/
+      const rawHit = entries.find(
+        (e) =>
+          e.fileName.toLowerCase().includes("/baggages/") &&
+          (e.fileName.toLowerCase() === qLower || path.basename(e.fileName).toLowerCase() === qLower),
+      );
+      if (!rawHit) return undefined;
+      const buf = zip.readEntryBuffer(rawHit.fileName);
+      const fname = path.basename(rawHit.fileName);
+      return {
+        id: q,
+        manufacturerId: mfrRefId,
+        targetPath: path.dirname(rawHit.fileName),
+        name: fname,
+        filename: fname,
+        zipEntryPath: rawHit.fileName,
+        mimeType: guessMimeTypeFromFilename(fname),
+        size: buf.length,
+        buffer: buf,
+      };
+    };
+
     return {
       sourceName,
       manufacturerId,
@@ -1484,6 +1783,8 @@ export class KnxProdParser {
       hardware,
       applications,
       maskVersions,
+      baggages,
+      readBaggage,
     };
   }
 }

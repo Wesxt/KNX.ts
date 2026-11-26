@@ -38,6 +38,7 @@ export * from "./management/apduBuilders";
 export * from "./management/TransportConnection";
 export * from "./management/KNXManagement";
 export * from "./programming";
+export * from "./project";
 export * from "./core/resources/DeviceDescriptorType";
 export * from "./core/resources/KNXManufacturers";
 export * from "./core/resources/KNXUsbInterfaces";

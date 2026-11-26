@@ -1,4 +1,4 @@
-import type { OpenSessionOptions } from "../management/KNXManagement";
+import type { KnxIpInterfaceConfig, OpenSessionOptions } from "../management/KNXManagement";
 import type { KnxDataSecure } from "../security/KnxDataSecure";
 import type { KnxKeyring } from "../security/KnxKeyring";
 
@@ -27,6 +27,41 @@ export type GroupObjectPriority = "System" | "Normal" | "Urgent" | "Alert" | "Lo
 export type FlagSetting = "Enabled" | "Disabled";
 
 /**
+ * KNX Management Model derived from `knx_master.xml` `<MaskVersion ManagementModel="...">`
+ * or inferred from the 16-bit MaskVersion (`DD0`).
+ */
+export type KnxManagementModel = "SystemB" | "BimM112" | "Bcu2" | "Bcu1" | "PropertyBased" | "None";
+
+/**
+ * Static memory-mapped table declaration inside `<ApplicationProgram><Static>`
+ * (`<AddressTable>`, `<AssociationTable>`, `<ComObjectTable>`).
+ */
+export interface KnxStaticTableLocation {
+  codeSegment?: string;
+  offset: number;
+  maxEntries?: number;
+}
+
+/**
+ * ETS Plugin / Device Configuration App (DCA) metadata detected on an `ApplicationProgram`.
+ */
+export interface KnxApplicationExtensionInfo {
+  requiresExternalSoftware: boolean;
+  downloadInfoIncomplete: boolean;
+  etsDownloadPlugin?: string;
+  etsUiPlugin?: string;
+  etsDataHandler?: string;
+  baggageRefIds: string[];
+  pluginParameterTypeIds: string[];
+  /** True if the application relies on a proprietary ETS download plugin / data handler or incomplete download info. */
+  hasDownloadPlugin: boolean;
+  /** True if the application relies on a proprietary ETS UI plugin / external software / parameter-type plugin. */
+  hasUiPlugin: boolean;
+  /** True if either `hasDownloadPlugin` or `hasUiPlugin` is set (proprietary ETS DCA/plugin detected). */
+  requiresDca: boolean;
+}
+
+/**
  * KNX Application Program `<Options>` parsed from `.knxprod`.
  */
 export interface KnxApplicationOptions {
@@ -39,6 +74,9 @@ export interface KnxApplicationOptions {
   supportsExtendedPropertyServices: boolean;
   comparable?: boolean;
   reconstructable?: boolean;
+  legacyPatchManufacturerIdInTaskSegment?: boolean;
+  setObjectTableLengthAlwaysToOne?: boolean;
+  legacyNoMemoryVerifyMode?: boolean;
 }
 
 /**
@@ -53,6 +91,8 @@ export interface KnxCodeSegment {
   offset: number;
   address?: number;
   memoryType?: string;
+  /** True when `<AbsoluteSegment UserMemory="true|1">` (BCU2 user memory space). */
+  userMemory?: boolean;
   /** Initial image data decoded from Base64 `<Data>` (padded/sized to `size` if shorter). */
   data: Buffer;
   /** Validity bitmask decoded from Base64 `<Mask>` (`1` = defined/owned by ETS, `0` = untouched/reserved). */
@@ -363,6 +403,8 @@ export interface KnxMaskVersion {
   name: string;
   managementModel: string;
   mediumTypeRefId: string;
+  /** Downward-compatible MaskVersion IDs declared under `<DownwardCompatibleMasks>` (e.g. `MV-0012` -> `["MV-0010", "MV-0011"]`). */
+  downwardCompatibleMasks: string[];
   features: Record<string, string>;
   resources: Map<string, KnxMaskResource>;
   procedures: KnxMasterProcedure[];
@@ -413,6 +455,14 @@ export interface KnxApplicationProgram {
   maxSecurityP2PKeyTableEntries?: number;
   addressTableMaxEntries: number;
   associationTableMaxEntries: number;
+  /** Static `<AddressTable>` memory placement (used by BCU1 / BCU2 / BIM M112). */
+  addressTable?: KnxStaticTableLocation;
+  /** Static `<AssociationTable>` memory placement (used by BCU1 / BCU2 / BIM M112). */
+  associationTable?: KnxStaticTableLocation;
+  /** Static `<ComObjectTable>` memory placement (used by BCU1 / BCU2 / BIM M112). */
+  comObjectTable?: KnxStaticTableLocation;
+  /** Detected ETS Plugin / Device Configuration App (DCA) metadata (if any). */
+  extension?: KnxApplicationExtensionInfo;
   options: KnxApplicationOptions;
   codeSegments: Map<string, KnxCodeSegment>;
   parameterTypes: Map<string, KnxParameterType>;
@@ -435,6 +485,29 @@ export interface KnxApplicationProgram {
 }
 
 /**
+ * Baggage file metadata declared in `M-XXXX/Baggages.xml` inside a `.knxprod` archive
+ * (e.g. button icons, `TypePicture` images, manuals).
+ */
+export interface KnxProdBaggageEntry {
+  id: string;
+  manufacturerId: string;
+  targetPath: string;
+  name: string;
+  zipEntryPath: string;
+  mimeType: string;
+  size?: number;
+}
+
+/**
+ * Extracted Baggage binary payload ready for web UI rendering (`TypePicture`, icons, PDFs).
+ */
+export interface KnxExtractedBaggage extends KnxProdBaggageEntry {
+  filename: string;
+  size: number;
+  buffer: Buffer;
+}
+
+/**
  * Top-level parsed `.knxprod` package.
  */
 export interface ParsedKnxProd {
@@ -444,6 +517,10 @@ export interface ParsedKnxProd {
   hardware: KnxHardwareInfo[];
   applications: KnxApplicationProgram[];
   maskVersions: Map<string, KnxMaskVersion>;
+  /** Indexed manufacturer baggage files from `M-XXXX/Baggages.xml` (lazy binary extraction via `readBaggage`). */
+  baggages?: KnxProdBaggageEntry[];
+  /** Lazy extractor for baggage files by Baggage `Id`, `zipEntryPath`, or filename. */
+  readBaggage?: (refIdOrName: string) => KnxExtractedBaggage | undefined;
 }
 
 /**
@@ -582,6 +659,32 @@ export interface DeviceApplicationConfig {
    * Optional Group Object Table length override. Defaults to `maxComObjectNumber` defined by the application.
    */
   groupObjectTableSize?: number;
+  /**
+   * Optional target Individual Address (e.g. `"1.1.5"`).
+   * Embedded in bytes 1..2 of legacy BCU1 / BCU2 / BIM M112 Group Address Tables (`GrAT`)
+   * and used to detect Area (`A.0.0`) vs Line (`A.L.0`) Couplers (`PID_HOP_COUNT`).
+   * Automatically supplied by `KNXDeviceProgrammer.download(ia, ...)` if omitted.
+   */
+  individualAddress?: string;
+  /**
+   * Optional coupler Filter Table bitmask (`Buffer` or hex string, e.g. from `KnxProject.computeFilterTables()`).
+   * Used when programming KNX Line/Area Couplers (`MV-091A`, `MV-0912`, `MV-2920`).
+   */
+  filterTable?: Buffer | string;
+  /**
+   * Convenience list of Group Addresses to allow through a KNX Line/Area Coupler filter table.
+   * Automatically compiled into the 8192-byte filter bitmask when `filterTable` is not provided.
+   */
+  filterTableGroupAddresses?: (string | number)[];
+  /**
+   * Explicit Area Coupler flag for `MV-2920` (`PID_HOP_COUNT` = `0x0004` for Area Coupler vs `0x0005` for Line Coupler).
+   * Auto-inferred from `individualAddress` (`A.0.0` with `A > 0`) when omitted.
+   */
+  isAreaCoupler?: boolean;
+  /**
+   * Optional `KnxMaskVersion` definition from `knx_master.xml` to guide management model detection during offline compilation.
+   */
+  maskVersionDef?: KnxMaskVersion;
 }
 
 /**
@@ -615,6 +718,24 @@ export interface ResolvedComObject {
 }
 
 /**
+ * ETS-compatible metadata for an instantiated `<Module>` node inside `<Dynamic>` / `<Repeat>`.
+ */
+export interface EvaluatedModuleInstanceInfo {
+  /** Internal DynamicEvaluator instance key, e.g. `"M-0071_A-5C41-12-3158_MD-1_M-15_r0"`. */
+  instanceKey: string;
+  /** ETS `0.xml` `<ModuleInstance Id="...">`, e.g. `"MD-1_M-15_MI-1"`. */
+  etsInstanceId: string;
+  /** ETS `0.xml` `<ModuleInstance RefId="...">`, e.g. `"MD-1_M-15"`. */
+  etsRefId: string;
+  /** Full `<ModuleDef Id="...">`, e.g. `"M-0071_A-5C41-12-3158_MD-1"`. */
+  moduleDefId: string;
+  /** ETS `RepeatIndex` attribute when expanded inside `<Repeat>`, e.g. `"1589x1"` or `"352x1 353x1"`. */
+  repeatIndex?: string;
+  /** ETS `<Arguments><Argument RefId="..." Value="..." /></Arguments>` entries. */
+  arguments: { refId: string; value: string; resolvedNumber: number }[];
+}
+
+/**
  * Output of `DynamicEvaluator.evaluate()`.
  */
 export interface EvaluatedApplicationState {
@@ -639,8 +760,15 @@ export interface EvaluatedApplicationState {
   allComObjectRefs: Map<string, KnxComObjectRefDef>;
   /** Expanded `<Dynamic>` subtrees for instantiated `<Module>` nodes keyed by instanceKey. */
   expandedModules: Map<string, KnxDynamicNode[]>;
-  /** Active/visible Communication Objects keyed by 1-based `Number` (ASAP). */
+  /** ETS-compatible `<ModuleInstance>` metadata for every instantiated `<Module>` node. */
+  instantiatedModules: EvaluatedModuleInstanceInfo[];
+  /** Bidirectional map between internal `DynamicEvaluator` ParameterRef/ComObjectRef IDs and ETS `0.xml` module IDs. */
+  etsIdToInternalId: Map<string, string>;
+  internalIdToEtsId: Map<string, string>;
+  /** Active/visible Communication Objects keyed by `Number` (ASAP: 1-based on System B, 0-based on BCU1/BCU2/BIM M112). */
   activeComObjects: Map<number, ResolvedComObject>;
+  /** Lowest ComObject Number base (`0` for BCU1/BCU2/BIM M112 0-based tables, `1` for System B 1-based tables). */
+  comObjectNumberBase: 0 | 1;
   /** Highest ComObject Number across base + instantiated modules. */
   maxComObjectNumber: number;
   /** Warnings emitted during evaluation (e.g. unknown parameter name, skipped calculation error). */
@@ -662,6 +790,11 @@ export interface CompiledMemorySegment {
   segmentId: string;
   loadStateMachine: number;
   size: number;
+  /** Absolute start address when compiled from `<AbsoluteSegment>` (undefined for `<RelativeSegment>`). */
+  address?: number;
+  /** True when `<AbsoluteSegment UserMemory="true|1">` (BCU2 user memory space). */
+  userMemory?: boolean;
+  memoryType?: string;
   /** Full patched binary image for the segment. */
   image: Buffer;
   /** Effective write mask (`0xFF` = defined/patched byte, `0x00` = untouched/reserved byte). */
@@ -673,39 +806,70 @@ export interface CompiledMemorySegment {
 }
 
 /**
- * Complete System B (`0x07B0`) binary image compiled for a device.
+ * Compiled writable property value (used by System 300 `PropertyBased` devices and property-backed router/app parameters).
+ */
+export interface CompiledPropertyWrite {
+  objectIndex?: number;
+  objectType?: number;
+  occurrence?: number;
+  propertyId: number;
+  offset: number;
+  bitOffset: number;
+  data: Buffer;
+  bitLength: number;
+  parameterName: string;
+}
+
+/**
+ * Complete compiled KNX device binary image (supports System B `MV-07B0`/`17B0`/`27B0`/`2920`/`57B0`,
+ * System 7 BIM M112 `MV-0700`/`0701`/`0705`, System 2 BCU2 `MV-0020`/`0021`/`0025`,
+ * System 1 BCU1 `MV-0010`–`0013` & Couplers `MV-091A`/`0912`, and System 300 `MV-0300`).
  */
 export interface CompiledSystemBImage {
   applicationId: string;
   applicationName: string;
   maskVersion: number;
+  /** Resolved KNX Management Model (`"SystemB"`, `"BimM112"`, `"Bcu2"`, `"Bcu1"`, `"PropertyBased"`, `"None"`). */
+  managementModel: KnxManagementModel;
   manufacturerId: number;
   applicationNumber: number;
   applicationVersion: number;
   /** 5-byte `PID_PROGRAM_VERSION` (`[MfrHi, MfrLo, AppHi, AppLo, AppVer]`). */
   programVersion: Buffer;
-  /** Object 1 — Group Address Table (`GrAT`, Realisation Type 7). */
+  /** Object 1 — Group Address Table (`GrAT`, Realisation Type 7 on System B or Type 1/2 on BCU1/BCU2/BIM M112). */
   groupAddressTable: Buffer;
   /** Sorted unique Group Addresses in `GrAT` (index `i` corresponds to `TSAP = i + 1`). */
   groupAddresses: string[];
-  /** Object 2 — Group Object Association Table (`GrOAT`, Realisation Type 6/7). */
+  /** Object 2 — Group Object Association Table (`GrOAT`, Realisation Type 6/7 or Type 1/2). */
   associationTable: Buffer;
   /** GrOAT format used (`0` = 1B TSAP + 1B ASAP, `1` = 2B TSAP + 2B ASAP). */
   associationTableFormat: 0 | 1;
   /** Number of association pairs in `GrOAT`. */
   associationCount: number;
-  /** Object 3 — Group Object Table (`GrOT`, Realisation Type 7). */
+  /** Object 3 — Group Object Table (`GrOT`, Realisation Type 7 on System B, Type 2 on BIM M112, Type 1 on BCU1/BCU2). */
   groupObjectTable: Buffer;
   /** Number of Group Object slots in `GrOT`. */
   groupObjectCount: number;
-  /** Object 4 (and optional Obj 5) — Application memory segments keyed by LSM index (`4`, `5`, etc.). */
+  /** Relative memory segments keyed by LSM index (`4`, `5`, etc.) for System B. */
   segments: Map<number, CompiledMemorySegment>;
+  /** All compiled `<AbsoluteSegment>` blocks (sorted ascending by `address`) for BCU1 / BCU2 / BIM M112 / Couplers. */
+  absoluteSegments: CompiledMemorySegment[];
+  /** All compiled segments (both relative and absolute) indexed by XML `CodeSegment` Id. */
+  segmentsById: Map<string, CompiledMemorySegment>;
+  /** Optional compiled 8192-byte (or 3584-byte) KNX Coupler Filter Table bitmask (`MV-091A`, `MV-0912`, `MV-2920`). */
+  filterTable?: Buffer;
+  /** Target Individual Address used during compilation (if provided). */
+  individualAddress?: string;
+  /** Area coupler flag (`A.0.0`) used by `MV-2920` `PID_HOP_COUNT`. */
+  isAreaCoupler?: boolean;
+  /** Writable property-mapped parameters (System 300 `MV-0300` & property-backed parameters such as `PID_FILTER_TABLE_USE`). */
+  propertyWrites: CompiledPropertyWrite[];
   /** Evaluated state used to produce this image. */
   evaluated: EvaluatedApplicationState;
   /** Warnings produced during compilation. */
   warnings: string[];
   /**
-   * Optional hardware check properties (e.g. `PID_HARDWARE_TYPE` from `Property` parameters in the `.knxprod`).
+   * Optional hardware check properties (e.g. `PID_HARDWARE_TYPE` from read-only `Property` parameters in the `.knxprod`).
    */
   expectedProperties: {
     objectIndex: number;
@@ -748,14 +912,76 @@ export type DownloadAction =
   | { type: "Connect" }
   | { type: "Disconnect" }
   | { type: "Authorize"; key: number | Buffer }
-  | { type: "Unload"; lsmIdx: number; ignoreErrors?: boolean }
-  | { type: "LoadStart"; lsmIdx: number }
-  | { type: "AllocRelSegment"; lsmIdx: number; size: number; mode: number; fill: number }
-  | { type: "WriteRelMem"; objIdx: number; offset: number; size: number; verify: boolean; mode?: number; fill?: number }
-  | { type: "WriteAbsMem"; address: number; data: Buffer; verify: boolean }
+  | { type: "Unload"; lsmIdx?: number; objType?: number; occurrence?: number; ignoreErrors?: boolean }
+  | { type: "LoadStart"; lsmIdx?: number; objType?: number; occurrence?: number }
+  | {
+      type: "AllocRelSegment";
+      lsmIdx?: number;
+      objType?: number;
+      occurrence?: number;
+      size: number;
+      mode: number;
+      fill: number;
+    }
+  | {
+      type: "AllocAbsSegment";
+      lsmIdx: number;
+      segType: number;
+      address: number;
+      size: number;
+      access: number;
+      memType: number;
+      segFlags: number;
+    }
+  | { type: "TaskSegment"; lsmIdx: number; address: number }
+  | { type: "TaskPtr"; lsmIdx: number; initPtr: number; savePtr: number; serialPtr: number }
+  | { type: "TaskCtrl1"; lsmIdx: number; address: number; count: number }
+  | { type: "TaskCtrl2"; lsmIdx: number; callback: number; address: number; seg0: number; seg1: number }
+  | {
+      type: "WriteRelMem";
+      objIdx?: number;
+      objType?: number;
+      occurrence?: number;
+      offset: number;
+      size: number;
+      verify: boolean;
+      mode?: number;
+      fill?: number;
+    }
+  | {
+      type: "WriteAbsMem";
+      address: number;
+      data: Buffer;
+      verify: boolean;
+      addressSpace?: "Standard" | "UserMemory" | "LcFilter" | "LcSlave";
+      restoreFromLoadedImage?: boolean;
+    }
+  | {
+      type: "LoadImageMem";
+      address: number;
+      size: number;
+      addressSpace?: "Standard" | "UserMemory";
+    }
+  | {
+      type: "CompareMem";
+      address: number;
+      size: number;
+      expected?: Buffer;
+      mask?: Buffer;
+      compareWithLoadedImage?: boolean;
+      addressSpace?: "Standard" | "UserMemory";
+    }
+  | {
+      type: "ClearLCFilterTable";
+      useFunctionProp: boolean;
+      objType?: number;
+      occurrence?: number;
+    }
   | {
       type: "WriteProp";
-      objIdx: number;
+      objIdx?: number;
+      objType?: number;
+      occurrence?: number;
       propId: number;
       startElement: number;
       count: number;
@@ -764,15 +990,26 @@ export type DownloadAction =
     }
   | {
       type: "CompareProp";
-      objIdx: number;
+      objIdx?: number;
+      objType?: number;
+      occurrence?: number;
       propId: number;
       startElement: number;
       count: number;
       expected?: Buffer;
+      mask?: Buffer;
       compareWithLoadedImage?: boolean;
     }
-  | { type: "LoadImageProp"; objIdx: number; propId: number; startElement: number; count: number }
-  | { type: "LoadCompleted"; lsmIdx: number }
+  | {
+      type: "LoadImageProp";
+      objIdx?: number;
+      objType?: number;
+      occurrence?: number;
+      propId: number;
+      startElement: number;
+      count: number;
+    }
+  | { type: "LoadCompleted"; lsmIdx?: number; objType?: number; occurrence?: number }
   | {
       type: "ProgramSecurityObject";
       objectInstance: number;
@@ -786,6 +1023,8 @@ export type DownloadAction =
         writeSequenceNumberSending: boolean;
       };
     }
+  | { type: "Delay"; milliseconds: number }
+  | { type: "MasterReset"; eraseCode: number; channelNumber: number }
   | { type: "Restart" };
 
 /**
@@ -795,6 +1034,7 @@ export interface DownloadPlan {
   mode: DownloadMode;
   procedureSubType: string;
   maskVersion: number;
+  managementModel: KnxManagementModel;
   actions: DownloadAction[];
   estimatedBytesToWrite: number;
 }
@@ -827,6 +1067,15 @@ export interface DeviceDownloadOptions {
   interfaceMaxApduLength?: number;
   /** Skip runs of >= 8 bytes matching the `Fill` byte when segment was allocated with `Mode = 1`. Default: `true`. */
   skipFillRuns?: boolean;
+  /**
+   * Enable differential (byte-level delta) memory writing when `previousSegments` or `previousAbsoluteSegments`
+   * is provided (automatically enabled on `mode: "par"` / `"par,grp"` when previous images are supplied).
+   */
+  differentialWrite?: boolean;
+  /** Previous compiled RelativeSegment images keyed by LSM index (`4`, `5`, etc.) for differential delta writes. */
+  previousSegments?: Map<number, Buffer>;
+  /** Previous compiled AbsoluteSegment images keyed by XML `CodeSegment` Id for differential delta writes. */
+  previousAbsoluteSegments?: Map<string, Buffer>;
   /** Memory write verification strategy: `"response"` (rely on confirmed `A_MemoryExtended_WriteResponse`, default for extended memory), `"readback"` (explicit read-back), or `"none"`. */
   verifyMemoryMode?: "response" | "readback" | "none";
   /** Skip `A_Restart` at the end of download (not recommended on real hardware unless chaining operations). Default: `false`. */
@@ -838,6 +1087,13 @@ export interface DeviceDownloadOptions {
   programSecurityObject?: boolean;
   /** Optional session options (e.g. `{ secure: true }` for KNX Data Secure management sessions). */
   sessionOptions?: OpenSessionOptions;
+  /**
+   * Allow attempting download even if the `.knxprod` declares a proprietary ETS Download Plugin / DCA
+   * (`app.extension.hasDownloadPlugin === true`). Default: `false` (fails fast with a descriptive error).
+   */
+  allowDcaOverride?: boolean;
+  /** Skip `LdCtrlDelay` waits during download (mainly useful for unit tests / offline simulation). Default: `false`. */
+  skipDelay?: boolean;
   /** Optional progress callback for UI/CLI feedback. */
   onProgress?: (event: DownloadProgressEvent) => void;
 }
@@ -905,6 +1161,76 @@ export interface DeviceDownloadResult {
   executedSteps: string[];
 }
 
+export interface DeviceDiagnosticsOptions {
+  /** Authorization key for plain sessions (defaults to `0xFFFFFFFF`). */
+  authorizeKey?: number | Buffer;
+  /** Optional management session options (e.g. `{ secure: true }` for KNX Data Secure devices). */
+  sessionOptions?: OpenSessionOptions;
+  /** Read Group Address Table (`GrAT`). Default: `true`. */
+  includeGroupAddresses?: boolean;
+  /** Read KNXnet/IP Parameter Object (Type 11) if present on the device. Default: `true`. */
+  includeIpConfig?: boolean;
+  /** Read KNX Data Secure Object (Type 17) status & failures log if present/accessible. Default: `true`. */
+  includeSecurity?: boolean;
+  /** Read Interface Object list (`PID_IO_LIST`). Default: `true`. */
+  includeInterfaceObjects?: boolean;
+}
+
+/**
+ * Complete ETS "Device Info" diagnostic snapshot read from a physical KNX device.
+ * 100% JSON-serializable for web UIs, REST APIs, and bus-vs-project comparison.
+ */
+export interface DeviceDiagnosticsReport {
+  individualAddress: string;
+  inspectedAt: string;
+  maskVersion: number;
+  maskVersionHex: string;
+  maskName?: string;
+  managementModel: KnxManagementModel;
+  manufacturerId?: number;
+  manufacturerName?: string;
+  serialNumber?: string;
+  hardwareType?: string;
+  orderInfo?: string;
+  orderInfoText?: string;
+  firmwareRevision?: number;
+  firmwareVersionHex?: string;
+  peiType?: number;
+  maxApduLength: number;
+  programmingMode?: boolean;
+  programVersionHex?: string;
+  applicationIdInfo?: {
+    manufacturerId: number;
+    applicationNumber: number;
+    applicationVersion: number;
+  };
+  loadStates: { objectIndex: number; objectType?: number; state: number; stateName: string }[];
+  runState?: { objectIndex: number; state: number; stateName: string };
+  interfaceObjects: { objectIndex: number; objectType: number }[];
+  groupAddressTable?: {
+    method: string;
+    tableAddress?: number;
+    count: number;
+    groupAddresses: string[];
+  };
+  ipConfig?: KnxIpInterfaceConfig;
+  security?: {
+    objectPresent: boolean;
+    securityMode?: boolean;
+    loadState?: number;
+    loadStateName?: string;
+    sequenceNumberSending?: string;
+    groupKeyCount?: number;
+    authorizedSenders?: string[];
+    failuresLog?: {
+      seqNrErrors: number;
+      cryptoErrors: number;
+      accessRoleErrors: number;
+    };
+  };
+  warnings: string[];
+}
+
 // ============================================================================
 // External Software / Web App Parameterization API (`DeviceConfigSession`)
 // All types below are strictly JSON-serializable for REST/WebSocket/UI layers.
@@ -951,6 +1277,7 @@ export interface UiParameterField {
   unit?: string;
   colorSpace?: string;
   ipVersion?: string;
+  baggageRefId?: string;
   options?: UiParameterOption[];
   indentLevel: number;
   value: string;
@@ -1024,6 +1351,12 @@ export interface DeviceCatalogSummary {
   applicationVersion: number;
   maskVersionId: string;
   maskVersion: number;
+  /** Resolved KNX Management Model (`"SystemB"`, `"BimM112"`, `"Bcu2"`, `"Bcu1"`, `"PropertyBased"`, `"None"`). */
+  managementModel: KnxManagementModel;
+  /** True if the catalog declares a proprietary ETS Plugin / Device Configuration App (DCA). */
+  requiresDca: boolean;
+  /** Detailed ETS Plugin / DCA metadata (if present in the `.knxprod`). */
+  extension?: KnxApplicationExtensionInfo;
   parameterByteOrder: "BigEndian" | "LittleEndian";
   isSecureEnabled: boolean;
   defaultLanguage: string;
@@ -1098,6 +1431,9 @@ export interface SerializedDeviceConfig {
     associationTableFormat?: 0 | 1;
     clearCommunicationFlagWhenUnlinked?: boolean;
     groupObjectTableSize?: number;
+    individualAddress?: string;
+    filterTableHex?: string;
+    isAreaCoupler?: boolean;
   };
 }
 

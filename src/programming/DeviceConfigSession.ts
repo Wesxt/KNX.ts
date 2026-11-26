@@ -3,8 +3,9 @@ import { parseKey16 } from "../security/KnxSecureKeys";
 import { KNXHelper } from "../utils/KNXHelper";
 import { DynamicEvaluator, matchesWhenTest, objectSizeToValueTypeCode } from "./DynamicEvaluator";
 import { KNXDeviceProgrammer, KnxProdSource } from "./KNXDeviceProgrammer";
+import { resolveManagementModel } from "./KnxProdParser";
 import { LoadProcedureEngine } from "./LoadProcedureEngine";
-import { SystemBCompiler } from "./SystemBCompiler";
+import { compileCouplerFilterTable, SystemBCompiler } from "./SystemBCompiler";
 import {
   CompiledSystemBImage,
   ConfigMutationResult,
@@ -156,6 +157,10 @@ export class DeviceConfigSession {
     associationTableFormat?: 0 | 1;
     clearCommunicationFlagWhenUnlinked?: boolean;
     groupObjectTableSize?: number;
+    individualAddress?: string;
+    filterTable?: Buffer | string;
+    filterTableGroupAddresses?: (string | number)[];
+    isAreaCoupler?: boolean;
   } = {};
 
   private evaluated!: EvaluatedApplicationState;
@@ -225,6 +230,10 @@ export class DeviceConfigSession {
       associationTableFormat: cfg.associationTableFormat,
       clearCommunicationFlagWhenUnlinked: cfg.clearCommunicationFlagWhenUnlinked,
       groupObjectTableSize: cfg.groupObjectTableSize,
+      individualAddress: cfg.individualAddress,
+      filterTable: cfg.filterTable,
+      filterTableGroupAddresses: cfg.filterTableGroupAddresses ? [...cfg.filterTableGroupAddresses] : undefined,
+      isAreaCoupler: cfg.isAreaCoupler,
     };
   }
 
@@ -275,7 +284,15 @@ export class DeviceConfigSession {
       };
     }
     if (cfg.options) {
-      this.compileOptions = { ...cfg.options };
+      this.compileOptions = {
+        runParameterCalculations: cfg.options.runParameterCalculations,
+        associationTableFormat: cfg.options.associationTableFormat,
+        clearCommunicationFlagWhenUnlinked: cfg.options.clearCommunicationFlagWhenUnlinked,
+        groupObjectTableSize: cfg.options.groupObjectTableSize,
+        individualAddress: cfg.options.individualAddress,
+        filterTable: cfg.options.filterTableHex,
+        isAreaCoupler: cfg.options.isAreaCoupler,
+      };
     }
   }
 
@@ -354,6 +371,9 @@ export class DeviceConfigSession {
   public getCatalogSummary(): DeviceCatalogSummary {
     const translatedName = this.translate(this.app.id, "Name", this.app.name);
     const translatedDesc = this.translate(this.app.id, "VisibleDescription", this.app.visibleDescription ?? "");
+    const maskVerDef = this.knxProd?.maskVersions.get(this.app.maskVersionId);
+    const managementModel = resolveManagementModel(this.app.maskVersion, maskVerDef);
+    const ext = this.app.extension;
     return {
       sourceName: this.knxProd?.sourceName,
       applicationId: this.app.id,
@@ -365,6 +385,15 @@ export class DeviceConfigSession {
       applicationVersion: this.app.applicationVersion,
       maskVersionId: this.app.maskVersionId,
       maskVersion: this.app.maskVersion,
+      managementModel,
+      requiresDca: Boolean(ext?.requiresDca),
+      extension: ext
+        ? {
+            ...ext,
+            baggageRefIds: [...ext.baggageRefIds],
+            pluginParameterTypeIds: [...ext.pluginParameterTypeIds],
+          }
+        : undefined,
       parameterByteOrder: this.app.options.parameterByteOrder,
       isSecureEnabled: this.app.isSecureEnabled,
       defaultLanguage: this.app.defaultLanguage,
@@ -665,6 +694,7 @@ export class DeviceConfigSession {
     let unit: string | undefined;
     let colorSpace: string | undefined;
     let ipVersion: string | undefined;
+    let baggageRefId: string | undefined;
 
     if (detail) {
       switch (detail.kind) {
@@ -706,6 +736,9 @@ export class DeviceConfigSession {
           sizeInBit = detail.sizeInBit;
           ipVersion = detail.version;
           break;
+        case "Picture":
+          baggageRefId = detail.refId;
+          break;
         case "RawData":
           maxByteLength = detail.maxSize;
           break;
@@ -733,6 +766,7 @@ export class DeviceConfigSession {
       unit,
       colorSpace,
       ipVersion,
+      baggageRefId,
       options,
       indentLevel,
       value,
@@ -1476,6 +1510,10 @@ export class DeviceConfigSession {
         | "associationTableFormat"
         | "clearCommunicationFlagWhenUnlinked"
         | "groupObjectTableSize"
+        | "individualAddress"
+        | "filterTable"
+        | "filterTableGroupAddresses"
+        | "isAreaCoupler"
       >
     >,
   ): ConfigMutationResult {
@@ -1497,6 +1535,23 @@ export class DeviceConfigSession {
     const errors: ConfigValidationIssue[] = [];
     const warnings: ConfigValidationIssue[] = [];
     const ui = this.getUiState();
+
+    // 0. Check ETS DCA / Plugin restrictions
+    if (this.app.extension?.hasDownloadPlugin) {
+      errors.push({
+        severity: "error",
+        code: "REQUIRES_ETS_DCA",
+        path: "catalog.extension",
+        message: `Application "${this.app.name}" declares a proprietary ETS Download Plugin / DCA (requires ETS for physical bus download)`,
+      });
+    } else if (this.app.extension?.hasUiPlugin) {
+      warnings.push({
+        severity: "warning",
+        code: "HAS_ETS_UI_PLUGIN",
+        path: "catalog.extension",
+        message: `Application "${this.app.name}" declares a proprietary ETS UI Plugin / DCA (some vendor-specific UI screens may not be represented in generic XML parameters)`,
+      });
+    }
 
     // 1. Validate visible parameters against their ParameterType definitions
     for (const field of ui.parameters) {
@@ -1915,7 +1970,35 @@ export class DeviceConfigSession {
       }
     }
 
-    const hasOptions = Object.values(this.compileOptions).some((v) => v !== undefined);
+    const serializedOpts: NonNullable<SerializedDeviceConfig["options"]> = {};
+    if (this.compileOptions.runParameterCalculations !== undefined) {
+      serializedOpts.runParameterCalculations = this.compileOptions.runParameterCalculations;
+    }
+    if (this.compileOptions.associationTableFormat !== undefined) {
+      serializedOpts.associationTableFormat = this.compileOptions.associationTableFormat;
+    }
+    if (this.compileOptions.clearCommunicationFlagWhenUnlinked !== undefined) {
+      serializedOpts.clearCommunicationFlagWhenUnlinked = this.compileOptions.clearCommunicationFlagWhenUnlinked;
+    }
+    if (this.compileOptions.groupObjectTableSize !== undefined) {
+      serializedOpts.groupObjectTableSize = this.compileOptions.groupObjectTableSize;
+    }
+    if (this.compileOptions.individualAddress !== undefined) {
+      serializedOpts.individualAddress = this.compileOptions.individualAddress;
+    }
+    if (this.compileOptions.isAreaCoupler !== undefined) {
+      serializedOpts.isAreaCoupler = this.compileOptions.isAreaCoupler;
+    }
+    if (this.compileOptions.filterTable !== undefined) {
+      serializedOpts.filterTableHex = Buffer.isBuffer(this.compileOptions.filterTable)
+        ? this.compileOptions.filterTable.toString("hex").toUpperCase()
+        : this.compileOptions.filterTable;
+    } else if (this.compileOptions.filterTableGroupAddresses !== undefined) {
+      serializedOpts.filterTableHex = compileCouplerFilterTable(this.compileOptions.filterTableGroupAddresses)
+        .toString("hex")
+        .toUpperCase();
+    }
+    const hasOptions = Object.keys(serializedOpts).length > 0;
 
     return {
       schemaVersion: 1,
@@ -1924,7 +2007,7 @@ export class DeviceConfigSession {
       parameters,
       groupLinks,
       ...(security ? { security } : {}),
-      ...(hasOptions ? { options: { ...this.compileOptions } } : {}),
+      ...(hasOptions ? { options: serializedOpts } : {}),
     };
   }
 
@@ -1981,27 +2064,57 @@ export class DeviceConfigSession {
   }
 
   /**
-   * Compiles the current session configuration into a System B binary image (including Object 17 if secure).
+   * Compiles the current session configuration into a binary image matching the device's KNX Management Model
+   * (System B, System 7 BIM M112, System 2 BCU2, System 1 BCU1, Couplers, or System 300 PropertyBased; plus Object 17 if secure).
    */
   public compile(runtimeSecurity?: Partial<DeviceSecurityConfig>): CompiledSystemBImage {
     const cfg = this.toDeviceConfig(runtimeSecurity);
+    const maskVersionDef = this.knxProd?.maskVersions.get(this.app.maskVersionId);
     const reuseEvaluated = !runtimeSecurity && !this.hasInvalidDraftGroupAddress;
-    return SystemBCompiler.compile(this.app, cfg, reuseEvaluated ? this.evaluated : undefined);
+    return SystemBCompiler.compile(this.app, { ...cfg, maskVersionDef }, reuseEvaluated ? this.evaluated : undefined);
+  }
+
+  /**
+   * Lists catalog baggage files (icons, `TypePicture` images, manuals, PDFs) embedded in the backing `.knxprod` / `.knxproj`.
+   */
+  public listBaggages() {
+    return (this.knxProd?.baggages ?? []).map((b) => ({ ...b }));
+  }
+
+  /**
+   * Lazily extracts a baggage asset by `BaggageRefId` (e.g. from `UiParameterField.baggageRefId`), filename, or ZIP path.
+   */
+  public readBaggage(refIdOrName: string) {
+    return this.knxProd?.readBaggage?.(refIdOrName);
   }
 
   /**
    * Builds a concrete `DownloadPlan` (offline dry-run) for the current session configuration.
    */
   public planDownload(
-    options: Pick<DeviceDownloadOptions, "mode" | "skipFillRuns" | "skipRestart" | "programSecurityObject"> = {},
+    options: Pick<
+      DeviceDownloadOptions,
+      | "mode"
+      | "skipFillRuns"
+      | "skipRestart"
+      | "programSecurityObject"
+      | "differentialWrite"
+      | "previousSegments"
+      | "previousAbsoluteSegments"
+    > = {},
     runtimeSecurity?: Partial<DeviceSecurityConfig>,
   ): { image: CompiledSystemBImage; plan: DownloadPlan } {
     const image = this.compile(runtimeSecurity);
+    const maskVersionDef = this.knxProd?.maskVersions.get(this.app.maskVersionId);
     const plan = LoadProcedureEngine.buildPlan(this.app, image, options.mode ?? "ap1", {
       knxProd: this.knxProd,
+      maskVersion: maskVersionDef,
       skipFillRuns: options.skipFillRuns ?? true,
       skipRestart: options.skipRestart ?? false,
       programSecurityObject: options.programSecurityObject,
+      differentialWrite: options.differentialWrite,
+      previousSegments: options.previousSegments,
+      previousAbsoluteSegments: options.previousAbsoluteSegments,
     });
     return { image, plan };
   }

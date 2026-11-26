@@ -1,3 +1,4 @@
+import { isCouplerMaskVersion, resolveManagementModel } from "./KnxProdParser";
 import { SystemBCompiler } from "./SystemBCompiler";
 import {
   CompiledSystemBImage,
@@ -6,14 +7,15 @@ import {
   DownloadPlan,
   KnxApplicationProgram,
   KnxLdCtrlStep,
+  KnxManagementModel,
   KnxMaskVersion,
   KnxMasterProcedure,
   ParsedKnxProd,
 } from "./types";
 
 /**
- * Built-in fallback System B (`MV-07B0`) procedure templates matching `knx_master.xml` HawkConfigurationData,
- * used when a `KnxApplicationProgram` is compiled standalone without `knx_master.xml`.
+ * Built-in fallback System B (`MV-07B0` / `17B0` / `27B0` / `57B0`) procedure templates matching
+ * `knx_master.xml` HawkConfigurationData, used when compiled standalone without `knx_master.xml`.
  */
 const DEFAULT_SYSTEM_B_PROCEDURES: Record<string, KnxLdCtrlStep[]> = {
   ap1: [
@@ -123,6 +125,148 @@ const DEFAULT_SYSTEM_B_PROCEDURES: Record<string, KnxLdCtrlStep[]> = {
   ],
 };
 
+/** Built-in fallback BCU1 (`MV-0010`..`MV-0013`) procedures matching `knx_master.xml`. */
+const DEFAULT_BCU1_PROCEDURES: Record<string, KnxLdCtrlStep[]> = {
+  all: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlSetControlVariable", attrs: { Name: "EnableVerifyOnWriteDirect", Value: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "269", Size: "1", Verify: "true", InlineData: "00" } },
+    { tag: "LdCtrlLoadImageMem", attrs: { Address: "278", Size: "1" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "278", Size: "1", Verify: "true", InlineData: "01" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "256", Size: "1", Verify: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "260", Size: "9", Verify: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "270", Size: "8", Verify: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "281", Size: "230", Verify: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "206", Size: "9", Verify: "true", InlineData: "000000000000000000" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "215", Size: "9", Verify: "true", InlineData: "000000000000000000" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "278", Size: "1", Verify: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "269", Size: "1", Verify: "true", InlineData: "FF" } },
+    { tag: "LdCtrlRestart", attrs: {} },
+  ],
+  unload: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlSetControlVariable", attrs: { Name: "EnableVerifyOnWriteDirect", Value: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "269", Size: "1", Verify: "true", InlineData: "00" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "278", Size: "1", Verify: "true", InlineData: "01" } },
+    { tag: "LdCtrlWriteMem", attrs: { Address: "261", Size: "3", Verify: "true", InlineData: "000000" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+};
+
+/** Built-in fallback BCU1 Coupler (`MV-091A`) procedures matching `knx_master.xml`. */
+const DEFAULT_COUPLER_091A_PROCEDURES: Record<string, KnxLdCtrlStep[]> = {
+  all: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "1" } },
+    { tag: "LdCtrlUnload", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "2" } },
+    { tag: "LdCtrlLoad", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "52", Verify: "true", InlineData: "77" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "53", Verify: "true", InlineData: "77" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "54", Verify: "true", InlineData: "17" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "55", Verify: "true", InlineData: "17" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "3" } },
+    { tag: "LdCtrlClearLCFilterTable", attrs: { UseFunctionProp: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { AddressSpace: "LcFilter", Address: "512", Size: "8192", Verify: "true" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "4" } },
+    { tag: "LdCtrlRestart", attrs: {} },
+  ],
+  par: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "1" } },
+    { tag: "LdCtrlLoad", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "52", Verify: "true", InlineData: "77" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "53", Verify: "true", InlineData: "77" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "54", Verify: "true", InlineData: "17" } },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "55", Verify: "true", InlineData: "17" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "3" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "4" } },
+    { tag: "LdCtrlRestart", attrs: {} },
+  ],
+  grp: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "1" } },
+    { tag: "LdCtrlLoad", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlClearLCFilterTable", attrs: { UseFunctionProp: "true" } },
+    { tag: "LdCtrlWriteMem", attrs: { AddressSpace: "LcFilter", Address: "512", Size: "8192", Verify: "true" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { ObjType: "6" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+  unload: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "5" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+};
+
+/** Built-in fallback System B Coupler (`MV-2920`) procedures matching `knx_master.xml`. */
+const DEFAULT_COUPLER_2920_PROCEDURES: Record<string, KnxLdCtrlStep[]> = {
+  all: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "1" } },
+    { tag: "LdCtrlUnload", attrs: { LsmIdx: "0" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "2" } },
+    { tag: "LdCtrlLoad", attrs: { LsmIdx: "0" } },
+    { tag: "LdCtrlUnload", attrs: { ObjType: "6", Occurrence: "1" } },
+    { tag: "LdCtrlLoad", attrs: { ObjType: "6", Occurrence: "1" } },
+    { tag: "LdCtrlClearLCFilterTable", attrs: { UseFunctionProp: "true" } },
+    { tag: "LdCtrlRelSegment", attrs: { ObjType: "6", Occurrence: "1", Size: "8192", Mode: "0", Fill: "0" } },
+    { tag: "LdCtrlWriteRelMem", attrs: { ObjType: "6", Occurrence: "1", Offset: "0", Size: "8192", Verify: "true" } },
+    {
+      tag: "LdCtrlWriteProp",
+      attrs: { ObjType: "6", Occurrence: "1", PropId: "67", InlineData: "01", Verify: "true" },
+    },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "61", InlineData: "0005", Verify: "true" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "3" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { ObjType: "6", Occurrence: "1" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { LsmIdx: "0" } },
+    { tag: "LdCtrlLoadImageProp", attrs: { ObjType: "6", Occurrence: "1", PropId: "27" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+  grp: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlUnload", attrs: { ObjType: "6", Occurrence: "1" } },
+    { tag: "LdCtrlLoad", attrs: { ObjType: "6", Occurrence: "1" } },
+    { tag: "LdCtrlClearLCFilterTable", attrs: { UseFunctionProp: "true" } },
+    { tag: "LdCtrlRelSegment", attrs: { ObjType: "6", Occurrence: "1", Size: "8192", Mode: "0", Fill: "0" } },
+    { tag: "LdCtrlWriteRelMem", attrs: { ObjType: "6", Occurrence: "1", Offset: "0", Size: "8192", Verify: "true" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { ObjType: "6", Occurrence: "1" } },
+    { tag: "LdCtrlLoadImageProp", attrs: { ObjType: "6", Occurrence: "1", PropId: "27" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+  par: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlUnload", attrs: { LsmIdx: "0" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "2" } },
+    { tag: "LdCtrlLoad", attrs: { LsmIdx: "0" } },
+    {
+      tag: "LdCtrlWriteProp",
+      attrs: { ObjType: "6", Occurrence: "1", PropId: "67", InlineData: "01", Verify: "true" },
+    },
+    { tag: "LdCtrlWriteProp", attrs: { ObjType: "6", PropId: "61", InlineData: "0005", Verify: "true" } },
+    { tag: "LdCtrlMerge", attrs: { MergeId: "3" } },
+    { tag: "LdCtrlLoadCompleted", attrs: { LsmIdx: "0" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+  unload: [
+    { tag: "LdCtrlConnect", attrs: {} },
+    { tag: "LdCtrlMasterReset", attrs: { EraseCode: "7", ChannelNumber: "0" } },
+    { tag: "LdCtrlDisconnect", attrs: {} },
+  ],
+};
+
+/** Built-in fallback BIM M112 / System 7 (`MV-0700`/`0701`/`0705`) Unload procedure. */
+const DEFAULT_BIM_M112_UNLOAD: KnxLdCtrlStep[] = [
+  { tag: "LdCtrlConnect", attrs: {} },
+  { tag: "LdCtrlUnload", attrs: { LsmIdx: "1" } },
+  { tag: "LdCtrlUnload", attrs: { LsmIdx: "2" } },
+  { tag: "LdCtrlUnload", attrs: { LsmIdx: "3" } },
+  { tag: "LdCtrlUnload", attrs: { LsmIdx: "4" } },
+  { tag: "LdCtrlDisconnect", attrs: {} },
+];
+
 function appliesToMode(appliesTo: string | undefined, mode: DownloadMode): boolean {
   if (!appliesTo || appliesTo.trim() === "") return true;
   const tokens = appliesTo
@@ -149,9 +293,58 @@ function isAllZeroHex(hex: string): boolean {
   return hex.length > 0 && /^0+$/.test(hex);
 }
 
+function parseIntAttr(val?: string): number | undefined {
+  if (val === undefined || val === "") return undefined;
+  const n = parseInt(val, 10);
+  return Number.isNaN(n) ? undefined : n;
+}
+
+function extractNonZeroFilterSpans(
+  filterTable: Buffer,
+  baseOffset: number,
+  size: number,
+  skipZeroRuns: boolean,
+): { offset: number; data: Buffer }[] {
+  const effectiveLen = Math.min(size, filterTable.length - baseOffset);
+  if (effectiveLen <= 0) return [];
+  if (!skipZeroRuns) {
+    return [{ offset: baseOffset, data: Buffer.from(filterTable.subarray(baseOffset, baseOffset + effectiveLen)) }];
+  }
+
+  const spans: { offset: number; data: Buffer }[] = [];
+  const end = baseOffset + effectiveLen;
+  let i = baseOffset;
+  while (i < end) {
+    while (i < end && filterTable[i] === 0x00) i++;
+    if (i >= end) break;
+    const start = i;
+    let zeroRun = 0;
+    while (i < end) {
+      if (filterTable[i] === 0x00) {
+        zeroRun++;
+        if (zeroRun >= 8) break;
+      } else {
+        zeroRun = 0;
+      }
+      i++;
+    }
+    const spanEnd = zeroRun >= 8 ? i - zeroRun + 1 : i;
+    if (spanEnd > start) {
+      spans.push({ offset: start, data: Buffer.from(filterTable.subarray(start, spanEnd)) });
+    }
+  }
+  return spans;
+}
+
 /**
  * Merges `knx_master.xml` `<MaskVersion><HawkConfigurationData><Procedures>` with an
- * `ApplicationProgram`'s `<LoadProcedures>` (`MergeId` 1..7) and compiles them into a concrete `DownloadPlan`.
+ * `ApplicationProgram`'s `<LoadProcedures>` (`MergedProcedure` or `ProductProcedure`) and compiles
+ * them into a concrete `DownloadPlan` across all supported KNX Management Models:
+ * - System B (`MV-07B0`, `17B0`, `27B0`, `2920`, `57B0`)
+ * - System 7 / BIM M112 (`MV-0700`, `0701`, `0705`, `1900`, `2705`, `5705`)
+ * - System 2 / BCU2 (`MV-0020`, `0021`, `0025`)
+ * - System 1 / BCU1 & Couplers (`MV-0010`–`0013`, `1011`–`1013`, `091A`, `0912`)
+ * - System 300 / PropertyBased (`MV-0300`)
  */
 export class LoadProcedureEngine {
   public static buildPlan(
@@ -164,33 +357,90 @@ export class LoadProcedureEngine {
       skipFillRuns?: boolean;
       skipRestart?: boolean;
       programSecurityObject?: boolean;
+      differentialWrite?: boolean;
+      previousSegments?: Map<number, Buffer>;
+      previousAbsoluteSegments?: Map<string, Buffer>;
     } = {},
   ): DownloadPlan {
     const maskVer = options.maskVersion ?? options.knxProd?.maskVersions.get(app.maskVersionId);
+    const managementModel: KnxManagementModel =
+      image.managementModel ?? resolveManagementModel(app.maskVersion, maskVer);
     const hasPeiSegment = image.segments.has(5);
+    const isCoupler = isCouplerMaskVersion(app.maskVersion);
 
-    // Choose procedureSubType matching MV-07B0 HawkConfigurationData
+    // Choose procedureSubType matching HawkConfigurationData
     const procedureType = mode === "unload" ? "Unload" : "Load";
     let procedureSubType: string;
     if (mode === "unload") {
       procedureSubType = "all";
     } else if (mode === "full") {
-      procedureSubType = hasPeiSegment ? "all" : "ap1";
+      procedureSubType = hasPeiSegment || managementModel !== "SystemB" || isCoupler ? "all" : "ap1";
+    } else if (mode === "ap1" && (managementModel !== "SystemB" || isCoupler)) {
+      procedureSubType = "all";
     } else {
       procedureSubType = mode;
     }
 
-    // 1. Obtain template steps (MergedProcedure vs ProductProcedure)
+    // 1. Obtain template steps (ProductProcedure vs PropertyBased vs MergedProcedure)
     let rawSteps: KnxLdCtrlStep[];
 
-    if (app.loadProcedureStyle === "ProductProcedure" && mode !== "unload") {
-      rawSteps = app.loadProcedures.flatMap((lp) => lp.steps);
+    if (managementModel === "PropertyBased" && app.loadProcedures.length === 0 && mode !== "unload") {
+      // System 300 (MV-0300): Property-based direct writes
+      rawSteps = [{ tag: "LdCtrlConnect", attrs: {} }];
+      for (const pw of image.propertyWrites) {
+        const attrs: Record<string, string> = {
+          PropId: String(pw.propertyId),
+          StartElement: "1",
+          Count: "1",
+          Verify: "true",
+          InlineData: pw.data.toString("hex").toUpperCase(),
+        };
+        if (pw.objectIndex !== undefined) attrs.ObjIdx = String(pw.objectIndex);
+        else if (pw.objectType !== undefined) {
+          attrs.ObjType = String(pw.objectType);
+          if (pw.occurrence !== undefined) attrs.Occurrence = String(pw.occurrence);
+        } else {
+          attrs.ObjIdx = "0";
+        }
+        rawSteps.push({ tag: "LdCtrlWriteProp", attrs });
+      }
+      rawSteps.push({ tag: "LdCtrlRestart", attrs: {} });
+    } else if (app.loadProcedureStyle === "ProductProcedure" && mode !== "unload") {
+      const productSteps = app.loadProcedures
+        .flatMap((lp) => lp.steps)
+        .filter((s) => appliesToMode(s.attrs.AppliesTo, mode));
+
+      // Minimal ProductProcedure (e.g. BCU2 MV-0021 containing only <LdCtrlAbsSegment>) needs Connect/Unload/Load/LoadCompleted wrapper
+      const hasLifecycle = productSteps.some(
+        (s) => s.tag === "LdCtrlConnect" || s.tag === "LdCtrlLoad" || s.tag === "LdCtrlUnload",
+      );
+      if (!hasLifecycle && productSteps.length > 0) {
+        const lsmSet = new Set<number>();
+        for (const s of productSteps) {
+          const lsm = parseIntAttr(s.attrs.LsmIdx);
+          if (lsm !== undefined) lsmSet.add(lsm);
+        }
+        const lsms = Array.from(lsmSet).sort((a, b) => a - b);
+        rawSteps = [{ tag: "LdCtrlConnect", attrs: {} }];
+        for (const lsm of lsms) rawSteps.push({ tag: "LdCtrlUnload", attrs: { LsmIdx: String(lsm) } });
+        for (const lsm of lsms) {
+          rawSteps.push({ tag: "LdCtrlLoad", attrs: { LsmIdx: String(lsm) } });
+          for (const s of productSteps) {
+            if (parseIntAttr(s.attrs.LsmIdx) === lsm) rawSteps.push(s);
+          }
+          rawSteps.push({ tag: "LdCtrlLoadCompleted", attrs: { LsmIdx: String(lsm) } });
+        }
+        for (const s of productSteps) {
+          if (parseIntAttr(s.attrs.LsmIdx) === undefined) rawSteps.push(s);
+        }
+        rawSteps.push({ tag: "LdCtrlRestart", attrs: {} });
+      } else {
+        rawSteps = productSteps;
+      }
     } else {
       const masterProc = this.findMasterProcedure(maskVer, procedureType, procedureSubType);
       const templateSteps =
-        masterProc?.steps ??
-        DEFAULT_SYSTEM_B_PROCEDURES[mode === "unload" ? "unload" : procedureSubType] ??
-        DEFAULT_SYSTEM_B_PROCEDURES.ap1;
+        masterProc?.steps ?? this.getFallbackTemplateSteps(app.maskVersion, managementModel, mode, procedureSubType);
 
       const appByMergeId = new Map<number, KnxLdCtrlStep[]>();
       for (const lp of app.loadProcedures) {
@@ -226,11 +476,30 @@ export class LoadProcedureEngine {
       }
     }
 
+    // Check if an application parameter overrides PID_FILTER_TABLE_USE (ObjType 6, PID 67)
+    const filterTableUseParam = image.propertyWrites.find(
+      (pw) => (pw.objectType === 6 || pw.objectIndex === 6) && pw.propertyId === 67,
+    );
+    const filterTableDisabled =
+      filterTableUseParam !== undefined && filterTableUseParam.data.length > 0 && filterTableUseParam.data[0] === 0;
+
     // 2. Translate raw XML LdCtrl steps into concrete DownloadActions with resolved sizes & payloads
     const actions: DownloadAction[] = [];
-    const allocMetaByLsm = new Map<number, { mode: number; fill: number; size: number }>();
+    const allocMetaByKey = new Map<string, { mode: number; fill: number; size: number }>();
+    const loadedImageMemKeys = new Set<string>();
     let ignoreCurrentErrors = false;
+    let enableSegmentWrite = true;
+    let enableVerifyOnWriteDirect = false;
+    let filterTableCleared = false;
     let estimatedBytesToWrite = 0;
+
+    const useDifferential =
+      options.differentialWrite ??
+      ((mode === "par" || mode === "par,grp") &&
+        Boolean(options.previousSegments?.size || options.previousAbsoluteSegments?.size));
+
+    const allocKey = (objIdx?: number, objType?: number, occurrence?: number) =>
+      objIdx !== undefined ? `idx:${objIdx}` : `type:${objType ?? -1}:${occurrence ?? 0}`;
 
     for (const step of rawSteps) {
       const a = step.attrs;
@@ -247,56 +516,188 @@ export class LoadProcedureEngine {
           ignoreCurrentErrors = mapped === 0;
           break;
         }
+        case "LdCtrlSetControlVariable": {
+          const name = a.Name ?? "";
+          const val = a.Value === "true" || a.Value === "1";
+          if (name === "EnableSegmentWrite") enableSegmentWrite = val;
+          else if (name === "EnableVerifyOnWriteDirect") enableVerifyOnWriteDirect = val;
+          break;
+        }
         case "LdCtrlUnload": {
-          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
-          if (lsmIdx > 0) {
-            actions.push({ type: "Unload", lsmIdx, ignoreErrors: ignoreCurrentErrors || lsmIdx === 5 });
+          const lsmIdx = parseIntAttr(a.LsmIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
+          if (lsmIdx !== undefined || objType !== undefined) {
+            actions.push({
+              type: "Unload",
+              lsmIdx,
+              objType,
+              occurrence,
+              ignoreErrors: ignoreCurrentErrors || lsmIdx === 5,
+            });
           }
           break;
         }
         case "LdCtrlLoad": {
-          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
-          if (lsmIdx > 0) {
-            actions.push({ type: "LoadStart", lsmIdx });
+          const lsmIdx = parseIntAttr(a.LsmIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
+          if (lsmIdx !== undefined || objType !== undefined) {
+            actions.push({ type: "LoadStart", lsmIdx, objType, occurrence });
           }
           break;
         }
         case "LdCtrlRelSegment": {
-          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
-          const allocMode = parseInt(a.Mode ?? "0", 10);
+          const lsmIdx = parseIntAttr(a.LsmIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
+          let allocMode = parseInt(a.Mode ?? "0", 10);
           const fill = parseInt(a.Fill ?? "0", 10);
           let size = parseInt(a.Size ?? "0", 10);
 
-          // Resolve actual table/segment size dynamically for Objects 1..5
           if (lsmIdx === 1) size = image.groupAddressTable.length;
           else if (lsmIdx === 2) size = image.associationTable.length;
           else if (lsmIdx === 3) size = image.groupObjectTable.length;
-          else {
+          else if (lsmIdx !== undefined) {
             const seg = image.segments.get(lsmIdx);
             if (seg) size = seg.size;
+          } else if (objType === 6 && image.filterTable) {
+            size = Math.min(size || image.filterTable.length, image.filterTable.length);
           }
 
-          allocMetaByLsm.set(lsmIdx, { mode: allocMode, fill, size });
-          actions.push({ type: "AllocRelSegment", lsmIdx, size, mode: allocMode, fill });
+          // When performing a partial differential download on an unchanged segment size, force Mode=0 (do not erase)
+          // so untouched bytes remain intact on the device (guarded by LdCtrlCompareProp on PID_TABLE_REFERENCE).
+          if (
+            useDifferential &&
+            (mode === "par" || mode === "par,grp") &&
+            lsmIdx !== undefined &&
+            lsmIdx >= 4 &&
+            options.previousSegments?.get(lsmIdx)?.length === size
+          ) {
+            allocMode = 0;
+          }
+
+          allocMetaByKey.set(allocKey(lsmIdx, objType, occurrence), { mode: allocMode, fill, size });
+          actions.push({ type: "AllocRelSegment", lsmIdx, objType, occurrence, size, mode: allocMode, fill });
+          break;
+        }
+        case "LdCtrlAbsSegment": {
+          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
+          const segType = parseInt(a.SegType ?? "0", 10);
+          const address = parseInt(a.Address ?? "0", 10);
+          const size = parseInt(a.Size ?? "0", 10);
+          const access = parseInt(a.Access ?? "255", 10);
+          const memType = parseInt(a.MemType ?? "3", 10);
+          const segFlags = parseInt(a.SegFlags ?? "0", 10);
+
+          actions.push({
+            type: "AllocAbsSegment",
+            lsmIdx,
+            segType,
+            address,
+            size,
+            access,
+            memType,
+            segFlags,
+          });
+
+          // Per KNX 03_05_02 & Hawk EnableSegmentWrite (default true): non-RAM absolute segments (MemType=3 EEPROM/Flash)
+          // are written immediately after allocation unless EnableSegmentWrite was explicitly set to false.
+          if (enableSegmentWrite && memType !== 1 && memType !== 2 && size > 0) {
+            const spans = SystemBCompiler.extractAbsoluteMemorySpans(image, address, size, {
+              previousAbsoluteSegments: useDifferential ? options.previousAbsoluteSegments : undefined,
+            });
+            for (const sp of spans) {
+              estimatedBytesToWrite += sp.data.length;
+              actions.push({
+                type: "WriteAbsMem",
+                address: sp.address,
+                data: sp.data,
+                verify: !app.options.legacyNoMemoryVerifyMode,
+                addressSpace: sp.userMemory ? "UserMemory" : "Standard",
+              });
+            }
+          }
+          break;
+        }
+        case "LdCtrlTaskSegment": {
+          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
+          const address = parseInt(a.Address ?? "0", 10);
+          actions.push({ type: "TaskSegment", lsmIdx, address });
+          break;
+        }
+        case "LdCtrlTaskPtr": {
+          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
+          const initPtr = parseInt(a.InitPtr ?? "0", 10);
+          const savePtr = parseInt(a.SavePtr ?? "0", 10);
+          const serialPtr = parseInt(a.SerialPtr ?? "0", 10);
+          actions.push({ type: "TaskPtr", lsmIdx, initPtr, savePtr, serialPtr });
+          break;
+        }
+        case "LdCtrlTaskCtrl1": {
+          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
+          const address = parseInt(a.Address ?? "0", 10);
+          const count = parseInt(a.Count ?? "0", 10);
+          actions.push({ type: "TaskCtrl1", lsmIdx, address, count });
+          break;
+        }
+        case "LdCtrlTaskCtrl2": {
+          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
+          const callback = parseInt(a.Callback ?? "0", 10);
+          const address = parseInt(a.Address ?? "0", 10);
+          const seg0 = parseInt(a.Seg0 ?? "0", 10);
+          const seg1 = parseInt(a.Seg1 ?? "0", 10);
+          actions.push({ type: "TaskCtrl2", lsmIdx, callback, address, seg0, seg1 });
           break;
         }
         case "LdCtrlWriteRelMem": {
-          const objIdx = parseInt(a.ObjIdx ?? "0", 10);
+          const objIdx = parseIntAttr(a.ObjIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
           const offset = parseInt(a.Offset ?? "0", 10);
           const requestedSize = parseInt(a.Size ?? "0", 10);
           const verify = a.Verify !== "false";
-          const allocMeta = allocMetaByLsm.get(objIdx);
+          const allocMeta = allocMetaByKey.get(allocKey(objIdx, objType, occurrence));
 
+          if (objType === 6) {
+            // Router Filter Table relative write (MV-2920)
+            if (filterTableDisabled || !image.filterTable) break;
+            const spans = extractNonZeroFilterSpans(
+              image.filterTable,
+              offset,
+              requestedSize,
+              filterTableCleared && (options.skipFillRuns ?? true),
+            );
+            for (const sp of spans) {
+              estimatedBytesToWrite += sp.data.length;
+              actions.push({
+                type: "WriteRelMem",
+                objType,
+                occurrence,
+                offset: sp.offset,
+                size: sp.data.length,
+                verify,
+                mode: allocMeta?.mode,
+                fill: allocMeta?.fill,
+              });
+            }
+            break;
+          }
+
+          if (objIdx === undefined) break;
           const actualSize = this.resolveObjectByteLength(image, objIdx, offset, requestedSize);
           if (actualSize > 0) {
             const seg = image.segments.get(objIdx);
             if (seg) {
+              const prevSeg =
+                useDifferential && allocMeta?.mode !== 1 ? options.previousSegments?.get(objIdx) : undefined;
               const spans = SystemBCompiler.extractWritableSpans(seg, {
                 offset,
                 size: actualSize,
                 mode: allocMeta?.mode,
                 fill: allocMeta?.fill,
                 skipFillRuns: options.skipFillRuns ?? true,
+                previousImage: prevSeg,
               });
               estimatedBytesToWrite += spans.reduce((acc, s) => acc + s.data.length, 0);
             } else {
@@ -316,21 +717,118 @@ export class LoadProcedureEngine {
         }
         case "LdCtrlWriteMem": {
           const address = parseInt(a.Address ?? "0", 10);
+          const requestedSize = parseInt(a.Size ?? "0", 10);
+          const verify = a.Verify !== undefined ? a.Verify !== "false" : enableVerifyOnWriteDirect;
+          const rawSpace = a.AddressSpace ?? "Standard";
+          const addressSpace: "Standard" | "UserMemory" | "LcFilter" | "LcSlave" =
+            rawSpace === "LcFilter"
+              ? "LcFilter"
+              : rawSpace === "LcSlave"
+                ? "LcSlave"
+                : rawSpace === "UserMemory"
+                  ? "UserMemory"
+                  : "Standard";
           const inlineHex = (a.InlineData ?? "").replace(/\s+/g, "");
+
           if (inlineHex.length > 0) {
             const data = Buffer.from(inlineHex, "hex");
-            estimatedBytesToWrite += data.length;
+            if (addressSpace !== "LcSlave") estimatedBytesToWrite += data.length;
             actions.push({
               type: "WriteAbsMem",
               address,
               data,
-              verify: a.Verify !== "false",
+              verify,
+              addressSpace,
             });
+          } else if (addressSpace === "LcFilter") {
+            if (!filterTableDisabled && image.filterTable) {
+              const tableSize = requestedSize > 0 ? requestedSize : image.filterTable.length;
+              const spans = extractNonZeroFilterSpans(
+                image.filterTable,
+                0,
+                tableSize,
+                filterTableCleared && (options.skipFillRuns ?? true),
+              );
+              for (const sp of spans) {
+                estimatedBytesToWrite += sp.data.length;
+                actions.push({
+                  type: "WriteAbsMem",
+                  address: address + sp.offset,
+                  data: sp.data,
+                  verify,
+                  addressSpace: "LcFilter",
+                });
+              }
+            }
+          } else if (requestedSize > 0) {
+            const spans = SystemBCompiler.extractAbsoluteMemorySpans(image, address, requestedSize, {
+              previousAbsoluteSegments: useDifferential ? options.previousAbsoluteSegments : undefined,
+            });
+            if (spans.length > 0) {
+              for (const sp of spans) {
+                if (addressSpace !== "LcSlave") estimatedBytesToWrite += sp.data.length;
+                actions.push({
+                  type: "WriteAbsMem",
+                  address: sp.address,
+                  data: sp.data,
+                  verify,
+                  addressSpace: addressSpace === "Standard" && sp.userMemory ? "UserMemory" : addressSpace,
+                });
+              }
+            } else if (loadedImageMemKeys.has(`${address}:${requestedSize}`)) {
+              // Restore byte(s) saved by an earlier LdCtrlLoadImageMem (e.g. BCU1/BCU2 addr 278 when no segment covers it)
+              estimatedBytesToWrite += requestedSize;
+              actions.push({
+                type: "WriteAbsMem",
+                address,
+                data: Buffer.alloc(requestedSize),
+                verify,
+                addressSpace,
+                restoreFromLoadedImage: true,
+              });
+            }
           }
           break;
         }
+        case "LdCtrlLoadImageMem": {
+          const address = parseInt(a.Address ?? "0", 10);
+          const size = parseInt(a.Size ?? "1", 10);
+          const addressSpace = a.AddressSpace === "UserMemory" ? "UserMemory" : "Standard";
+          loadedImageMemKeys.add(`${address}:${size}`);
+          actions.push({ type: "LoadImageMem", address, size, addressSpace });
+          break;
+        }
+        case "LdCtrlCompareMem": {
+          const address = parseInt(a.Address ?? "0", 10);
+          const size = parseInt(a.Size ?? "1", 10);
+          const inlineHex = (a.InlineData ?? "").replace(/\s+/g, "");
+          const maskHex = (a.Mask ?? "").replace(/\s+/g, "");
+          const compareWithLoadedImage = inlineHex.length === 0;
+          actions.push({
+            type: "CompareMem",
+            address,
+            size,
+            expected: inlineHex.length > 0 ? Buffer.from(inlineHex, "hex") : undefined,
+            mask: maskHex.length > 0 ? Buffer.from(maskHex, "hex") : undefined,
+            compareWithLoadedImage,
+            addressSpace: a.AddressSpace === "UserMemory" ? "UserMemory" : "Standard",
+          });
+          break;
+        }
+        case "LdCtrlClearLCFilterTable": {
+          filterTableCleared = true;
+          actions.push({
+            type: "ClearLCFilterTable",
+            useFunctionProp: a.UseFunctionProp === "true" || a.UseFunctionProp === "1",
+            objType: parseIntAttr(a.ObjType) ?? 6,
+            occurrence: parseIntAttr(a.Occurrence) ?? (app.maskVersion === 0x2920 ? 1 : 0),
+          });
+          break;
+        }
         case "LdCtrlWriteProp": {
-          const objIdx = parseInt(a.ObjIdx ?? "0", 10);
+          const objIdx = parseIntAttr(a.ObjIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
           const propId = parseInt(a.PropId ?? "0", 10);
           const startElement = parseInt(a.StartElement ?? "1", 10);
           const count = parseInt(a.Count ?? "1", 10);
@@ -343,42 +841,75 @@ export class LoadProcedureEngine {
             data = Buffer.from(image.programVersion);
           }
 
+          // MV-2920 PID_FILTER_TABLE_USE (ObjType 6, PID 67) parameter override
+          if (objType === 6 && propId === 67 && filterTableUseParam) {
+            data = Buffer.from(filterTableUseParam.data);
+          }
+
+          // MV-2920 PID_HOP_COUNT (ObjType 6, PID 61): 0004 for Area Coupler (A.0.0), 0005 for Line Coupler
+          if (objType === 6 && propId === 61 && image.isAreaCoupler && inlineHex.toUpperCase() === "0005") {
+            data = Buffer.from("0004", "hex");
+          }
+
           if (data.length > 0) {
-            actions.push({ type: "WriteProp", objIdx, propId, startElement, count, data, verify });
+            actions.push({ type: "WriteProp", objIdx, objType, occurrence, propId, startElement, count, data, verify });
           }
           break;
         }
         case "LdCtrlCompareProp": {
-          const objIdx = parseInt(a.ObjIdx ?? "0", 10);
+          const objIdx = parseIntAttr(a.ObjIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
           const propId = parseInt(a.PropId ?? "0", 10);
           const startElement = parseInt(a.StartElement ?? "1", 10);
           const count = parseInt(a.Count ?? "1", 10);
           const inlineHex = (a.InlineData ?? "").replace(/\s+/g, "");
-          const compareWithLoadedImage = inlineHex.length === 0 || isAllZeroHex(inlineHex);
+          const maskHex = (a.Mask ?? "").replace(/\s+/g, "");
+          const compareWithLoadedImage = inlineHex.length === 0 || (isAllZeroHex(inlineHex) && maskHex.length === 0);
           actions.push({
             type: "CompareProp",
             objIdx,
+            objType,
+            occurrence,
             propId,
             startElement,
             count,
             expected: compareWithLoadedImage ? undefined : Buffer.from(inlineHex, "hex"),
+            mask: maskHex.length > 0 ? Buffer.from(maskHex, "hex") : undefined,
             compareWithLoadedImage,
           });
           break;
         }
         case "LdCtrlLoadImageProp": {
-          const objIdx = parseInt(a.ObjIdx ?? "0", 10);
+          const objIdx = parseIntAttr(a.ObjIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
           const propId = parseInt(a.PropId ?? "0", 10);
           const startElement = parseInt(a.StartElement ?? "1", 10);
           const count = parseInt(a.Count ?? "1", 10);
-          actions.push({ type: "LoadImageProp", objIdx, propId, startElement, count });
+          actions.push({ type: "LoadImageProp", objIdx, objType, occurrence, propId, startElement, count });
           break;
         }
         case "LdCtrlLoadCompleted": {
-          const lsmIdx = parseInt(a.LsmIdx ?? "0", 10);
-          if (lsmIdx > 0) {
-            actions.push({ type: "LoadCompleted", lsmIdx });
+          const lsmIdx = parseIntAttr(a.LsmIdx);
+          const objType = parseIntAttr(a.ObjType);
+          const occurrence = parseIntAttr(a.Occurrence);
+          if (lsmIdx !== undefined || objType !== undefined) {
+            actions.push({ type: "LoadCompleted", lsmIdx, objType, occurrence });
           }
+          break;
+        }
+        case "LdCtrlDelay": {
+          const ms = parseInt(a.MilliSeconds ?? "0", 10);
+          if (ms > 0) {
+            actions.push({ type: "Delay", milliseconds: ms });
+          }
+          break;
+        }
+        case "LdCtrlMasterReset": {
+          const eraseCode = parseInt(a.EraseCode ?? "1", 10);
+          const channelNumber = parseInt(a.ChannelNumber ?? "0", 10);
+          actions.push({ type: "MasterReset", eraseCode, channelNumber });
           break;
         }
         case "LdCtrlRestart":
@@ -391,7 +922,7 @@ export class LoadProcedureEngine {
       }
     }
 
-    // 3. Phase 2: Insert Security Interface Object (Type 17) commissioning step before Restart
+    // 3. Phase 2: Insert Security Interface Object (Type 17) commissioning step before Restart/Disconnect
     const sec = image.securityImage;
     const shouldProgramSecurity =
       Boolean(sec) &&
@@ -433,6 +964,7 @@ export class LoadProcedureEngine {
       mode,
       procedureSubType,
       maskVersion: app.maskVersion,
+      managementModel,
       actions,
       estimatedBytesToWrite,
     };
@@ -444,11 +976,48 @@ export class LoadProcedureEngine {
     procedureSubType: string,
   ): KnxMasterProcedure | undefined {
     if (!maskVer) return undefined;
-    return maskVer.procedures.find(
-      (p) =>
-        p.procedureType.toLowerCase() === procedureType.toLowerCase() &&
-        p.procedureSubType.toLowerCase() === procedureSubType.toLowerCase(),
-    );
+    const matchBySubType = (sub: string) => {
+      const candidates = maskVer.procedures.filter(
+        (p) =>
+          p.procedureType.toLowerCase() === procedureType.toLowerCase() &&
+          p.procedureSubType.toLowerCase() === sub.toLowerCase(),
+      );
+      if (candidates.length === 0) return undefined;
+      // Prefer "remote" procedure over local-only procedures (e.g. BCU2 MV-0021 has "remote local2" and "local1")
+      return candidates.find((p) => p.access.toLowerCase().includes("remote")) ?? candidates[0];
+    };
+
+    const exact = matchBySubType(procedureSubType);
+    if (exact) return exact;
+    if (procedureType.toLowerCase() === "load" && (procedureSubType === "ap1" || procedureSubType === "full")) {
+      return matchBySubType("all") ?? matchBySubType("ap1");
+    }
+    return undefined;
+  }
+
+  private static getFallbackTemplateSteps(
+    maskVersion: number,
+    managementModel: KnxManagementModel,
+    mode: DownloadMode,
+    procedureSubType: string,
+  ): KnxLdCtrlStep[] {
+    const key = mode === "unload" ? "unload" : procedureSubType;
+    if (maskVersion === 0x2920) {
+      return DEFAULT_COUPLER_2920_PROCEDURES[key] ?? DEFAULT_COUPLER_2920_PROCEDURES.all;
+    }
+    if (maskVersion === 0x091a || maskVersion === 0x0912) {
+      return DEFAULT_COUPLER_091A_PROCEDURES[key] ?? DEFAULT_COUPLER_091A_PROCEDURES.all;
+    }
+    if (managementModel === "BimM112" && mode === "unload") {
+      return DEFAULT_BIM_M112_UNLOAD;
+    }
+    if (managementModel === "Bcu1") {
+      return DEFAULT_BCU1_PROCEDURES[key] ?? DEFAULT_BCU1_PROCEDURES.all;
+    }
+    if (managementModel === "Bcu2") {
+      return mode === "unload" ? DEFAULT_BIM_M112_UNLOAD : DEFAULT_BCU1_PROCEDURES.all;
+    }
+    return DEFAULT_SYSTEM_B_PROCEDURES[key] ?? DEFAULT_SYSTEM_B_PROCEDURES.ap1;
   }
 
   private static resolveObjectByteLength(
