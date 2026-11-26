@@ -59,20 +59,25 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^26.0.0",
-    "@types/ws": "^8.18.1",
-    "eslint": "^10.2.0",
+    "@types/node": "^26.6.11",
+    "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
-    "globals": "^17.5.0",
-    "jest": "^30.3.0",
-    "ts-jest": "^29.4.9",
-    "tsx": "^4.21.0",
+    "eslint-plugin-prettier": "^5.5.7",
+    "globals": "^17.14.0",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.15",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.58.1"
+    "typescript-eslint": "^8.74.0"
   },
   "dependencies": {
-    "node-hid": "^3.3.0",
+    "node-hid": "^3.4.0",
     "serialport": "^13.0.0"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.6.0": true,
+    "@serialport/bindings-cpp@13.0.0": true,
+    "esbuild@0.28.2": true,
+    "node-hid@3.4.0": true
   }
 }
